@@ -1,5 +1,9 @@
 export ZSH="/Users/ksotis/.oh-my-zsh"
 
+# Environment variables
+
+export HOMEBREW_NO_AUTO_UPDATE=1
+
 # ALIAS
 
 alias python=/usr/local/bin/python3
