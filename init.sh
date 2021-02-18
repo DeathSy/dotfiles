@@ -8,5 +8,8 @@ xcode-select --install
 ln -s -f ./.zshrc ~/.zshrc
 
 # ADD tmux configuration
-ln -s -f ./.tmux.conf ~/.tmux.conf
-ln -s -f ./.tmux.conf.local ~/.tmux.conf.local
+ln -s -f $(pwd)/tmux.conf ~/.tmux.conf
+ln -s -f $(pwd).tmux.conf.local ~/.tmux.conf.local
+
+# ADD nvim configuration
+ln -s -f $(pwd)/nvim ~/.config/nvim
