@@ -13,3 +13,9 @@ ln -s -f $(pwd).tmux.conf.local ~/.tmux.conf.local
 
 # ADD nvim configuration
 ln -s -f $(pwd)/nvim ~/.config/nvim
+
+# ADD iCloud configurations config to it's place
+
+ln -s -f "~/Library/Mobile Documents/com~apple~CloudDocs/workspace" ~/workspacek
+ln -s -f "~/Library/Mobile Documents/com~apple~CloudDocs/workspace/keypairs" ~/.ssh/keypairs
+ln -s -f "~/Library/Mobile Documents/com~apple~CloudDocs/workspace/infra/config" ~/.ssh/config
