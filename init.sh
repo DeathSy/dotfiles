@@ -4,7 +4,7 @@ xcode-select --install
 # INSTALL homebrew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 
-brew install go antigen
+brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget
 
 # ADD zsh configuration
 ln -s -f ./antigen /usr/local/share/antigen
