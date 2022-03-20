@@ -11,15 +11,20 @@ export GOBIN=$GOPATH/bin
 
 export PATH=$PATH:$(go env GOPATH)/bin
 
+# Setting NVM path
 export NVM_DIR="$HOME/.nvm"
   [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
   [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
+
+# Setting DOCKER_HOST with colima
+export DOCKER_HOST="unix://$HOME/.colima/docker.sock"
 
 # ALIAS
 
 alias python=/usr/local/bin/python3
 alias pip=/usr/local/bin/pip3
 alias vim=nvim
+alias act="act --container-architecture linux/amd64"
 
 # PLUGINS
 

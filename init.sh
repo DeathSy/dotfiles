@@ -7,7 +7,7 @@ xcode-select --install
 brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget docker docker-compose colima kubernetes-cli act
 
 brew tap homebrew/cask-fonts
-brew install --cask font-fira-code visual-studio-code
+brew install --cask font-fira-code visual-studio-code runjs
 
 # ADD zsh configuration
 ln -s $(pwd)/.zshrc ~/.zshrc
@@ -34,7 +34,3 @@ cd fonts && ./install.sh
 
 mkdir -p ~/.docker/cli-plugins
 ln -sfn $(brew --prefix)/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
-
-# REMAP aliases
-alias act="act --container-architecture linux/amd64"
-
