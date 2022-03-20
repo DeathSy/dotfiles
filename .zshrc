@@ -23,7 +23,7 @@ alias vim=nvim
 
 # PLUGINS
 
-source /usr/local/share/antigen/antigen.zsh
+source ./antigen/antigen.zsh
 
 antigen init $HOME/dotfiles/.antigenrc
 
