@@ -10,8 +10,8 @@ brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby te
 ln -s $(pwd)/.zshrc ~/.zshrc
 
 # ADD tmux configuration
-ln -s $(pwd)/tmux.conf ~/.tmux.conf
-ln -s $(pwd).tmux.conf.local ~/.tmux.conf.local
+ln -s $(pwd)/.tmux.conf ~/.tmux.conf
+ln -s $(pwd)/.tmux.conf.local ~/.tmux.conf.local
 
 # ADD nvim configuration
 ln -s $(pwd)/nvim ~/.config/nvim
