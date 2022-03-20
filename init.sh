@@ -35,3 +35,6 @@ cd fonts && ./install.sh
 mkdir -p ~/.docker/cli-plugins
 ln -sfn $(brew --prefix)/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 
+# REMAP aliases
+alias act="act --container-architecture linux/amd64"
+
