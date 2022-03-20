@@ -7,7 +7,6 @@ xcode-select --install
 brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget
 
 # ADD zsh configuration
-ln -s -f ./antigen /usr/local/share/antigen
 ln -s $(pwd)/.zshrc ~/.zshrc
 
 # ADD tmux configuration
