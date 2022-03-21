@@ -1,3 +1,7 @@
+# Fig pre block. Keep at the top of this file.
+export PATH="${PATH}:${HOME}/.local/bin"
+eval "$(fig init zsh pre)"
+
 export ZSH="/Users/ksotis/.oh-my-zsh"
 
 # Environment variables
@@ -35,3 +39,7 @@ antigen init $HOME/dotfiles/.antigenrc
 # tabtab source for packages
 # uninstall by removing these lines
 [[ -f ~/.config/tabtab/__tabtab.zsh ]] && . ~/.config/tabtab/__tabtab.zsh || true
+
+# Fig post block. Keep at the bottom of this file.
+eval "$(fig init zsh post)"
+
