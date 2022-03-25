@@ -4,7 +4,7 @@ xcode-select --install
 # INSTALL homebrew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 
-brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget docker docker-compose colima kubernetes-cli act ngrok fastlane cocoapods
+brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget docker docker-compose colima kubernetes-cli act ngrok fastlane cocoapods exa
 
 brew tap homebrew/cask-fonts
 brew install --cask font-fira-code visual-studio-code runjs fig
@@ -37,3 +37,7 @@ ln -sfn $(brew --prefix)/opt/docker-compose/bin/docker-compose ~/.docker/cli-plu
 
 # Setting up native ruby plugin
 sudo gem install bundler:2.2.27 cocoapods
+
+# INSTALL node
+nvm install 16
+
