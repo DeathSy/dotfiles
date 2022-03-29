@@ -1,0 +1,6 @@
+alias python=/usr/local/bin/python3
+alias pip=/usr/local/bin/pip3
+alias vim=nvim
+alias act="act --container-architecture linux/amd64"
+alias ll='exa -l --icons --no-user --group-directories-first  --time-style long-iso'
+

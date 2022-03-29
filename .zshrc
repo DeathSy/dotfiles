@@ -22,6 +22,7 @@ export NVM_DIR="$HOME/.nvm"
 
 # Setting DOCKER_HOST with colima
 export DOCKER_HOST="unix://$HOME/.colima/docker.sock"
+export DOCKER_BUILDKIT=1
 
 # PLUGINS
 
@@ -38,9 +39,5 @@ eval "$(fig init zsh post)"
 
 # ALIAS
 
-alias python=/usr/local/bin/python3
-alias pip=/usr/local/bin/pip3
-alias vim=nvim
-alias act="act --container-architecture linux/amd64"
-alias ll='exa -l --icons --no-user --group-directories-first  --time-style long-iso'
+source ~/dotfiles/.aliasrc
 
