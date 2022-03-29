@@ -7,7 +7,7 @@ xcode-select --install
 brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget docker docker-compose colima kubernetes-cli act ngrok fastlane cocoapods exa alt-tab
 
 brew tap homebrew/cask-fonts
-brew install --cask font-fira-code visual-studio-code runjs fig font-hack-nerd-font
+brew install --cask font-fira-code visual-studio-code runjs fig font-hack-nerd-font raycast
 
 # ADD zsh configuration
 ln -s $(pwd)/.zshrc ~/.zshrc
