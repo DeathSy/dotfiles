@@ -7,7 +7,7 @@ export ZSH="/Users/ksotis/.oh-my-zsh"
 # Environment variables
 
 export HOMEBREW_NO_AUTO_UPDATE=1
-export GITHUB_REGISTRY_TOKEN=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
+export GITHUB_REGISTRY_TOKEN=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
 
 # Setting GoPath
 export GOPATH=$(go env GOPATH)
