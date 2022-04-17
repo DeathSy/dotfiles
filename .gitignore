@@ -2,3 +2,5 @@
 
 *.zwc*
 fonts/
+
+.secretrc

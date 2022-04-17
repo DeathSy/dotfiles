@@ -7,7 +7,6 @@ export ZSH="/Users/ksotis/.oh-my-zsh"
 # Environment variables
 
 export HOMEBREW_NO_AUTO_UPDATE=1
-export GITHUB_REGISTRY_TOKEN=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
 
 # Setting GoPath
 export GOPATH=$(go env GOPATH)
@@ -33,9 +32,9 @@ antigen init $HOME/dotfiles/.antigenrc
 # tabtab source for packages
 # uninstall by removing these lines
 [[ -f ~/.config/tabtab/__tabtab.zsh ]] && . ~/.config/tabtab/__tabtab.zsh || true
-# ALIAS
 
 source ~/dotfiles/.aliasrc
+source ~/dotfiles/.secertrc
 
 # Fig post block. Keep at the bottom of this file.
 eval "$(fig init zsh post)"
