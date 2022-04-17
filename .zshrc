@@ -34,7 +34,7 @@ antigen init $HOME/dotfiles/.antigenrc
 [[ -f ~/.config/tabtab/__tabtab.zsh ]] && . ~/.config/tabtab/__tabtab.zsh || true
 
 source ~/dotfiles/.aliasrc
-source ~/dotfiles/.secertrc
+source ~/dotfiles/.secretrc
 
 # Fig post block. Keep at the bottom of this file.
 eval "$(fig init zsh post)"
