@@ -4,4 +4,5 @@ alias vim=nvim
 alias act="act --container-architecture linux/amd64"
 alias ll='exa -l --icons --no-user --group-directories-first  --time-style long-iso'
 alias l='exa -la --icons --no-user --group-directories-first  --time-style long-iso'
-
+alias docker-start="colima start -V \"$(pwd)\":w"
+alias docker-stop="colima stop"
