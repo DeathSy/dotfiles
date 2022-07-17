@@ -18,7 +18,7 @@ export NVM_DIR="$HOME/.nvm"
   [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
 
 # Setting DOCKER_HOST with colima
-export DOCKER_HOST="unix://$HOME/.colima/docker.sock"
+export DOCKER_HOST="unix:///Users/ksotis/.docker/run/docker.sock"
 export DOCKER_BUILDKIT=1
 
 # PLUGINS

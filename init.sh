@@ -4,7 +4,7 @@ xcode-select --install
 # INSTALL homebrew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 
-brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget docker docker-compose colima kubernetes-cli act ngrok fastlane cocoapods exa alt-tab vagrant
+brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok fastlane cocoapods exa alt-tab vagrant
 
 brew tap homebrew/cask-fonts adoptopenjdk/openjdk
 brew install --cask font-fira-code visual-studio-code runjs fig font-hack-nerd-font raycast adoptopenjdk8
@@ -29,11 +29,6 @@ ln -s ~/Library/Mobile\ Documents/com\~apple\~CloudDocs/workspace/infra/config ~
 # ADD powerline font
 git clone https://github.com/powerline/fonts.git
 cd fonts && ./install.sh
-
-# Setting up docker plugin 
-
-mkdir -p ~/.docker/cli-plugins
-ln -sfn $(brew --prefix)/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 
 # Setting up native ruby plugin
 sudo gem install bundler:2.2.27 cocoapods
