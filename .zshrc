@@ -1,5 +1,5 @@
 # Fig pre block. Keep at the top of this file.
-[[ -f "$HOME/.fig/shell/zshrc.pre.zsh" ]] && . "$HOME/.fig/shell/zshrc.pre.zsh"
+[[ -f "$HOME/.fig/shell/zshrc.pre.zsh" ]] && builtin source "$HOME/.fig/shell/zshrc.pre.zsh"
 export ZSH="/Users/ksotis/.oh-my-zsh"
 
 # Environment variables
@@ -11,6 +11,7 @@ export GOPATH=$(go env GOPATH)
 export GOBIN=$GOPATH/bin
 
 export PATH=$PATH:$(go env GOPATH)/bin
+export FIG_TERM=1
 
 # Setting NVM path
 export NVM_DIR="$HOME/.nvm"
@@ -35,4 +36,4 @@ source ~/dotfiles/.aliasrc
 source ~/dotfiles/.secretrc
 
 # Fig post block. Keep at the bottom of this file.
-[[ -f "$HOME/.fig/shell/zshrc.post.zsh" ]] && . "$HOME/.fig/shell/zshrc.post.zsh"
+[[ -f "$HOME/.fig/shell/zshrc.post.zsh" ]] && builtin source "$HOME/.fig/shell/zshrc.post.zsh"
