@@ -4,7 +4,10 @@ xcode-select --install
 # INSTALL homebrew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 
-brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok fastlane cocoapods exa alt-tab vagrant appium htop rustup-init aquasecurity/trivy/trivy derailed/k9s/k9
+# INSTALL pngm
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok fastlane cocoapods exa alt-tab vagrant appium htop rustup-init openjdk@11 aquasecurity/trivy/trivy derailed/k9s/k9
 
 brew tap homebrew/cask-fonts adoptopenjdk/openjdk
 brew install --cask font-fira-code visual-studio-code runjs fig font-hack-nerd-font raycast adoptopenjdk8
