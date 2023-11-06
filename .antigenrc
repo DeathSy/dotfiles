@@ -8,6 +8,7 @@ antigen bundle tmux
 antigen bundle vscode
 antigen bundle yarn
 antigen bundle wd
+antigen bundle nekofar/zsh-pnpm
 
 antigen bundle zsh-users/zsh-completions
 antigen bundle zsh-users/zsh-autosuggestions
