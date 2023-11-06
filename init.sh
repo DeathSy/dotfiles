@@ -37,5 +37,8 @@ cd fonts && ./install.sh
 sudo gem install bundler:2.2.27 cocoapods
 
 # INSTALL node
-nvm install 16
+nvm install stable
+nvm alias default stable
+
+corepack enable
 
