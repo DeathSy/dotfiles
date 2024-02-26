@@ -1,0 +1,4 @@
+require("ks")
+
+print("hello")
+
