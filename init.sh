@@ -7,10 +7,10 @@ xcode-select --install
 # INSTALL pngm
 curl -fsSL https://get.pnpm.io/install.sh | sh -
 
-brew install go antigen tmux thefuck nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok fastlane cocoapods exa alt-tab vagrant appium htop rustup-init openjdk@11 aquasecurity/trivy/trivy derailed/k9s/k9
+brew install go antigen nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok vagrant htop rustup-init oven-sh/bun/bun openjdk@11 aquasecurity/trivy/trivy derailed/k9s/k9
 
 brew tap homebrew/cask-fonts adoptopenjdk/openjdk
-brew install --cask font-fira-code visual-studio-code runjs fig font-hack-nerd-font raycast adoptopenjdk8
+brew install --cask font-fira-code visual-studio-code runjs font-hack-nerd-font raycast adoptopenjdk8
 
 # ADD zsh configuration
 ln -s $(pwd)/.zshrc ~/.zshrc
@@ -23,18 +23,9 @@ git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 # ADD nvim configuration
 ln -s $(pwd)/nvim ~/.config/nvim
 
-# ADD iCloud configurations config to it's place
-
-ln -s ~/Library/Mobile\ Documents/com\~apple\~CloudDocs/workspace ~/workspace
-ln -s ~/Library/Mobile\ Documents/com\~apple\~CloudDocs/workspace/keypairs ~/.ssh/keypairs
-ln -s ~/Library/Mobile\ Documents/com\~apple\~CloudDocs/workspace/infra/config ~/.ssh/config
-
 # ADD powerline font
 git clone https://github.com/powerline/fonts.git
 cd fonts && ./install.sh
-
-# Setting up native ruby plugin
-sudo gem install bundler:2.2.27 cocoapods
 
 # INSTALL node
 nvm install stable

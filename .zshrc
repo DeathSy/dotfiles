@@ -1,5 +1,3 @@
-# Fig pre block. Keep at the top of this file.
-[[ -f "$HOME/.fig/shell/zshrc.pre.zsh" ]] && builtin source "$HOME/.fig/shell/zshrc.pre.zsh"
 export ZSH="/Users/ksotis/.oh-my-zsh"
 
 # Environment variables
@@ -11,22 +9,20 @@ export GOPATH=$(go env GOPATH)
 export GOBIN=$GOPATH/bin
 
 export PATH=$PATH:$(go env GOPATH)/bin
-export FIG_TERM=1
 
 # Setting NVM path
 export NVM_DIR="$HOME/.nvm"
   [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
   [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
 
-# Setting DOCKER_HOST with colima
-export DOCKER_HOST="unix:///Users/ksotis/.docker/run/docker.sock"
-export DOCKER_BUILDKIT=1
-
 # PLUGINS
 
 source ~/dotfiles/antigen/antigen.zsh
 
 antigen init $HOME/dotfiles/.antigenrc
+
+# SPACESHIP TERMINAL THEME FLAG
+SPACESHIP_PROMPT_SEPARATE_LINE=false
 
 # tabtab source for packages
 # uninstall by removing these lines
@@ -35,9 +31,6 @@ antigen init $HOME/dotfiles/.antigenrc
 source ~/dotfiles/.aliasrc
 source ~/dotfiles/.secretrc
 
-# Fig post block. Keep at the bottom of this file.
-[[ -f "$HOME/.fig/shell/zshrc.post.zsh" ]] && builtin source "$HOME/.fig/shell/zshrc.post.zsh"
-
 # pnpm
 export PNPM_HOME="/Users/ksotis/Library/pnpm"
 case ":$PATH:" in
@@ -45,3 +38,10 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 # pnpm end
+
+# bun completions
+[ -s "/Users/ksotis/.bun/_bun" ] && source "/Users/ksotis/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
