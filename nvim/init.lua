@@ -1,4 +1,0 @@
-require("ks")
-
-print("hello")
-
