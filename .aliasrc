@@ -50,3 +50,11 @@ alias bx='bun x'
 alias bbd='bun build'
 
 # END Bun Aliases
+
+# START Lazy Alias
+
+alias lg='lazygit'
+alias ld='lazydocker'
+alias lk='lazykube'
+
+# EDN Lazy Alias
