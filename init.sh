@@ -14,6 +14,9 @@ brew install --cask font-fira-code visual-studio-code runjs font-hack-nerd-font 
 
 # ADD zsh configuration
 ln -s $(pwd)/.zshrc ~/.zshrc
+source ~/.zshrc
+
+pip install harlequin
 
 # ADD tmux configuration
 ln -s $(pwd)/.tmux.conf ~/.tmux.conf

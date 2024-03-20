@@ -1,5 +1,5 @@
-alias python=/usr/local/bin/python3
-alias pip=/usr/local/bin/pip3
+alias python=$HOMEBREW_PREFIX/bin/python3
+alias pip=$HOMEBREW_PREFIX/bin/pip3
 alias vim=nvim
 alias n=nvim
 alias act="act --container-architecture linux/amd64"
