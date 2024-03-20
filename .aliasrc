@@ -55,6 +55,6 @@ alias bbd='bun build'
 
 alias lg='lazygit'
 alias ld='lazydocker'
-alias lk='lazykube'
+alias lk='k9s'
 
 # EDN Lazy Alias
