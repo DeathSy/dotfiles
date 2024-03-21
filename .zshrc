@@ -10,6 +10,9 @@ export GOBIN=$GOPATH/bin
 
 export PATH=$PATH:$(go env GOPATH)/bin
 
+export VISUAL=nvim
+export EDITOR=nvim
+
 # Setting NVM path
 export NVM_DIR="$HOME/.nvm"
   [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
