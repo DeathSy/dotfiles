@@ -23,6 +23,10 @@ git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 # ADD nvim configuration
 ln -s "$(pwd)/lvim" ~/.config/lvim
 
+# ADD wezterm configuration
+mkdir -p ~/.config/wezterm
+ln -s "$(pwd)/wezterm.lua" ~/.config/wezterm.lua
+
 # ADD powerline font
 git clone https://github.com/powerline/fonts.git
 cd fonts && ./install.sh
