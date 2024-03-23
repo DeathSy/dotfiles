@@ -7,22 +7,21 @@ xcode-select --install
 # INSTALL pngm
 curl -fsSL https://get.pnpm.io/install.sh | sh -
 
-brew install iterm2 go antigen nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok vagrant htop rustup-init oven-sh/bun/bun openjdk@11 aquasecurity/trivy/trivy derailed/k9s/k9 lazydocker tnk-studio/tools/lazykube pipx ripgrep
+brew install iterm2 wezterm go antigen nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok vagrant htop rustup-init oven-sh/bun/bun openjdk@11 aquasecurity/trivy/trivy derailed/k9s/k9 lazydocker tnk-studio/tools/lazykube pipx ripgrep
 
 brew tap homebrew/cask-fonts adoptopenjdk/openjdk
 brew install --cask font-fira-code visual-studio-code runjs font-hack-nerd-font raycast adoptopenjdk8
 
 # ADD zsh configuration
-ln -s $(pwd)/.zshrc ~/.zshrc
-source ~/.zshrc
+ln -s "$(pwd)/.zshrc" ~/.zshrc
 
 # ADD tmux configuration
-ln -s $(pwd)/.tmux.conf ~/.tmux.conf
-ln -s $(pwd)/.tmux.conf.local ~/.tmux.conf.local
+ln -s "$(pwd)/.tmux.conf" ~/.tmux.conf
+ln -s "$(pwd)/.tmux.conf.local" ~/.tmux.conf.local
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 # ADD nvim configuration
-ln -s $(pwd)/lvim ~/.config/lvim
+ln -s "$(pwd)/lvim" ~/.config/lvim
 
 # ADD powerline font
 git clone https://github.com/powerline/fonts.git
