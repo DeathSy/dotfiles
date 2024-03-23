@@ -42,6 +42,16 @@ lvim.plugins = {
     end,
   },
   {
+    "rcarriga/nvim-notify",
+    config = function()
+      require("notify").setup({
+        background_colour = "Normal",
+        timeout = 3000,
+        render = "wrapped-compact",
+      })
+    end
+  },
+  {
     "folke/noice.nvim",
     event = "VeryLazy",
     opts = {
@@ -49,7 +59,6 @@ lvim.plugins = {
     },
     dependencies = {
       "MunifTanjim/nui.nvim",
-      "rcarriga/nvim-notify",
     },
     config = function()
       require('noice').setup({
@@ -112,10 +121,9 @@ lvim.plugins = {
 
   -- Themes --
   {
-    "folke/tokyonight.nvim",
-    lazy = false,
-    priority = 1000,
-    opts = {},
+    "catppuccin/nvim",
+    name = "catppuccin",
+    priority = 1000
   }
 }
 

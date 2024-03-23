@@ -1,5 +1,5 @@
-lvim.colorscheme = "tokyonight-night"
-lvim.transparent_window = true
+lvim.colorscheme = "catppuccin-mocha"
+lvim.transparent_window = false
 lvim.format_on_save = true
 
 

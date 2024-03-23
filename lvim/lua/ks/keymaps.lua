@@ -10,6 +10,7 @@ lvim.keys.normal_mode["<leader>|"] = ":vsplit<CR>"
 lvim.keys.normal_mode["<leader>-"] = ":split<CR>"
 
 -- ChatGPT --
+lvim.keys.normal_mode["<leader>ac"] = ":ChatGPT<CR>"
 vim.keymap.set("n", "<leader>ac", ":ChatGPT<CR>")
 
 -- Telescope --
