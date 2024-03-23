@@ -22,7 +22,7 @@ ln -s $(pwd)/.tmux.conf.local ~/.tmux.conf.local
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 # ADD nvim configuration
-ln -s $(pwd)/nvim ~/.config/nvim
+ln -s $(pwd)/lvim ~/.config/lvim
 
 # ADD powerline font
 git clone https://github.com/powerline/fonts.git
