@@ -1,5 +1,5 @@
 lvim.colorscheme = "catppuccin-mocha"
-lvim.transparent_window = false
+lvim.transparent_window = true
 lvim.format_on_save = true
 
 

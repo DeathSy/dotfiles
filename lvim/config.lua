@@ -45,7 +45,7 @@ lvim.plugins = {
     "rcarriga/nvim-notify",
     config = function()
       require("notify").setup({
-        background_colour = "Normal",
+        background_colour = "#000",
         timeout = 3000,
         render = "wrapped-compact",
       })
