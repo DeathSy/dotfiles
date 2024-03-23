@@ -6,3 +6,5 @@ lvim.builtin.treesitter.ensure_installed = {
   "go",
   "lua",
 }
+
+lvim.builtin.treesitter.rainbow.enable = true
