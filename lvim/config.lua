@@ -1,8 +1,3 @@
-reload("ks.options")
-reload("ks.treesitter")
-reload("ks.keymaps")
-reload("ks.mason")
-
 lvim.plugins = {
   -- vim motion plugins --
   { "tpope/vim-surround" },
@@ -33,6 +28,27 @@ lvim.plugins = {
   },
 
   -- Productivity --
+  {
+    "jackMort/ChatGPT.nvim",
+    event = "VeryLazy",
+    config = function()
+      require("chatgpt").setup({
+        api_key_cmd = "echo $OPENAI_API_KEY",
+        openai_params = {
+          model = "gpt-4-turbo-preview",
+        },
+        openai_edit_params = {
+          model = "gpt-4-turbo-preview",
+        },
+      })
+    end,
+    dependencies = {
+      "MunifTanjim/nui.nvim",
+      "nvim-lua/plenary.nvim",
+      "folke/trouble.nvim",
+      "nvim-telescope/telescope.nvim"
+    },
+  },
 
   -- Themes --
   {
@@ -43,21 +59,6 @@ lvim.plugins = {
   }
 }
 
-local ok, copilot = pcall(require, "copilot")
-if not ok then
-  return
-end
-
-copilot.setup {
-  suggestion = {
-    keymap = {
-      accept = "<c-l>",
-      next = "<c-j>",
-      prev = "<c-k>",
-      dismiss = "<c-h>",
-    },
-  },
-}
-
-local opts = { noremap = true, silent = true }
-vim.api.nvim_set_keymap("n", "<c-s>", "<cmd>lua require('copilot.suggestion').toggle_auto_trigger()<CR>", opts)
+require("ks.options")
+require("ks.treesitter")
+require("ks.keymaps")
