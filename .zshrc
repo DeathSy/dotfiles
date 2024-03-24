@@ -25,7 +25,7 @@ source ~/dotfiles/antigen/antigen.zsh
 antigen init $HOME/dotfiles/.antigenrc
 
 # SPACESHIP TERMINAL THEME FLAG
-SPACESHIP_PROMPT_SEPARATE_LINE=false
+SPACESHIP_PROMPT_SEPARATE_LINE=true
 
 # tabtab source for packages
 # uninstall by removing these lines
