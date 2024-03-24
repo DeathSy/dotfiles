@@ -24,11 +24,6 @@ source ~/dotfiles/antigen/antigen.zsh
 
 antigen init $HOME/dotfiles/.antigenrc
 
-
-# Setting tmuxifier
-export PATH="$HOME/.tmux/plugins/tmuxifier/bin":$PATH
-eval "$(tmuxifier init -)"
-
 # SPACESHIP TERMINAL THEME FLAG
 SPACESHIP_PROMPT_SEPARATE_LINE=false
 
