@@ -15,10 +15,14 @@ brew install --cask font-fira-code visual-studio-code runjs font-hack-nerd-font 
 # ADD zsh configuration
 ln -s "$(pwd)/.zshrc" ~/.zshrc
 
+# ADD neofetch configuration
+ln -s "$(pwd)/neofetch.conf" ~/.config/neofetch
+
 # ADD tmux configuration
 ln -s "$(pwd)/.tmux.conf" ~/.tmux.conf
 ln -s "$(pwd)/.tmux.conf.local" ~/.tmux.conf.local
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+
 
 # ADD nvim configuration
 ln -s "$(pwd)/lvim" ~/.config/lvim
