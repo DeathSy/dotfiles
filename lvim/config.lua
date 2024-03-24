@@ -82,6 +82,7 @@ lvim.plugins = {
   },
 
   -- Productivity --
+  { "christoomey/vim-tmux-navigator" },
   {
     "jackMort/ChatGPT.nvim",
     event = "VeryLazy",
