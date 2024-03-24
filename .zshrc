@@ -24,6 +24,11 @@ source ~/dotfiles/antigen/antigen.zsh
 
 antigen init $HOME/dotfiles/.antigenrc
 
+
+# Setting tmuxifier
+export PATH="$HOME/.tmux/plugins/tmuxifier/bin":$PATH
+eval "$(tmuxifier init -)"
+
 # SPACESHIP TERMINAL THEME FLAG
 SPACESHIP_PROMPT_SEPARATE_LINE=false
 
@@ -50,3 +55,4 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 export PATH="$HOME/.local/bin":$PATH
+
