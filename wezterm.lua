@@ -15,5 +15,11 @@ config.window_close_confirmation = "AlwaysPrompt"
 config.scrollback_lines = 3000
 config.default_workspace = "home"
 config.enable_tab_bar = false
+config.window_padding = {
+  left = 10,
+  top = 0,
+  right = 0,
+  bottom = 0,
+}
 
 return config
