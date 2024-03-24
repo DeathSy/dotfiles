@@ -3,11 +3,7 @@ antigen use oh-my-zsh
 antigen bundle docker
 antigen bundle docker-compose
 antigen bundle git
-antigen bundle gitignore
-antigen bundle tmux
-antigen bundle vscode
 antigen bundle yarn
-antigen bundle wd
 antigen bundle nekofar/zsh-pnpm
 
 antigen bundle zsh-users/zsh-completions
