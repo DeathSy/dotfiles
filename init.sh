@@ -12,6 +12,11 @@ brew install neofetch go antigen nvm gh git-flow git-lfs helm neovim ruby terraf
 brew tap homebrew/cask-fonts adoptopenjdk/openjdk
 brew install --cask font-fira-code visual-studio-code runjs font-hack-nerd-font raycast adoptopenjdk8 wezterm
 
+# ADD k9s theme
+OUT="${XDG_CONFIG_HOME:-$HOME/Library/Application Support}/k9s/skins"
+mkdir -p "$OUT"
+curl -L https://github.com/catppuccin/k9s/archive/main.tar.gz | tar xz -C "$OUT" --strip-components=2 k9s-main/dist
+
 # ADD zsh configuration
 ln -s "$(pwd)/.zshrc" ~/.zshrc
 
