@@ -9,7 +9,7 @@ config.color_scheme = "Catppuccin Mocha"
 config.font = wezterm.font_with_fallback({
   { family = "Fira Code", scale = 1.1 },
 })
-config.window_background_opacity = 0.9
+config.window_background_opacity = 1
 config.window_decorations = "RESIZE"
 config.window_close_confirmation = "AlwaysPrompt"
 config.scrollback_lines = 3000
