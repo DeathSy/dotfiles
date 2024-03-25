@@ -60,4 +60,8 @@ alias lg='lazygit'
 alias ld='lazydocker'
 alias lk='k9s'
 
-# EDN Lazy Alias
+# END Lazy Alias
+
+# START Tmux Alias
+alias tmux='tmux new-session -A -s'
+# END Tmux Alias
