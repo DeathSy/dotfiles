@@ -10,8 +10,8 @@ export GOBIN=$GOPATH/bin
 
 export PATH=$PATH:$(go env GOPATH)/bin
 
-export VISUAL=nvim
-export EDITOR=nvim
+export VISUAL=lvim
+export EDITOR=lvim
 
 # Setting NVM path
 export NVM_DIR="$HOME/.nvm"
