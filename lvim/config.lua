@@ -15,15 +15,6 @@ lvim.plugins = {
 
   -- Editor --
   {
-    "f-person/git-blame.nvim",
-    event = "BufRead",
-    config = function()
-      vim.cmd "highlight default link gitblame SpecialComment"
-      require("gitblame").setup { enabled = false }
-    end,
-
-  },
-  {
     "mrjones2014/nvim-ts-rainbow",
   },
   {
@@ -82,36 +73,8 @@ lvim.plugins = {
   },
 
   -- Productivity --
+  { "tpope/vim-dotenv" },
   { "christoomey/vim-tmux-navigator" },
-  {
-    "f-person/git-blame.nvim",
-    event = "BufRead",
-    config = function()
-      vim.cmd "highlight default link gitblame SpecialComment"
-      vim.g.gitblame_enabled = 1
-    end,
-  },
-  {
-    "jackMort/ChatGPT.nvim",
-    event = "VeryLazy",
-    config = function()
-      require("chatgpt").setup({
-        api_key_cmd = "echo $OPENAI_API_KEY",
-        openai_params = {
-          model = "gpt-4-turbo-preview",
-        },
-        openai_edit_params = {
-          model = "gpt-4-turbo-preview",
-        },
-      })
-    end,
-    dependencies = {
-      "MunifTanjim/nui.nvim",
-      "nvim-lua/plenary.nvim",
-      "folke/trouble.nvim",
-      "nvim-telescope/telescope.nvim"
-    },
-  },
   {
     "zbirenbaum/copilot.lua",
     cmd = "Copilot",
@@ -126,6 +89,27 @@ lvim.plugins = {
   {
     "metakirby5/codi.vim",
     cmd = "Codi",
+  },
+  {
+    "tpope/vim-dadbod"
+  },
+  {
+    "kristijanhusak/vim-dadbod-ui"
+  },
+  {
+    "kristijanhusak/vim-dadbod-completion",
+    ft = { 'sql', 'mysql', 'plsql' },
+    lazy = true,
+    cmd = {
+      'DBUI',
+      'DBUIToggle',
+      'DBUIAddConnection',
+      'DBUIFindBuffer',
+    },
+    init = function()
+      -- Your DBUI configuration
+      vim.g.db_ui_use_nerd_fonts = 1
+    end,
   },
 
   -- Themes --

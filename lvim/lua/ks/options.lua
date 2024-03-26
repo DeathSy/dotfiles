@@ -16,6 +16,19 @@ vim.opt.shiftwidth = 2
 vim.opt.tabstop = 2
 vim.opt.wrap = true
 
+-- Telescope Setup --
+lvim.builtin.telescope = {
+  defaults = {
+    layout_strategy = "horizontal",
+    layout_config = {
+      width = 0.75,
+      preview_cutoff = 120,
+      horizontal = { mirror = false },
+      vertical = { mirror = false },
+    },
+  },
+}
+
 -- Copilot Setup --
 local ok, copilot = pcall(require, "copilot")
 if not ok then

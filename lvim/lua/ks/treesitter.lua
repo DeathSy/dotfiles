@@ -5,7 +5,8 @@ lvim.builtin.treesitter.ensure_installed = {
   "json",
   "go",
   "lua",
-  "bash"
+  "bash",
+  "sql"
 }
 
 lvim.builtin.treesitter.rainbow.enable = true
