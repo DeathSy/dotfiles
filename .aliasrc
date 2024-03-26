@@ -63,5 +63,5 @@ alias lk='k9s'
 # END Lazy Alias
 
 # START Tmux Alias
-alias tmux='tmux new-session -A -s'
+alias tmux='tmux new-session -A -c ~/workspace -s'
 # END Tmux Alias
