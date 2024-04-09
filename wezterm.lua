@@ -11,7 +11,7 @@ config.font = wezterm.font_with_fallback({
 })
 config.window_background_opacity = 1
 config.window_decorations = "RESIZE"
-config.window_close_confirmation = "AlwaysPrompt"
+config.window_close_confirmation = "NeverPrompt"
 config.scrollback_lines = 3000
 config.default_workspace = "home"
 config.enable_tab_bar = false
