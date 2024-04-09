@@ -1,0 +1,33 @@
+# initial yabai
+
+yabai -m signal --add event=dock_did_restart action="sudo yabai --load-sa"
+sudo yabai --load-sa
+
+# setting up yabai layout
+
+yabai -m config layout bsp
+
+# configure window padding
+
+yabai -m config top_padding 10
+yabai -m config left_padding 10
+yabai -m config bottom_padding 10
+yabai -m config right_padding 10
+yabai -m config window_gap 10
+
+
+# add mouse support just in case i'm using mouse
+
+yabai -m config mouse_follows_focus on
+
+yabai -m config mouse_modifer ctrl
+
+yabai -m config mouse_action1 move
+yabai -m config mouse_action2 resize
+
+yabai -m mouse_drop_action swap
+
+# Disable specific app from yabai
+
+yabai -m rule --add app="^System Settings$" manage=off
+
