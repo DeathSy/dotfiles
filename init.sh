@@ -7,7 +7,7 @@ xcode-select --install
 # INSTALL pngm
 curl -fsSL https://get.pnpm.io/install.sh | sh -
 
-brew install neofetch go antigen nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok vagrant htop rustup-init oven-sh/bun/bun openjdk@11 aquasecurity/trivy/trivy derailed/k9s/k9 lazydocker tnk-studio/tools/lazykube pipx ripgrep entr lefthook yabai skhd
+brew install neofetch go antigen nvm gh git-flow git-lfs helm neovim ruby terraform tree wget kubernetes-cli act ngrok vagrant htop rustup-init oven-sh/bun/bun openjdk@11 aquasecurity/trivy/trivy derailed/k9s/k9 lazydocker tnk-studio/tools/lazykube pipx ripgrep entr lefthook koekeishiya/formulae/yabai skhd
 
 brew tap homebrew/cask-fonts adoptopenjdk/openjdk
 brew install --cask font-fira-code visual-studio-code runjs font-hack-nerd-font raycast adoptopenjdk8 wezterm
