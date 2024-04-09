@@ -53,3 +53,5 @@ export PATH="$HOME/.local/bin":$PATH
 
 neofetch
 
+
+eval $(thefuck --alias)
