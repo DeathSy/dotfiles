@@ -17,16 +17,20 @@ vim.opt.tabstop = 2
 vim.opt.wrap = true
 
 -- Telescope Setup --
-lvim.builtin.telescope = {
-  defaults = {
-    layout_strategy = "horizontal",
-    layout_config = {
-      width = 0.75,
-      preview_cutoff = 120,
-      horizontal = { mirror = false },
-      vertical = { mirror = false },
-    },
-  },
+
+lvim.builtin.telescope.pickers.find_files = {
+  layout_config = { height = 0.80, width = 0.80, preview_cutoff = 120, preview_width = 0.6, prompt_position = "top" },
+  layout_strategy = "horizontal"
+}
+
+lvim.builtin.telescope.pickers.live_grep = {
+  layout_config = { height = 0.80, width = 0.80, preview_cutoff = 120, preview_width = 0.6, prompt_position = "top" },
+  layout_strategy = "horizontal"
+}
+
+lvim.builtin.telescope.pickers.git_commits = {
+  layout_strategy = "horizontal",
+  layout_config = { height = 0.88, width = 0.88, preview_cutoff = 20, preview_width = 0.70, prompt_position = "bottom" }
 }
 
 -- Copilot Setup --
