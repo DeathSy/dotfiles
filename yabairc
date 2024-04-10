@@ -6,6 +6,7 @@ sudo yabai --load-sa
 # setting up yabai layout
 
 yabai -m config layout bsp
+yabai -m config external_bar all:32:0
 
 # configure window padding
 
