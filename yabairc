@@ -31,4 +31,6 @@ yabai -m mouse_drop_action swap
 # Disable specific app from yabai
 
 yabai -m rule --add app="^System Settings$" manage=off
+yabai -m rule --add app="^Finder$" manage=off
+yabai -m rule --add app="^Raycast$" manage=off
 
