@@ -55,6 +55,11 @@ alias bbd='bun build'
 
 # END Bun Aliases
 
+# START TMUX alias
+alias t='sesh connect $(sesh list | fzf)'
+
+# END TMUX alias
+
 # START Lazy Alias
 
 alias lg='lazygit'
