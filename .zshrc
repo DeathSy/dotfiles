@@ -55,3 +55,4 @@ neofetch
 
 
 eval $(thefuck --alias)
+eval "$(zoxide init zsh)"
