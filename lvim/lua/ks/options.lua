@@ -18,9 +18,51 @@ vim.opt.wrap = true
 
 -- Telescope Setup --
 
+lvim.builtin.telescope.defaults.file_ignore_patterns = {
+  "vendor/*",
+  "%.lock",
+  "__pycache__/*",
+  "%.sqlite3",
+  "%.ipynb",
+  "node_modules/*",
+  "%.jpg",
+  "%.jpeg",
+  "%.png",
+  "%.svg",
+  "%.otf",
+  "%.ttf",
+  ".git/",
+  "%.webp",
+  ".dart_tool/",
+  ".github/",
+  ".gradle/",
+  ".idea/",
+  ".vscode/",
+  "__pycache__/",
+  "build/",
+  "env/",
+  "gradle/",
+  "node_modules/",
+  "target/",
+  "%.pdb",
+  "%.dll",
+  "%.class",
+  "%.exe",
+  "%.cache",
+  "%.ico",
+  "%.pdf",
+  "%.dylib",
+  "%.jar",
+  "%.docx",
+  "%.met",
+  "smalljre_*/*",
+  ".vale/",
+}
+
 lvim.builtin.telescope.pickers.find_files = {
   layout_config = { height = 0.80, width = 0.80, preview_cutoff = 120, preview_width = 0.6, prompt_position = "top" },
-  layout_strategy = "horizontal"
+  layout_strategy = "horizontal",
+  hidden = true,
 }
 
 lvim.builtin.telescope.pickers.live_grep = {
