@@ -10,6 +10,7 @@ alias l='exa -la --icons --no-user --group-directories-first  --time-style long-
 alias docker-start="colima start -V \"$HOME/workspace/appman\":w"
 alias docker-stop="colima stop"
 alias docker-reset="docker system prune --volumes -fa"
+alias cd=z
 
 # Start Bun Aliases
 
