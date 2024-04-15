@@ -3,9 +3,10 @@ alt - k : yabai -m window --focus north
 alt - h : yabai -m window --focus west
 alt - l : yabai -m window --focus east
 alt - p : yabai -m window --focus next || yabai -m window --focus first
+alt - o : yabai -m window --focus prev || yabai -m window --focus last
 
-alt - b : yabai -m space --focus prev
-alt - n : yabai -m space --focus next
+alt - n : yabai -m space --focus next || yabai -m space --focus first
+alt - b : yabai -m space --focus prev || yabai -m space --focus last
 alt + shift - b : yabai -m window --space prev; yabai -m space --focus prev;
 alt + shift - n : yabai -m window --space next; yabai -m space --focus next;
 alt + shift - c : yabai -m space --create && \
@@ -13,8 +14,8 @@ alt + shift - c : yabai -m space --create && \
                    yabai -m window --space "${index}" && \
                    yabai -m space --focus "${index}"
 
-ctrl + shift - h : yabai -m display --focus west
-ctrl + shift - l : yabai -m display --focus east
+ctrl + alt - h : yabai -m display --focus next || yabai -m display --focus first
+ctrl + alt - l : yabai -m display --focus prev || yabai -m display --focus last
 
 shift + alt - r : yabai -m space --rotate 270
 shift + alt - y : yabai -m space --mirror y-axis
@@ -32,4 +33,4 @@ shift + alt - l : yabai -m window --warp east
 ctrl + shift + alt - h : yabai -m window --display west; yabai -m display --focust west;
 ctrl + shift + alt - l : yabai -m window --display east; yabai -m display --focust east;
 
-alt - z : yabai -m window --toggle zoom-fullscreen
+alt - m : yabai -m window --toggle zoom-fullscreen
