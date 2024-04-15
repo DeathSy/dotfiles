@@ -5,9 +5,9 @@ alt - l : yabai -m window --focus east
 
 alt - b : yabai -m space --focus prev
 alt - n : yabai -m space --focus next
-alt + ctrl - b : yabai -m window --space prev; yabai -m space --focus prev;
-alt + ctrl - n : yabai -m window --space next; yabai -m space --focus next;
-alt + ctrl - c : yabai -m space --create && \
+alt + shift - b : yabai -m window --space prev; yabai -m space --focus prev;
+alt + shift - n : yabai -m window --space next; yabai -m space --focus next;
+alt + shift - c : yabai -m space --create && \
                    index="$(yabai -m query --spaces --display | jq 'map(select(."is-native-fullscreen" == false))[-1].index')" && \
                    yabai -m window --space "${index}" && \
                    yabai -m space --focus "${index}"
