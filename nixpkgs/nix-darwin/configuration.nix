@@ -1,6 +1,4 @@
 { pkgs, ... }: {
-  # List packages installed in system profile. To search by name, run:
-  # $ nix-env -qaP | grep wget
   environment.systemPackages = with pkgs; [
     vim
     neovim
@@ -38,6 +36,7 @@
     pnpm
     bat
     fd
+    postman
   ];
 
   services.nix-daemon.enable = true;
