@@ -163,10 +163,4 @@
 
 		sketchybar.enable = true;
 	};
-
-	launchd.user.agents = {
-		aerospace = {
-			command = "open /Applications/AeroSpace.app";
-		};
-	};
 }

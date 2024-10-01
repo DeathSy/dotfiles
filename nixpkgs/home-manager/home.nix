@@ -41,7 +41,9 @@
     };
 	};
 
-  home.activation.set-wallpaper = lib.mkAfter ''
+  home.activation.startup-application = lib.mkAfter ''
   /usr/local/bin/desktoppr ~/workspace/dotfiles/wallpapers/Cloudsnight-landscape.jpg
+
+	/usr/bin/open /Applications/AeroSpace.app
   '';
 }
