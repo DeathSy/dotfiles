@@ -83,6 +83,7 @@
       "nikitabobko/tap/aerospace"
       "sf-symbols"
       "runjs"
+      "desktoppr"
     ];
 
     masApps = {

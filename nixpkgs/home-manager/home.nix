@@ -1,4 +1,4 @@
-{ config, pkgs, ... }: {
+{ config, pkgs, lib, ... }: {
   home.username = "ksotis";
 
   home.stateVersion = "24.05";
@@ -40,4 +40,8 @@
       enable = true;
     };
 	};
+
+  home.activation.set-wallpaper = lib.mkAfter ''
+  /usr/local/bin/desktoppr ~/workspace/dotfiles/wallpapers/Cloudsnight-landscape.jpg
+  '';
 }
