@@ -139,7 +139,6 @@
         TrackpadThreeFingerDrag = true;
       };
 
-      screencapture.location = "~/Pictures/screenshots";
       screensaver.askForPasswordDelay = 10;
     };
 
