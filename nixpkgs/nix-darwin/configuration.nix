@@ -82,6 +82,7 @@
     casks = [
       "nikitabobko/tap/aerospace"
       "sf-symbols"
+      "runjs"
     ];
 
     masApps = {
