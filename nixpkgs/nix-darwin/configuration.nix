@@ -85,10 +85,12 @@
       "sf-symbols"
       "runjs"
       "desktoppr"
+      "notion-calendar"
+      "tidal"
     ];
 
     masApps = {
-
+      "Things3" = 904280696;
     };
   };
 
