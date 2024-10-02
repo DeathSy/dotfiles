@@ -38,6 +38,7 @@
     fd
     postman
     ngrok
+    podman
   ];
 
   services.nix-daemon.enable = true;
