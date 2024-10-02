@@ -1,4 +1,11 @@
-{ config, pkgs, lib, ... }: {
+{ config, pkgs, lib, ... }:
+let
+  kubectl-forward = pkgs.fetchurl {
+    url = "https://raw.githubusercontent.com/ljakimczuk/kubectl-forward/main/bin/kubectl-forward";
+    hash = "sha256-2nLkitQK54ePm4PrYZ7YmySd4qmju+pzjTpZD6vL7RA=";
+  };
+in
+{
   home.username = "ksotis";
 
   home.stateVersion = "24.05";
@@ -23,6 +30,10 @@
 		".config/aerospace/aerospace.toml".source = ../../aerospace.toml;
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 	};
+
+  home.packages = with pkgs; [
+    (writeShellScriptBin "kubectl-forward" (builtins.readFile kubectl-forward))
+  ];
 
 	programs = {
 		lazygit.enable = true;
