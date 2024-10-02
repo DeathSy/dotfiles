@@ -23,13 +23,13 @@
     zoxide
     sesh
     bun
-		git-credential-manager
-		slack
-		raycast
-		arc-browser
-		sketchybar
-		jankyborders
-		fzf
+    git-credential-manager
+    slack
+    raycast
+    arc-browser
+    sketchybar
+    jankyborders
+    fzf
     nodejs_22
     corepack_22
     yarn
