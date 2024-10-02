@@ -70,6 +70,9 @@
 
   homebrew = {
     enable = true;
+    global = {
+      autoUpdate = true;
+    };
 
 		onActivation = {
       cleanup = "uninstall";
@@ -78,7 +81,12 @@
 
 		taps = [
 			"nikitabobko/tap"
+      "common-fate/granted"
 		];
+
+    brews = [
+      "granted"
+    ];
 
     casks = [
       "nikitabobko/tap/aerospace"
@@ -87,10 +95,12 @@
       "desktoppr"
       "notion-calendar"
       "tidal"
+      "firefox"
     ];
 
     masApps = {
       "Things3" = 904280696;
+      "Xcode" = 497799835;
     };
   };
 
