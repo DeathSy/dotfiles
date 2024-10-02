@@ -38,7 +38,6 @@
     fd
     postman
     ngrok
-    atac
   ];
 
   services.nix-daemon.enable = true;
