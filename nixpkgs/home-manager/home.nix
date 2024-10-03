@@ -46,10 +46,6 @@ in
 		bun = {
 			enable = true;
 		};
-
-    direnv = {
-      enable = true;
-    };
 	};
 
   home.activation.startup-application = lib.mkAfter ''
