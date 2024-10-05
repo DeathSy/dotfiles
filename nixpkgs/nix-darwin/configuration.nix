@@ -30,15 +30,10 @@
     sketchybar
     jankyborders
     fzf
-    nodejs_22
-    corepack_22
-    yarn
-    pnpm
     bat
     fd
     postman
-    ngrok
-    podman
+    tableplus
   ];
 
   services.nix-daemon.enable = true;
