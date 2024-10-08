@@ -33,6 +33,8 @@ in
 
   home.packages = with pkgs; [
     (writeShellScriptBin "kubectl-forward" (builtins.readFile kubectl-forward))
+    nodejs
+    corepack
   ];
 
 	programs = {
