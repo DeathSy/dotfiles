@@ -113,8 +113,8 @@
 
       NSGlobalDomain = {
         ApplePressAndHoldEnabled = false;
-        InitialKeyRepeat = 25;
-        KeyRepeat = 6;
+        InitialKeyRepeat = 10;
+        KeyRepeat = 2;
         AppleEnableSwipeNavigateWithScrolls = false;
         AppleInterfaceStyle = "Dark";
         AppleShowAllExtensions = true;
