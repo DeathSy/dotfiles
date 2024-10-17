@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ home, config, pkgs, ... }:
 let
   k9sSkins = pkgs.fetchurl {
     url = "https://github.com/catppuccin/k9s/archive/main.tar.gz";

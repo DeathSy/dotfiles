@@ -31,12 +31,13 @@
 						useUserPackages = true;
 						backupFileExtension = "backup";
 						users.ksotis.imports = [
-							./nixpkgs/home-manager/home.nix
 							./nixpkgs/home-manager/direnv.nix
 							./nixpkgs/home-manager/git.nix
+							./nixpkgs/home-manager/home.nix
+							./nixpkgs/home-manager/k9s.nix
+							./nixpkgs/home-manager/starship.nix
 							./nixpkgs/home-manager/tmux.nix
 							./nixpkgs/home-manager/zsh.nix
-							./nixpkgs/home-manager/starship.nix
 						];
 					};
 
