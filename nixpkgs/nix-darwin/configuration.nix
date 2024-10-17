@@ -13,6 +13,7 @@
     kubectl
     tree
     k9s
+    kubectx
     ripgrep
     btop
     eza

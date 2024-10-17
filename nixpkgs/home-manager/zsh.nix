@@ -24,10 +24,11 @@
 		zplug = {
 			enable = true;
 			plugins = [
+				{ name = "nekofar/zsh-pnpm"; }
+				{ name = "ntnyq/omz-plugin-bun"; }
 				{ name = "zsh-users/zsh-autosuggestions"; }
 				{ name = "zsh-users/zsh-completions"; }
 				{ name = "zsh-users/zsh-syntax-highlighting"; }
-				{ name = "nekofar/zsh-pnpm"; }
 			];
 		};
 
