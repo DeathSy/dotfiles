@@ -32,6 +32,7 @@
     mkalias
     postman
     raycast
+    tableplus
   ];
 
   services.nix-daemon.enable = true;
@@ -79,6 +80,7 @@
 
     brews = [
       "granted"
+      "trivy"
     ];
 
     casks = [
