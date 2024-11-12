@@ -8,6 +8,7 @@
 			GOBIN = "$GOPATH/bin";
 			VISUAL = "nvim";
 			EDITOR = "nvim";
+      ANTHROPIC_API_KEY = "$(pass show claude/personal)";
 		};
 
 		oh-my-zsh = {
