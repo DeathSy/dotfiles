@@ -42,6 +42,7 @@
 			bind-key | split-pane -h -c "#{pane_current_path}"
 			bind-key - split-pane -v -c "#{pane_current_path}"
 			bind-key c new-window -c "$HOME/workspace"
+      bind-key o display-popup -E lf
 
 			# Zoom motion
 			unbind z
