@@ -37,6 +37,10 @@ in
     corepack
   ];
 
+  home.sessionVariables = {
+    ANTHROPIC_API_KEY = "$(pass show claude/personal)";
+  };
+
 	programs = {
 		lazygit.enable = true;
 
