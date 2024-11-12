@@ -90,7 +90,6 @@
       "runjs"
       "desktoppr"
       "notion-calendar"
-      "tidal"
       "firefox"
       "arc"
       "wezterm"
