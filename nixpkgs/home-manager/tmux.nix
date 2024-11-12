@@ -8,7 +8,7 @@
 		extraConfig = ''
 		# Reload config keymap
 			unbind r
-			bind r source-file ~/.tmux.conf
+			bind r source-file ~/.config/tmux/tmux.conf
 
 			set -sg escape-time 0
 			set -g mouse on
@@ -70,6 +70,9 @@
             hash = "sha256-fXlBqc3nIEOcdL8Q1OOYb6javnwF9mT3gtgP3NpDPdw=";
           };
         };
+        extraConfig = ''
+        set -g @open-lazygit 'g'
+        '';
       }
       {
         plugin = tmuxPlugins.mkTmuxPlugin {
