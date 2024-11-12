@@ -34,6 +34,7 @@
     postman
     raycast
     tableplus
+    lf
   ];
 
   services.nix-daemon.enable = true;
