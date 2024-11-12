@@ -48,6 +48,8 @@
       
       find="fd";
 
+      ktx="kubectx";
+
       ls="eza --color=always --group-directories-first --icons";
       ll="eza -la --icons --octal-permissions --group-directories-first";
       l="eza -bGF --header --git --color=always --group-directories-first --icons";
