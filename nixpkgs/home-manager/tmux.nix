@@ -34,8 +34,10 @@
 			# Vim motion in tmux using prefix
 			setw -g mode-keys vi
 			bind-key -T copy-mode-vi v send-keys -X begin-selection
+			# bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel
 			bind-key -T copy-mode-vi C-v send-keys -X rectangle-toggle
-			bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
+
+      set-window-option -g mode-keys vi
 
 			bind-key | split-pane -h -c "#{pane_current_path}"
 			bind-key - split-pane -v -c "#{pane_current_path}"
@@ -64,6 +66,18 @@
 			tmuxPlugins.sensible
 			tmuxPlugins.yank
 			tmuxPlugins.vim-tmux-navigator
+      {
+        plugin = tmuxPlugins.mkTmuxPlugin {
+          pluginName = "neolazygit";
+          version = "863bb60";
+          src = pkgs.fetchFromGitHub {
+            owner = "AngryMorrocoy";
+            repo = "tmux-neolazygit";
+            rev = "863bb604550f6e599456082b14a9d91f4dabebdf";
+            hash = "sha256-fXlBqc3nIEOcdL8Q1OOYb6javnwF9mT3gtgP3NpDPdw=";
+          };
+        };
+      }
       {
         plugin = tmuxPlugins.mkTmuxPlugin {
           pluginName = "floax";
