@@ -21,7 +21,6 @@
     tmux
     lazygit
     zoxide
-    sesh
     bun
     git-credential-manager
     slack

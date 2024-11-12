@@ -46,26 +46,19 @@
 			# Zoom motion
 			unbind z
 			bind-key m resize-pane -Z
-
-			# Tmux session with sesh and fzf-tmux
-			unbind s
-			bind-key s run-shell "sesh connect \"$(
-				sesh list | fzf-tmux -p 55%,60% \
-					--no-sort --border-label ' sesh ' --prompt '⚡  ' \
-					--header '  ^a all ^t tmux ^g configs ^x zoxide ^d tmux kill ^f find' \
-					--bind 'tab:down,btab:up' \
-					--bind 'ctrl-a:change-prompt(⚡  )+reload(sesh list)' \
-					--bind 'ctrl-t:change-prompt(🪟  )+reload(sesh list -t)' \
-					--bind 'ctrl-g:change-prompt(⚙️  )+reload(sesh list -c)' \
-					--bind 'ctrl-x:change-prompt(📁  )+reload(sesh list -z)' \
-					--bind 'ctrl-f:change-prompt(🔎  )+reload(fd -H -d 2 -t d -E .Trash . ~)' \
-					--bind 'ctrl-d:execute(tmux kill-session -t {})+change-prompt(⚡  )+reload(sesh list)'
-			)\""
 		'';
 		plugins = with pkgs; [
 			tmuxPlugins.sensible
 			tmuxPlugins.yank
 			tmuxPlugins.vim-tmux-navigator
+      { 
+        plugin = tmuxPlugins.session-wizard;
+        extraConfig = ''
+        set -g @session-wizard 's'
+        set -g @session-wizard-mode 'directory'
+        set -g @session-wizard-windows on
+        '';
+      }
       {
         plugin = tmuxPlugins.mkTmuxPlugin {
           pluginName = "neolazygit";

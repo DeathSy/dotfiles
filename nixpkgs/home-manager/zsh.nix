@@ -38,7 +38,6 @@
 			vi = "nvim";
 			n = "nvim";
 
-			t = "sesh connect $(sesh list | fzf)";
 			lg = "lazygit";
 			lk = "k9s";
 
