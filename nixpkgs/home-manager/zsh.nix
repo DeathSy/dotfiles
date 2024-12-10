@@ -9,6 +9,7 @@
 			VISUAL = "nvim";
 			EDITOR = "nvim";
       ANTHROPIC_API_KEY = "$(pass show claude/personal)";
+      GITHUB_REGISTRY_TOKEN = "$(pass show github/personal)";
 		};
 
 		oh-my-zsh = {
@@ -60,6 +61,10 @@
       "l."="eza -a | grep -E '^\.'";
 
       assume="source /opt/homebrew/bin/assume";
+
+      au="assume --unset";
+      a="assume";
+      ac="assume -c";
 		};
 
 		initExtra = ''

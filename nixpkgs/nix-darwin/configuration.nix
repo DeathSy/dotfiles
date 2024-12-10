@@ -34,6 +34,9 @@
     raycast
     tableplus
     lf
+    bundler
+    cocoapods
+    discord
   ];
 
   services.nix-daemon.enable = true;
@@ -93,6 +96,7 @@
       "firefox"
       "arc"
       "wezterm"
+      "anydesk"
     ];
 
     masApps = {
