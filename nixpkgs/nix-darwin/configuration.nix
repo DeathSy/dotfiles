@@ -85,6 +85,7 @@
     brews = [
       "granted"
       "trivy"
+      "pinentry"
     ];
 
     casks = [
@@ -117,10 +118,6 @@
         show-recents = false;
         tilesize = 32;
         expose-group-by-app = true;
-      };
-
-      spaces = {
-        spans-displays = false;
       };
 
       NSGlobalDomain = {
