@@ -103,6 +103,7 @@
       "Things3" = 904280696;
       "Xcode" = 497799835;
       "Pages" = 409201541;
+      "The Unarchiver" = 425424353;
     };
   };
 
@@ -116,6 +117,10 @@
         show-recents = false;
         tilesize = 32;
         expose-group-by-app = true;
+      };
+
+      spaces = {
+        spans-displays = false;
       };
 
       NSGlobalDomain = {
