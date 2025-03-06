@@ -93,11 +93,11 @@
       "sf-symbols"
       "runjs"
       "desktoppr"
-      "notion-calendar"
       "firefox"
       "arc"
       "wezterm"
       "anydesk"
+      "ngrok"
     ];
 
     masApps = {
@@ -106,6 +106,8 @@
       "Pages" = 409201541;
       "The Unarchiver" = 425424353;
       "Line" = 539883307;
+      "Microsoft Word" = 462054704;
+      "WhatApps" = 310633997;
     };
   };
 
