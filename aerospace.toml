@@ -177,16 +177,16 @@ if.app-id = 'company.thebrowser.Browser'
 run = "move-node-to-workspace A"
 
 [[on-window-detected]]
-if.app-id = 'com.culturedcode.ThingsMac'
+if.app-id = 'com.apple.iCal'
 run = "move-node-to-workspace C"
 
 [[on-window-detected]]
-if.app-id = 'com.cron.electron'
+if.app-id = 'com.apple.reminders'
 run = "move-node-to-workspace C"
 
 [[on-window-detected]]
-if.app-id = 'com.electron.kontena-lens'
-run = "move-node-to-workspace D"
+if.app-id = 'com.apple.Notes'
+run = "move-node-to-workspace C"
 
 [[on-window-detected]]
 if.app-id = 'com.tinyapp.TablePlus'
@@ -209,7 +209,15 @@ if.app-id = 'com.hnc.Discord'
 run = "move-node-to-workspace S"
 
 [[on-window-detected]]
-if.app-id = 'com.microsoft.teams'
+if.app-id = 'jp.naver.line.mac'
+run = "move-node-to-workspace X"
+
+[[on-window-detected]]
+if.app-id = 'net.whatsapp.WhatsApp'
+run = "move-node-to-workspace X"
+
+[[on-window-detected]]
+if.app-id = 'com.microsoft.teams2'
 run = "move-node-to-workspace T"
 
 [[on-window-detected]]
