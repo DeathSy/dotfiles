@@ -56,10 +56,21 @@ in
     # Utilities applications
     postman
     raycast
+    awscli2
+    gh
 
     # Messaging applications
     slack
     discord
+
+
+    # Languages & Frameworks related
+    nodejs
+    corepack
+
+    # Ruby related
+    cocoapods
+    bundler
 
     # NodeJS global packages
     nodePackages.node2nix
@@ -77,6 +88,10 @@ in
 		bun = {
 			enable = true;
 		};
+
+    go = {
+      enable = true;
+    };
 	};
 
   home.activation.startup-application = lib.mkAfter ''

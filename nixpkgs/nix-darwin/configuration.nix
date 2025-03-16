@@ -16,31 +16,14 @@
     btop
     eza
     tmux
-    zoxide
     sketchybar
     jankyborders
 
     # Git $ Github related
     git
-    lazygit
     git-credential-manager
-    gh
     gitflow
     git-lfs
-
-    # GoLang related
-    go
-
-    # NodeJS related
-    bun
-    nodejs
-    corepack
-
-    # Ruby related
-    cocoapods
-    bundler
-
-    awscli2
   ];
 
   services.nix-daemon.enable = true;
