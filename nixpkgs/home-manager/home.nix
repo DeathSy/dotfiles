@@ -4,6 +4,7 @@ let
     url = "https://raw.githubusercontent.com/ljakimczuk/kubectl-forward/main/bin/kubectl-forward";
     hash = "sha256-2nLkitQK54ePm4PrYZ7YmySd4qmju+pzjTpZD6vL7RA=";
   };
+  extraNodePackages = import (builtins.path { path = ../global_node_packages; }) { inherit pkgs; };
 in
 {
   home.username = "ksotis";
@@ -36,9 +37,33 @@ in
 	};
 
   home.packages = with pkgs; [
+    # Kubernetes related applications
     (writeShellScriptBin "kubectl-forward" (builtins.readFile kubectl-forward))
-    nodejs
-    corepack
+    kubectl
+    kubectx
+    minikube
+    k9s
+
+    # Container related applications
+    podman
+    podman-compose
+
+    # Data storage applications
+    postgresql
+    tableplus
+    redis
+
+    # Utilities applications
+    postman
+    raycast
+
+    # Messaging applications
+    slack
+    discord
+
+    # NodeJS global packages
+    nodePackages.node2nix
+    extraNodePackages."@anthropic-ai/claude-code-v0.2.45"
   ];
 
 	programs = {

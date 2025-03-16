@@ -1,48 +1,46 @@
-{ pkgs, config, ... }:
-let
-  extraNodePackages = import (builtins.path { path = ../global_node_packages; }) { inherit pkgs; };
-in 
-{
+{ pkgs, config, ... }: {
   environment.systemPackages = with pkgs; [
+    # Terminal related
     vim
     neovim
-    git
     direnv
     neofetch
-    go
-    antigen
-    gh
-    gitflow
-    git-lfs
-    kubectl
-    tree
-    k9s
-    kubectx
-    ripgrep
-    btop
-    eza
-    awscli2
-    tmux
-    lazygit
-    zoxide
-    bun
-    git-credential-manager
-    slack
-    sketchybar
-    jankyborders
     fzf
     bat
     fd
     mkalias
-    postman
-    raycast
-    tableplus
     lf
-    bundler
+    antigen
+    tree
+    ripgrep
+    btop
+    eza
+    tmux
+    zoxide
+    sketchybar
+    jankyborders
+
+    # Git $ Github related
+    git
+    lazygit
+    git-credential-manager
+    gh
+    gitflow
+    git-lfs
+
+    # GoLang related
+    go
+
+    # NodeJS related
+    bun
+    nodejs
+    corepack
+
+    # Ruby related
     cocoapods
-    discord
-    nodePackages.node2nix
-    extraNodePackages."@anthropic-ai/claude-code-v0.2.45"
+    bundler
+
+    awscli2
   ];
 
   services.nix-daemon.enable = true;
