@@ -37,6 +37,7 @@
     bundler
     cocoapods
     discord
+    nodePackages.node2nix
   ];
 
   services.nix-daemon.enable = true;
