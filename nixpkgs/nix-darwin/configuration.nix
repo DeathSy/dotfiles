@@ -1,4 +1,8 @@
-{ pkgs, config, ... }: {
+{ pkgs, config, ... }:
+let
+  extraNodePackages = import (builtins.path { path = ../global_node_packages; }) { inherit pkgs; };
+in 
+{
   environment.systemPackages = with pkgs; [
     vim
     neovim
@@ -38,6 +42,7 @@
     cocoapods
     discord
     nodePackages.node2nix
+    extraNodePackages."@anthropic-ai/claude-code-v0.2.45"
   ];
 
   services.nix-daemon.enable = true;
