@@ -63,18 +63,22 @@ in
     slack
     discord
 
-
-    # Languages & Frameworks related
+    # NodeJS related
     nodejs
     corepack
-
-    # Ruby related
-    cocoapods
-    bundler
 
     # NodeJS global packages
     nodePackages.node2nix
     extraNodePackages."@anthropic-ai/claude-code-v0.2.45"
+
+    # Python related
+    python3
+    poetry
+    pipx
+
+    # Ruby related
+    cocoapods
+    bundler
   ];
 
 	programs = {
