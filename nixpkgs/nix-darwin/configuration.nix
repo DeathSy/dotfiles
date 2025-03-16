@@ -10,6 +10,7 @@
     fd
     mkalias
     lf
+    jq
     antigen
     tree
     ripgrep
