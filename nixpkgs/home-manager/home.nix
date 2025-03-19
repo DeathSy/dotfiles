@@ -70,6 +70,7 @@ in
     # NodeJS global packages
     nodePackages.node2nix
     extraNodePackages."@anthropic-ai/claude-code-v0.2.45"
+    extraNodePackages."serverless-v3.38.0"
 
     # Python related
     python3
