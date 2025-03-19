@@ -84,6 +84,7 @@
       "firefox"
       "arc"
       "wezterm"
+      "zen-browser"
       "anydesk"
       "ngrok"
     ];
