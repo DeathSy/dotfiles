@@ -67,11 +67,9 @@
 
 		taps = [
 			"nikitabobko/tap"
-      "common-fate/granted"
 		];
 
     brews = [
-      "granted"
       "trivy"
       "pinentry"
     ];
