@@ -85,6 +85,8 @@
       "zen-browser"
       "anydesk"
       "ngrok"
+      "notion"
+      "notion-calendar"
     ];
 
     masApps = {
