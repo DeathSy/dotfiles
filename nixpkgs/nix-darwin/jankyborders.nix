@@ -1,6 +1,6 @@
 { config, pkgs, lib, ... }:
 {
-  service.jankyborders = {
+  services.jankyborders = {
     enable = true;
     style = "round";
     hidpi = false;
