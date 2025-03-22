@@ -6,6 +6,7 @@
     direnv
     neofetch
     fzf
+    bash
     bat
     fd
     mkalias
