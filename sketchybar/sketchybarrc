@@ -8,7 +8,7 @@ export FONT="Hack Nerd Font Mono"
 export CORNER_RADIUS=30
 export BORDER_WIDTH=2
 
-sketchybar --bar	\
+sketchybar --bar \
   height=30 \
   color=$TRANSPARENT \
   position=top \
@@ -27,9 +27,8 @@ sketchybar --bar	\
   icon.padding_right=3 \
   background.padding_left=3 \
   background.padding_right=3 \
-  label.font="$FONT:Bold:13.0" \
+  label.font="$FONT:Bold:13.0"
 
-# source "$ITEM_DIR/space.sh"
 source "$ITEM_DIR/aerospace.sh"
 source "$ITEM_DIR/front_app.sh"
 

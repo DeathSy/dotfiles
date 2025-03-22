@@ -32,7 +32,6 @@ in
 			recursive = true;
 		};
 		".config/neofetch/config.conf".source = ../../neofetch.conf;
-		".config/aerospace/aerospace.toml".source = ../../aerospace.toml;
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 	};
 
@@ -101,7 +100,5 @@ in
 
   home.activation.startup-application = lib.mkAfter ''
   /usr/local/bin/desktoppr ~/workspace/dotfiles/wallpapers/Cloudsnight-landscape.jpg
-
-	/usr/bin/open /Applications/AeroSpace.app
   '';
 }

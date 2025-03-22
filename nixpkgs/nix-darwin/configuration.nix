@@ -1,4 +1,4 @@
-{ pkgs, config, ... }: {
+{ pkgs, config, lib, ... }: {
   environment.systemPackages = with pkgs; [
     # Terminal related
     vim
@@ -27,8 +27,6 @@
     git-lfs
   ];
 
-  services.nix-daemon.enable = true;
-  services.activate-system.enable = true;
   nix.settings.experimental-features = "nix-command flakes";
 
   nixpkgs = {
@@ -51,7 +49,8 @@
 
 	fonts.packages = with pkgs; [
 		recursive
-		(nerdfonts.override { fonts = ["Hack" "FiraCode"]; })
+    nerd-fonts.hack
+    nerd-fonts.fira-code
 	];
 
   homebrew = {
@@ -75,7 +74,6 @@
     ];
 
     casks = [
-      "nikitabobko/tap/aerospace"
       "sf-symbols"
       "runjs"
       "desktoppr"
@@ -109,7 +107,7 @@
         mru-spaces = false;
         show-recents = false;
         tilesize = 32;
-        expose-group-by-app = true;
+        expose-group-apps = true;
       };
 
       NSGlobalDomain = {
@@ -170,13 +168,17 @@
       rm -rf /Applications/Nix\ Apps
       mkdir -p /Applications/Nix\ Apps
       find ${env}/Applications -maxdepth 1 -type l -exec readlink '{}' + |
-      while read src; do
+      while read -r src; do
         app_name=$(basename "$src")
         echo "copying $src" >&2
         ${pkgs.mkalias}/bin/mkalias "$src" "/Applications/Nix Apps/$app_name"
       done
           '';
   };
+
+  imports = [
+    ./aerospace.nix
+  ];
 
 	services = {
 		jankyborders = {
