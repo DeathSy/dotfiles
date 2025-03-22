@@ -58,6 +58,7 @@
 		plugins = with pkgs; [
 			tmuxPlugins.sensible
 			tmuxPlugins.yank
+			tmuxPlugins.open
 			tmuxPlugins.vim-tmux-navigator
       { 
         plugin = tmuxPlugins.session-wizard;
