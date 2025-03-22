@@ -17,7 +17,6 @@
     ripgrep
     btop
     eza
-    tmux
     sketchybar
     jankyborders
 

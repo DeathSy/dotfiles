@@ -37,8 +37,8 @@
 							./nixpkgs/home-manager/k9s.nix
 							./nixpkgs/home-manager/password-store.nix
 							./nixpkgs/home-manager/starship.nix
-							./nixpkgs/home-manager/tmux.nix
 							./nixpkgs/home-manager/zsh.nix
+							./nixpkgs/home-manager/tmux.nix
 						];
 					};
 

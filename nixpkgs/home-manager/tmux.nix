@@ -5,10 +5,17 @@
 		terminal = "tmux-256color";
 		prefix = "C-a";
 		keyMode = "vi";
+    shell = "${pkgs.zsh}/bin/zsh";
 		extraConfig = ''
-		# Reload config keymap
+      # Reload config keymap
 			unbind r
 			bind r source-file ~/.config/tmux/tmux.conf
+
+      set-option -g default-shell "${pkgs.zsh}/bin/zsh"
+      set-option -g default-command "${pkgs.zsh}/bin/zsh"
+
+      set -g status-style "bg=default"
+      set -g status-bg default
 
 			set -sg escape-time 0
 			set -g mouse on
@@ -94,9 +101,7 @@
 				plugin = tmuxPlugins.catppuccin;
 				extraConfig = ''
 				set -g @catppuccin_flavour 'mocha'
-
-				set -g @catppuccin_status_default "on"
-				set -g @catppuccin_status_background "default"
+        set -g @catppuccin_window_status_style "rounded"
 
 				set -g @catppuccin_window_left_separator ""
 				set -g @catppuccin_window_right_separator " "
@@ -114,6 +119,10 @@
 				set -g @catppuccin_status_right_separator ""
 				set -g @catppuccin_status_fill "icon"
 				set -g @catppuccin_status_connect_separator "no"
+
+        set -g status-left ""
+        set -g status-right ""
+        set -ag status-right "#{E:@catppuccin_status_session}"
 				'';
 			}
 			{
