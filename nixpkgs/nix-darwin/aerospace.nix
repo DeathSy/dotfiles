@@ -2,35 +2,36 @@
 {
   services.aerospace = {
     enable = true;
+
     settings = {
       # After login and startup commands
-      "after-login-command" = [];
-      "after-startup-command" = [
+      after-login-command = [];
+      after-startup-command = [
         "exec-and-forget borders style=round hidpi=off active_color=0xc0e2e2e3 inactive_color=0xc02c2e34 background_color=0x302c2e34 width=6.0"
-        "exec-and-forget sketchybar"
+        "exec-and-forget ${pkgs.sketchybar}/bin/sketchybar"
       ];
 
       # Sketchybar integration
-      "exec-on-workspace-change" = [
+      exec-on-workspace-change = [
         "/bin/bash"
         "-c"
-        "sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
+        "${pkgs.sketchybar}/bin/sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
       ];
 
       # Normalization settings
-      "enable-normalization-flatten-containers" = true;
-      "enable-normalization-opposite-orientation-for-nested-containers" = true;
+      enable-normalization-flatten-containers = true;
+      enable-normalization-opposite-orientation-for-nested-containers = true;
 
       # Layouts
-      "accordion-padding" = 10;
-      "default-root-container-layout" = "tiles";
-      "default-root-container-orientation" = "auto";
+      accordion-padding = 10;
+      default-root-container-layout = "tiles";
+      default-root-container-orientation = "auto";
 
       # Key mapping
       key-mapping.preset = "qwerty";
 
       # Focus behavior
-      "on-focused-monitor-changed" = ["move-mouse monitor-lazy-center"];
+      on-focused-monitor-changed = ["move-mouse monitor-lazy-center"];
       "on-focus-changed" = ["move-mouse window-lazy-center"];
 
       # Gaps configuration
