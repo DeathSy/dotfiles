@@ -162,6 +162,10 @@
           run = "move-node-to-workspace S";
         }
         {
+          "if".app-id = "com.apple.MobileSMS";
+          run = "move-node-to-workspace S";
+        }
+        {
           "if".app-id = "com.hnc.Discord";
           run = "move-node-to-workspace S";
         }
