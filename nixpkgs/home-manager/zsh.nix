@@ -65,6 +65,10 @@
 			eval "$(/opt/homebrew/bin/brew shellenv)"
 
 			${pkgs.neofetch}/bin/neofetch
+
+      if [ -d "$HOME/.mynav" ]; then
+        export PATH="$PATH:$HOME/.mynav"
+      fi
 		'';
 	};
 }

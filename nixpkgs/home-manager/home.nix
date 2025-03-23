@@ -5,6 +5,39 @@ let
     hash = "sha256-2nLkitQK54ePm4PrYZ7YmySd4qmju+pzjTpZD6vL7RA=";
   };
   extraNodePackages = import (builtins.path { path = ../global_node_packages; }) { inherit pkgs; };
+
+  mynavSetup = pkgs.writeShellScriptBin "mynav-install" ''
+    # Create the .mynav directory if it doesn't exist
+    mkdir -p "$HOME/.mynav"
+    
+    # Clone or update the mynav repository
+    if [ -d "$HOME/.mynav/.git" ]; then
+      echo "Updating existing mynav installation..."
+      cd "$HOME/.mynav"
+      git pull origin main
+    else
+      echo "Installing mynav for the first time..."
+      git clone https://github.com/GianlucaP106/mynav.git "$HOME/.mynav"
+    fi
+    
+    # Build mynav from source
+    cd "$HOME/.mynav"
+    
+    # Check if go is available, and if so, build mynav
+    if command -v go &> /dev/null; then
+      echo "Building mynav with Go..."
+      go build -o mynav
+      chmod +x mynav
+    else
+      echo "Go is not available, fetching pre-built binary..."
+      curl -fsSL https://raw.githubusercontent.com/GianlucaP106/mynav/main/install.bash > install.bash
+      chmod +x install.bash
+      # Extract just the binary download part from the script without modifying shell config
+      ./install.bash
+    fi
+    
+    echo "✅ mynav has been installed to $HOME/.mynav/mynav"
+  '';
 in
 {
   home.username = "ksotis";
@@ -38,6 +71,11 @@ in
     kubectx
     minikube
     k9s
+
+    mynavSetup
+    (writeShellScriptBin "mynav" ''
+      exec "$HOME/.mynav/mynav" "$@"
+    '')
 
     # Container related applications
     podman
