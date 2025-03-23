@@ -69,8 +69,8 @@ in
 
     # Python related
     python3
-    poetry
     pipx
+    uv
 
     # Ruby related
     cocoapods
