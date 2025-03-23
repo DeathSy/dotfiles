@@ -54,11 +54,28 @@
 			# Zoom motion
 			unbind z
 			bind-key m resize-pane -Z
+
+      bind-key "s" run-shell "tmux display-popup -E -w 80% -h 71% -B 'sesh connect \"$(
+        sesh list --icons | fzf --border=rounded --color=bg:-1,gutter:-1,border:#f5c2e7,preview-bg:-1 \
+        --no-sort --ansi --border-label \" sesh \" --prompt \"⚡  \" \
+        --header \"  ^a all ^t tmux ^g configs ^x zoxide ^d tmux kill ^f find\" \
+        --bind \"tab:down,btab:up\" \
+        --bind \"ctrl-a:change-prompt(⚡  )+reload(sesh list --icons)\" \
+        --bind \"ctrl-t:change-prompt(🪟  )+reload(sesh list -t --icons)\" \
+        --bind \"ctrl-g:change-prompt(⚙️  )+reload(sesh list -c --icons)\" \
+        --bind \"ctrl-x:change-prompt(📁  )+reload(sesh list -z --icons)\" \
+        --bind \"ctrl-f:change-prompt(🔎  )+reload(fd -H -d 2 -t d -E .Trash . ~)\" \
+        --bind \"ctrl-d:execute(tmux kill-session -t {2..})+change-prompt(⚡  )+reload(sesh list --icons)\" \
+        --preview-window \"right:55%\" \
+        --preview \"sesh preview {}\"
+      )\"'"
 		'';
 		plugins = with pkgs; [
 			tmuxPlugins.sensible
 			tmuxPlugins.yank
 			tmuxPlugins.open
+			tmuxPlugins.sessionist
+
 			tmuxPlugins.vim-tmux-navigator
       {
         plugin = tmuxPlugins.mkTmuxPlugin {

@@ -29,6 +29,7 @@ in
 		};
 		".config/neofetch/config.conf".source = ../../neofetch.conf;
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
+		".config/sesh/sesh.toml".source = ../../sesh.toml;
 	};
 
   home.packages = with pkgs; [
@@ -38,6 +39,7 @@ in
     kubectx
     minikube
     k9s
+    sesh
 
     # Container related applications
     podman
