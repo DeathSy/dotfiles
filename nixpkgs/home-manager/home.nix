@@ -14,10 +14,6 @@ in
   programs.home-manager.enable = true;
   programs.home-manager.path = "$HOME/.config/nix-darwin/nixpkgs/";
 
-  home.sessionPath = [
-    "${pkgs.tmuxPlugins.session-wizard}/share/tmux-plugins/session-wizard/bin"
-  ];
-
 	home.file = {
 		".config/ascii_arts" = {
 			source = ../../ascii_arts;

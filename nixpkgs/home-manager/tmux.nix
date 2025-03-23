@@ -60,14 +60,6 @@
 			tmuxPlugins.yank
 			tmuxPlugins.open
 			tmuxPlugins.vim-tmux-navigator
-      { 
-        plugin = tmuxPlugins.session-wizard;
-        extraConfig = ''
-        set -g @session-wizard 's'
-        set -g @session-wizard-mode 'directory'
-        set -g @session-wizard-windows on
-        '';
-      }
       {
         plugin = tmuxPlugins.mkTmuxPlugin {
           pluginName = "neolazygit";
