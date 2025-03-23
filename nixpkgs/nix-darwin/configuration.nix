@@ -77,7 +77,6 @@
       "sf-symbols"
       "runjs"
       "desktoppr"
-      "firefox"
       "arc"
       "wezterm"
       "zen-browser"
