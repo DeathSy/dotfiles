@@ -19,6 +19,7 @@
     eza
     sketchybar
     jankyborders
+    localstack
 
     # Git $ Github related
     git
