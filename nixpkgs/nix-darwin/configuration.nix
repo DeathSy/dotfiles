@@ -57,7 +57,7 @@
   homebrew = {
     enable = true;
     global = {
-      autoUpdate = true;
+      autoUpdate = false;
     };
 
 		onActivation = {
