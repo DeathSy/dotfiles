@@ -10,6 +10,7 @@
 			EDITOR = "nvim";
       ANTHROPIC_API_KEY = "$(pass show claude/personal)";
       GITHUB_REGISTRY_TOKEN = "$(pass show github/personal)";
+      DOCKER_CMD = "podman";
 		};
 
 		oh-my-zsh = {
