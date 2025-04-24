@@ -57,7 +57,7 @@
   homebrew = {
     enable = true;
     global = {
-      autoUpdate = false;
+      autoUpdate = true;
     };
 
 		onActivation = {
@@ -72,6 +72,7 @@
     brews = [
       "trivy"
       "pinentry"
+      "ghostscript"
     ];
 
     casks = [
@@ -85,7 +86,8 @@
       "ngrok"
       "notion"
       "notion-calendar"
-      "ghostscript"
+      "postman"
+      "raycast"
     ];
 
     masApps = {

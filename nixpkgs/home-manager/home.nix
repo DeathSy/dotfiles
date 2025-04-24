@@ -51,8 +51,6 @@ in
     redis
 
     # Utilities applications
-    postman
-    raycast
     awscli2
     gh
 
