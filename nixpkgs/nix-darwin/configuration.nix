@@ -127,7 +127,7 @@
         NSAutomaticSpellingCorrectionEnabled = false;
         NSNavPanelExpandedStateForSaveMode = true;
         NSNavPanelExpandedStateForSaveMode2 = true;
-        _HIHideMenuBar = true;
+        _HIHideMenuBar = false;
       };
 
       WindowManager = {
@@ -180,8 +180,8 @@
   };
 
   imports = [
-    ./aerospace.nix
-    ./sketchybar.nix
-    ./jankyborders.nix
+    # ./aerospace.nix
+    # ./sketchybar.nix
+    # ./jankyborders.nix
   ];
 }

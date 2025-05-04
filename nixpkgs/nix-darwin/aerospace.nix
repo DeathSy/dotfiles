@@ -138,11 +138,15 @@
           run = "move-node-to-workspace C";
         }
         {
-          "if".app-id = "com.cron.electron";
-          run = "move-node-to-workspace C";
+          "if".app-id = "notion.id";
+          run = "move-node-to-workspace N";
         }
         {
-          "if".app-id = "notion.id";
+          "if".app-id = "com.cron.electron";
+          run = "move-node-to-workspace N";
+        }
+        {
+          "if".app-id = "notion.mail.id";
           run = "move-node-to-workspace N";
         }
         {
