@@ -88,6 +88,7 @@
       "notion-calendar"
       "postman"
       "raycast"
+      "karabiner-elements"
     ];
 
     masApps = {
