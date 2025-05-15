@@ -20,6 +20,7 @@
     sketchybar
     jankyborders
     localstack
+    ffmpeg
 
     # Git $ Github related
     git
@@ -84,8 +85,6 @@
       "zen-browser"
       "anydesk"
       "ngrok"
-      "notion"
-      "notion-calendar"
       "postman"
       "raycast"
       "karabiner-elements"
