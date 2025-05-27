@@ -67,6 +67,10 @@
 			eval "$(/opt/homebrew/bin/brew shellenv)"
 
 			${pkgs.neofetch}/bin/neofetch
+
+      export NVM_DIR="$HOME/.nvm"
+      [ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && source "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+      [ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && source "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"
 		'';
 	};
 }

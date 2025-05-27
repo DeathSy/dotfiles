@@ -74,6 +74,8 @@
       "trivy"
       "pinentry"
       "ghostscript"
+      "goku"
+      "nvm"
     ];
 
     casks = [
@@ -82,7 +84,6 @@
       "desktoppr"
       "arc"
       "wezterm"
-      "zen-browser"
       "anydesk"
       "ngrok"
       "postman"

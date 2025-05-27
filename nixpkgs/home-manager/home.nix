@@ -4,7 +4,6 @@ let
     url = "https://raw.githubusercontent.com/ljakimczuk/kubectl-forward/main/bin/kubectl-forward";
     hash = "sha256-2nLkitQK54ePm4PrYZ7YmySd4qmju+pzjTpZD6vL7RA=";
   };
-  extraNodePackages = import (builtins.path { path = ../global_node_packages; }) { inherit pkgs; };
 in
 {
   home.username = "ksotis";
@@ -30,6 +29,7 @@ in
 		".config/neofetch/config.conf".source = ../../neofetch.conf;
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
+		".claude/CLAUDE.MD".source = ../../CLAUDE.md;
 	};
 
   home.packages = with pkgs; [
@@ -54,18 +54,7 @@ in
     awscli2
     gh
 
-    # Messaging applications
-    slack
     discord
-
-    # NodeJS related
-    nodejs
-    corepack
-
-    # NodeJS global packages
-    nodePackages.node2nix
-    extraNodePackages."@anthropic-ai/claude-code-v0.2.45"
-    extraNodePackages."serverless-v3.38.0"
 
     # Python related
     python3
