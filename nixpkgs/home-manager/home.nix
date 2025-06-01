@@ -30,6 +30,20 @@ in
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
 		".claude/CLAUDE.MD".source = ../../CLAUDE.md;
+    ".sleep" = {
+      text = ''
+        #!/bin/bash
+        ${pkgs.podman}/bin/podman machine stop
+      '';
+      executable = true;
+    };
+    ".wakeup" = {
+      text = ''
+        #!/bin/bash
+        ${pkgs.podman}/bin/podman machine start
+      '';
+      executable = true;
+    };
 	};
 
   home.packages = with pkgs; [
@@ -82,6 +96,20 @@ in
       enable = true;
     };
 	};
+
+  launchd.agents.sleepwatcher = {
+    enable = true;
+    config = {
+      ProgramArguments = [
+        "/opt/homebrew/bin/sleepwatcher"
+        "-V"
+        "-s" "${config.home.homeDirectory}/.sleep"
+        "-w" "${config.home.homeDirectory}/.wakeup"
+      ];
+      RunAtLoad = true;
+      KeepAlive = true;
+    };
+  };
 
   home.activation.startup-application = lib.mkAfter ''
   /usr/local/bin/desktoppr ~/workspace/dotfiles/wallpapers/Cloudsnight-landscape.jpg

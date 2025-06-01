@@ -76,6 +76,7 @@
       "ghostscript"
       "goku"
       "nvm"
+      "sleepwatcher"
     ];
 
     casks = [
@@ -90,16 +91,6 @@
       "raycast"
       "karabiner-elements"
     ];
-
-    masApps = {
-      # "Things3" = 904280696;
-      # "Xcode" = 497799835;
-      # "Pages" = 409201541;
-      # "The Unarchiver" = 425424353;
-      # "Line" = 539883307;
-      # "Microsoft Word" = 462054704;
-      # "WhatApps" = 310633997;
-    };
   };
 
   system = {
