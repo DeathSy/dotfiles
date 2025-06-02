@@ -103,7 +103,7 @@
         "alt-shift-x" = "move-node-to-workspace X";
 
         # Fullscreen
-        "alt-m" = "fullscreen";
+        "ctrl-alt-enter" = "fullscreen";
 
         # Monitor controls
         "alt-shift-tab" = "move-workspace-to-monitor --wrap-around next";
@@ -130,31 +130,31 @@
       # Window rules (convert on-window-detected to rules format)
       on-window-detected = [
         {
-          "if".app-id = "app.zen-browser.zen";
+          "if".app-id = "com.linear";
+          run = "move-node-to-workspace 1";
+        }
+        {
+          "if".app-id = "company.thebrowser.Browser";
           run = "move-node-to-workspace A";
         }
         {
-          "if".app-id = "com.culturedcode.ThingsMac";
+          "if".app-id = "notion.id";
+          run = "move-node-to-workspace C";
+        }
+        {
+          "if".app-id = "com.cron.electron";
           run = "move-node-to-workspace C";
         }
         {
           "if".app-id = "notion.id";
-          run = "move-node-to-workspace N";
-        }
-        {
-          "if".app-id = "com.cron.electron";
-          run = "move-node-to-workspace N";
+          run = "move-node-to-workspace C";
         }
         {
           "if".app-id = "notion.mail.id";
-          run = "move-node-to-workspace N";
+          run = "move-node-to-workspace C";
         }
         {
           "if".app-id = "com.tinyapp.TablePlus";
-          run = "move-node-to-workspace D";
-        }
-        {
-          "if".app-id = "me.lukehaas.runjs";
           run = "move-node-to-workspace D";
         }
         {
@@ -188,6 +188,12 @@
         {
           "if".app-id = "com.github.wez.wezterm";
           run = "move-node-to-workspace W";
+        }
+
+        ## Floating application
+        {
+          "if".app-id = "com.raycast.macos";
+          run = "layout floating";
         }
       ];
     };

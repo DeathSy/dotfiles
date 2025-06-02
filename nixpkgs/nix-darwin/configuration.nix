@@ -21,6 +21,8 @@
     jankyborders
     localstack
     ffmpeg
+    gnupg
+    pinentry_mac
 
     # Git $ Github related
     git
@@ -81,7 +83,6 @@
 
     casks = [
       "sf-symbols"
-      "runjs"
       "desktoppr"
       "arc"
       "wezterm"
@@ -92,6 +93,17 @@
       "karabiner-elements"
     ];
   };
+
+  programs.gnupg.agent = {
+    enable = true;
+    enableSSHSupport = true;
+  };
+
+  environment.etc."gnupg/gpg-agent.conf".text = ''
+    pinentry-program ${pkgs.pinentry_mac}/Applications/pinentry-mac.app/Contents/MacOS/pinentry-mac
+    default-cache-ttl 1800
+    max-cache-ttl 7200
+  '';
 
   system = {
     stateVersion = 5;
@@ -119,7 +131,7 @@
         NSAutomaticSpellingCorrectionEnabled = false;
         NSNavPanelExpandedStateForSaveMode = true;
         NSNavPanelExpandedStateForSaveMode2 = true;
-        _HIHideMenuBar = false;
+        _HIHideMenuBar = true;
       };
 
       WindowManager = {
@@ -172,8 +184,8 @@
   };
 
   imports = [
-    # ./aerospace.nix
-    # ./sketchybar.nix
-    # ./jankyborders.nix
+    ./aerospace.nix
+    ./sketchybar.nix
+    ./jankyborders.nix
   ];
 }
