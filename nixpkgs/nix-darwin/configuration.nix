@@ -79,6 +79,8 @@
       "goku"
       "nvm"
       "sleepwatcher"
+      "act"
+      "helm"
     ];
 
     casks = [

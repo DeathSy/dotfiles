@@ -195,6 +195,10 @@
           "if".app-id = "com.raycast.macos";
           run = "layout floating";
         }
+        {
+          "if".app-id = "com.apple.finder";
+          run = "layout floating";
+        }
       ];
     };
   };
