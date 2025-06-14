@@ -12,7 +12,6 @@ config.font = wezterm.font_with_fallback({
 	{ family = "FiraCode Nerd Font", scale = 1.1 },
 })
 config.font_size = 12
--- config.window_background_opacity = 0.9
 config.window_decorations = "RESIZE"
 config.window_close_confirmation = "NeverPrompt"
 config.scrollback_lines = 3000
@@ -24,5 +23,12 @@ config.window_padding = {
 	right = 10,
 	bottom = 10,
 }
+
+config.max_fps = 30
+
+config.front_end = "Software"
+
+config.window_background_opacity = 1.0
+config.text_background_opacity = 1.0
 
 return config
