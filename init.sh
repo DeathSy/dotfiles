@@ -96,7 +96,8 @@ export NIX_CONFIG="experimental-features = nix-command flakes"
 # Run nix-darwin setup
 echo "🏗️  Running nix-darwin setup..."
 echo "This may take several minutes as packages are downloaded and built..."
-nix run nix-darwin -- switch --flake $(pwd)
+echo "Note: You may be prompted for your password (sudo access required)"
+sudo nix run nix-darwin -- switch --flake $(pwd)
 
 echo ""
 echo "🎉 Setup complete!"
@@ -107,8 +108,8 @@ echo "2. Some GUI applications may require manual permission grants"
 echo "3. Run 'darwin-rebuild switch --flake .' for future updates"
 echo ""
 echo "🔧 Useful commands:"
-echo "  - darwin-rebuild switch --flake .  # Update system configuration"
-echo "  - nix flake update                 # Update flake inputs"
-echo "  - home-manager switch              # Update user configuration only"
+echo "  - sudo darwin-rebuild switch --flake .  # Update system configuration"
+echo "  - nix flake update                      # Update flake inputs"
+echo "  - home-manager switch                   # Update user configuration only"
 echo ""
 
