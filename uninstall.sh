@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# Exit on any error
-set -e
+# Don't exit on error immediately - we want to handle errors gracefully
+# set -e
 
 echo "🗑️  macOS Dotfiles Uninstallation Script"
 echo "This script will remove Nix, nix-darwin, and all associated configurations."
@@ -13,6 +13,87 @@ if [ "$(uname)" != "Darwin" ]; then
     echo "❌ Error: This script is designed for macOS only."
     exit 1
 fi
+
+# Function to check if file/directory exists and report
+check_exists() {
+    local path="$1"
+    local description="$2"
+    if [ -e "$path" ]; then
+        echo "  ✓ Found: $path ($description)"
+        return 0
+    else
+        echo "  - Not found: $path ($description)"
+        return 1
+    fi
+}
+
+# Function to find and list all relevant files
+scan_system() {
+    echo "🔍 Scanning system for Nix and dotfiles installations..."
+    echo ""
+    
+    echo "📁 Nix Installation Files:"
+    check_exists "/nix" "Main Nix store"
+    check_exists "/etc/nix" "Nix system configuration"
+    check_exists "/var/root/.nix-profile" "Root Nix profile"
+    check_exists "/var/root/.nix-defexpr" "Root Nix expressions"
+    check_exists "/var/root/.nix-channels" "Root Nix channels"
+    check_exists "$HOME/.nix-profile" "User Nix profile"
+    check_exists "$HOME/.nix-defexpr" "User Nix expressions"
+    check_exists "$HOME/.nix-channels" "User Nix channels"
+    check_exists "$HOME/.config/nix" "User Nix config"
+    check_exists "$HOME/.config/nix-darwin" "nix-darwin config"
+    
+    echo ""
+    echo "🚀 System Services:"
+    check_exists "/Library/LaunchDaemons/org.nixos.nix-daemon.plist" "Nix daemon service"
+    check_exists "$HOME/Library/LaunchAgents/org.nixos.nix-darwin.auto-upgrade.plist" "nix-darwin auto-upgrade"
+    if launchctl list | grep -q "sleepwatcher" 2>/dev/null; then
+        echo "  ✓ Found: sleepwatcher service (running)"
+    else
+        echo "  - Not found: sleepwatcher service"
+    fi
+    
+    echo ""
+    echo "🔗 Dotfiles Symlinks:"
+    check_exists "$HOME/.config/nvim" "Neovim config"
+    check_exists "$HOME/.config/sketchybar" "Sketchybar config"
+    check_exists "$HOME/.config/wezterm" "WezTerm config"
+    check_exists "$HOME/.config/sesh" "Sesh config"
+    check_exists "$HOME/.config/ascii_arts" "ASCII arts"
+    check_exists "$HOME/.config/neofetch" "Neofetch config"
+    check_exists "$HOME/.claude" "Claude config"
+    check_exists "$HOME/.sleep" "Sleep script"
+    check_exists "$HOME/.wakeup" "Wakeup script"
+    
+    echo ""
+    echo "🍺 Homebrew Packages (from dotfiles config):"
+    if command -v brew >/dev/null 2>&1; then
+        echo "  ✓ Homebrew is installed"
+        # Check for specific packages from our config
+        for pkg in trivy pinentry ghostscript goku nvm sleepwatcher act helm; do
+            if brew list "$pkg" >/dev/null 2>&1; then
+                echo "  ✓ Found brew package: $pkg"
+            else
+                echo "  - Not found brew package: $pkg"
+            fi
+        done
+        for cask in sf-symbols desktoppr arc wezterm anydesk ngrok postman raycast karabiner-elements; do
+            if brew list --cask "$cask" >/dev/null 2>&1; then
+                echo "  ✓ Found brew cask: $cask"
+            else
+                echo "  - Not found brew cask: $cask"
+            fi
+        done
+    else
+        echo "  - Homebrew not installed"
+    fi
+    
+    echo ""
+}
+
+# Run system scan first
+scan_system
 
 # Confirmation prompt
 echo "What would you like to uninstall?"
@@ -59,19 +140,65 @@ fi
 echo ""
 echo "🚀 Starting uninstallation process..."
 
-# Function to safely remove files/directories
+# Function to safely remove files/directories with better error handling
 safe_remove() {
-    if [ -e "$1" ]; then
-        echo "Removing: $1"
-        sudo rm -rf "$1"
+    local path="$1"
+    if [ -e "$path" ]; then
+        echo "Removing: $path"
+        
+        # Special handling for /nix directory
+        if [ "$path" = "/nix" ]; then
+            # First, try to remove the Nix store contents
+            if [ -d "/nix/store" ]; then
+                echo "  Clearing Nix store..."
+                sudo find /nix/store -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+            fi
+            
+            # Handle .Trashes directory with special permissions
+            if [ -d "/nix/.Trashes" ]; then
+                echo "  Removing .Trashes directory..."
+                sudo chmod -R 777 "/nix/.Trashes" 2>/dev/null || true
+                sudo rm -rf "/nix/.Trashes" 2>/dev/null || true
+            fi
+            
+            # Remove other directories
+            for subdir in /nix/*; do
+                if [ -d "$subdir" ] && [ "$(basename "$subdir")" != ".Trashes" ]; then
+                    echo "  Removing $(basename "$subdir")..."
+                    sudo rm -rf "$subdir" 2>/dev/null || true
+                fi
+            done
+            
+            # Finally remove the /nix directory itself
+            sudo rmdir /nix 2>/dev/null || {
+                echo "  ⚠️  Could not remove /nix directory completely"
+                echo "     Run 'sudo rm -rf /nix' manually if needed"
+            }
+        else
+            # Regular removal for other paths
+            if sudo rm -rf "$path" 2>/dev/null; then
+                echo "  ✅ Successfully removed: $path"
+            else
+                echo "  ⚠️  Could not remove: $path (may require manual cleanup)"
+            fi
+        fi
+    else
+        echo "  - Already removed: $path"
     fi
 }
 
 # Function to safely remove files without sudo
 user_remove() {
-    if [ -e "$1" ]; then
-        echo "Removing: $1"
-        rm -rf "$1"
+    local path="$1"
+    if [ -e "$path" ]; then
+        echo "Removing: $path"
+        if rm -rf "$path" 2>/dev/null; then
+            echo "  ✅ Successfully removed: $path"
+        else
+            echo "  ⚠️  Could not remove: $path"
+        fi
+    else
+        echo "  - Already removed: $path"
     fi
 }
 
@@ -90,11 +217,12 @@ if [ "$REMOVE_SYMLINKS" = true ]; then
     user_remove "$HOME/.wakeup"
     
     # Stop and remove launchd services
-    if launchctl list | grep -q "sleepwatcher"; then
-        echo "Stopping sleepwatcher service..."
+    echo "Checking for sleepwatcher service..."
+    if launchctl list | grep -q "sleepwatcher" 2>/dev/null; then
+        echo "  Stopping sleepwatcher service..."
         launchctl unload "$HOME/Library/LaunchAgents/sleepwatcher.plist" 2>/dev/null || true
-        user_remove "$HOME/Library/LaunchAgents/sleepwatcher.plist"
     fi
+    user_remove "$HOME/Library/LaunchAgents/sleepwatcher.plist"
     
     echo "✅ Dotfiles symlinks removed"
 fi
@@ -164,11 +292,25 @@ if [ "$REMOVE_HOMEBREW" = true ]; then
     if command -v brew >/dev/null 2>&1; then
         # Remove specific packages from our configuration
         echo "Removing Homebrew packages..."
-        brew uninstall --ignore-dependencies trivy pinentry ghostscript goku nvm sleepwatcher act helm 2>/dev/null || true
-        brew uninstall --cask sf-symbols desktoppr arc wezterm anydesk ngrok postman raycast karabiner-elements 2>/dev/null || true
+        for pkg in trivy pinentry ghostscript goku nvm sleepwatcher act helm; do
+            if brew list "$pkg" >/dev/null 2>&1; then
+                echo "  Removing brew package: $pkg"
+                brew uninstall --ignore-dependencies "$pkg" 2>/dev/null || echo "    ⚠️  Could not remove $pkg"
+            fi
+        done
+        
+        for cask in sf-symbols desktoppr arc wezterm anydesk ngrok postman raycast karabiner-elements; do
+            if brew list --cask "$cask" >/dev/null 2>&1; then
+                echo "  Removing brew cask: $cask"
+                brew uninstall --cask "$cask" 2>/dev/null || echo "    ⚠️  Could not remove $cask"
+            fi
+        done
         
         # Remove tap
-        brew untap nikitabobko/tap 2>/dev/null || true
+        if brew tap | grep -q "nikitabobko/tap" 2>/dev/null; then
+            echo "  Removing tap: nikitabobko/tap"
+            brew untap nikitabobko/tap 2>/dev/null || true
+        fi
         
         echo "⚠️  Note: Homebrew itself is still installed. To remove it completely, run:"
         echo "    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\""
