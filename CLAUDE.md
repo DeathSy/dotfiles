@@ -1,62 +1,106 @@
-# Claude Context
+# CLAUDE.md
 
-## Personal Information
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Location: Thailand
-- Timezone: Asia/Bangkok
-- Preferred Language: English
+## System Setup & Installation
 
-## Work & Projects
+This is a Nix-based dotfiles repository for macOS (Darwin) systems using nix-darwin and home-manager.
 
-- Main Tech Stack: TypeScript, React (create-react-app), AWS Lambda, Bun
-- Code Style: 100% functional programming, ESLint compliant
-- Secondary Languages: Python, Go
-- Project Directory: ~/workspace
+### Initial Setup
+```bash
+# Install Nix and configure the system
+./init.sh
+```
 
-## Development Preferences
+### System Rebuild
+```bash
+# Rebuild the system configuration
+nix run nix-darwin -- switch --flake $(pwd)/nixpkgs
 
-- Programming Paradigm: Functional programming only
-- Code Quality: Follow ESLint rules strictly
-- Runtime: Bun for Node.js replacement
-- Frontend: React with create-react-app
-- Backend: AWS Lambda functions
-- Type Safety: TypeScript everywhere
+# Or rebuild specifically for the "garage" configuration
+darwin-rebuild switch --flake .#garage
+```
 
-## System Information
+## Architecture Overview
 
-- Operating System: [Your OS]
-- Package Manager: Bun (primary), npm/yarn (when needed)
-- Development Environment: ~/workspace for all projects
+This dotfiles repository uses a modular Nix flake configuration to manage:
 
-## Current Tech Focus
+- **System packages and settings** via nix-darwin (`nixpkgs/nix-darwin/`)
+- **User environment and applications** via home-manager (`nixpkgs/home-manager/`)
+- **Window management** via AeroSpace + Sketchybar + JankyBorders
+- **Terminal environment** via WezTerm + Neovim + Zsh
+- **Keyboard customization** via Karabiner Elements
 
-- Frontend: React functional components, hooks, TypeScript
-- Backend: Serverless Lambda functions with TypeScript
-- Runtime: Bun for faster development and execution
-- Code Quality: ESLint-driven development
-- Architecture: Functional programming patterns
+### Key Configuration Modules
 
-## Common Tasks
+- `flake.nix` - Main flake configuration defining the "garage" system
+- `nixpkgs/nix-darwin/configuration.nix` - System-level packages, homebrew, macOS defaults
+- `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
+- Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
 
-- Creating React components (functional only)
-- Writing Lambda functions in TypeScript
-- Setting up Bun projects
-- ESLint configuration and fixes
-- Functional programming patterns
-- Python/Go scripting when needed
+### Dotfile Symlinks
 
-## File Structure
+Configuration files are symlinked from this repo to `~/.config/` via home-manager:
+- `nvim/` → `~/.config/nvim/`
+- `sketchybar/` → `~/.config/sketchybar/`
+- `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
+- `sesh.toml` → `~/.config/sesh/sesh.toml`
 
-- All projects: ~/workspace/
-- React apps: create-react-app with TypeScript
-- Lambda functions: TypeScript with proper typing
-- Config files: ESLint, TypeScript, Bun configurations
+## Development Environment
 
-## Code Standards
+### Primary Tools
+- **Terminal**: WezTerm with Catppuccin theme
+- **Shell**: Zsh with Starship prompt and antigen
+- **Editor**: Neovim with LazyVim configuration
+- **Git**: Configured via `nixpkgs/home-manager/git.nix`
+- **Session Manager**: Sesh for tmux session management
+- **File Manager**: lf (terminal), Finder (GUI)
 
-- No class components (React functional only)
-- No imperative code (functional paradigm)
-- ESLint compliance is mandatory
-- TypeScript strict mode
-- Immutable data patterns
-- Pure functions preferred
+### Container & Kubernetes Tools
+- Podman with automatic start/stop on sleep/wake
+- kubectl, kubectx, k9s, minikube
+- Custom kubectl-forward script from GitHub
+
+### Programming Languages & Runtimes
+- **Node.js**: Managed via Bun and nvm (homebrew)
+- **Python**: Python3 with pipx and uv
+- **Go**: Enabled via home-manager
+- **Ruby**: cocoapods and bundler
+
+## System Services
+
+### Automatic Sleep/Wake Management
+- Sleepwatcher daemon stops/starts Podman machine on sleep/wake
+- Scripts: `~/.sleep` and `~/.wakeup`
+
+### Window Management Stack
+- **AeroSpace**: Tiling window manager (`nixpkgs/nix-darwin/aerospace.nix`)
+- **Sketchybar**: Status bar (`nixpkgs/nix-darwin/sketchybar.nix`)  
+- **JankyBorders**: Window borders (`nixpkgs/nix-darwin/jankyborders.nix`)
+
+### macOS System Defaults
+Comprehensive macOS customization in `configuration.nix`:
+- Dock: autohide, small tiles, no recents
+- Keyboard: fast repeat, caps→ctrl
+- Trackpad: tap-to-click, right-click, three-finger drag
+- Finder: show extensions, path bar, hidden files
+- Global: dark mode, no autocorrect, hidden menu bar
+
+## Key Keyboard Customizations
+
+Karabiner Elements configuration in `karabiner/karabiner.edn` (currently empty - uses default Goku config)
+
+## Troubleshooting
+
+### Permission Issues
+Some GUI applications may need manual permission grants after installation.
+
+### Homebrew vs Nix Conflicts  
+System uses both Nix packages and Homebrew casks. Check `configuration.nix` for the current split.
+
+### Service Restart
+```bash
+# Restart specific services after config changes
+launchctl unload ~/Library/LaunchAgents/sleepwatcher.plist
+launchctl load ~/Library/LaunchAgents/sleepwatcher.plist
+```
