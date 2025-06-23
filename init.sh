@@ -49,6 +49,21 @@ else
     echo "✅ Homebrew found"
 fi
 
+# Clean up any leftover Nix backup files that might cause installation issues
+echo "🧹 Cleaning up any leftover Nix backup files..."
+if [ -f "/etc/bashrc.backup-before-nix" ] || [ -f "/etc/zshrc.backup-before-nix" ]; then
+    echo "Found leftover Nix backup files that could cause installation issues."
+    echo "Cleaning them up..."
+    sudo rm -f "/etc/bashrc.backup-before-nix" 2>/dev/null || true
+    sudo rm -f "/etc/zshrc.backup-before-nix" 2>/dev/null || true
+    sudo rm -f "/etc/bash.bashrc.backup-before-nix" 2>/dev/null || true
+    rm -f "$HOME/.bash_profile.backup-before-nix" 2>/dev/null || true
+    rm -f "$HOME/.bashrc.backup-before-nix" 2>/dev/null || true
+    rm -f "$HOME/.zshrc.backup-before-nix" 2>/dev/null || true
+    rm -f "$HOME/.profile.backup-before-nix" 2>/dev/null || true
+    echo "✅ Backup files cleaned"
+fi
+
 # Install Nix if not present
 echo "❄️  Checking for Nix..."
 if ! command -v nix >/dev/null 2>&1; then

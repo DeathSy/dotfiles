@@ -45,6 +45,16 @@ scan_system() {
     check_exists "$HOME/.config/nix-darwin" "nix-darwin config"
     
     echo ""
+    echo "🔄 Nix Backup Files (can cause reinstall issues):"
+    check_exists "/etc/bashrc.backup-before-nix" "System bashrc backup"
+    check_exists "/etc/zshrc.backup-before-nix" "System zshrc backup"
+    check_exists "/etc/bash.bashrc.backup-before-nix" "System bash.bashrc backup"
+    check_exists "$HOME/.bash_profile.backup-before-nix" "User bash_profile backup"
+    check_exists "$HOME/.bashrc.backup-before-nix" "User bashrc backup"
+    check_exists "$HOME/.zshrc.backup-before-nix" "User zshrc backup"
+    check_exists "$HOME/.profile.backup-before-nix" "User profile backup"
+    
+    echo ""
     echo "🚀 System Services:"
     check_exists "/Library/LaunchDaemons/org.nixos.nix-daemon.plist" "Nix daemon service"
     check_exists "$HOME/Library/LaunchAgents/org.nixos.nix-darwin.auto-upgrade.plist" "nix-darwin auto-upgrade"
@@ -275,13 +285,23 @@ if [ "$REMOVE_NIX" = true ]; then
         sudo sed -i '' '/nix/d' /etc/zshrc 2>/dev/null || true
     fi
     
-    # Clean shell profiles
-    echo "Cleaning shell profiles..."
+    # Clean shell profiles and remove Nix backup files
+    echo "Cleaning shell profiles and backup files..."
     for profile in "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
         if [ -f "$profile" ]; then
             sed -i '' '/nix/d' "$profile" 2>/dev/null || true
         fi
     done
+    
+    # Remove Nix backup files that cause reinstallation issues
+    echo "Removing Nix backup files..."
+    safe_remove "/etc/bashrc.backup-before-nix"
+    safe_remove "/etc/zshrc.backup-before-nix"
+    safe_remove "/etc/bash.bashrc.backup-before-nix"
+    user_remove "$HOME/.bash_profile.backup-before-nix"
+    user_remove "$HOME/.bashrc.backup-before-nix"
+    user_remove "$HOME/.zshrc.backup-before-nix"
+    user_remove "$HOME/.profile.backup-before-nix"
     
     echo "✅ Nix and nix-darwin removed"
 fi
