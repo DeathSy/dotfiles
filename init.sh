@@ -3,8 +3,9 @@
 # Exit on any error
 set -e
 
-echo "🚀 Starting fresh macOS device setup with Nix and nix-darwin..."
+echo "🚀 Starting macOS device setup with Nix and nix-darwin..."
 echo "This script will install and configure your complete development environment."
+echo "Note: This script is idempotent - safe to run multiple times."
 echo ""
 
 # Check if we're on macOS
@@ -70,8 +71,11 @@ if ! command -v nix >/dev/null 2>&1; then
     echo "Installing Nix..."
     curl -L https://nixos.org/nix/install | sh
     echo "✅ Nix installed"
+elif [ -d "/nix" ] && [ -f "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" ]; then
+    echo "✅ Nix found (complete installation)"
 else
-    echo "✅ Nix found"
+    echo "⚠️  Nix command found but installation may be incomplete"
+    echo "   Continuing with setup..."
 fi
 
 # Source nix profile to make nix available in current session
@@ -93,11 +97,20 @@ fi
 echo "⚙️  Configuring Nix experimental features..."
 export NIX_CONFIG="experimental-features = nix-command flakes"
 
-# Run nix-darwin setup
-echo "🏗️  Running nix-darwin setup..."
-echo "This may take several minutes as packages are downloaded and built..."
-echo "Note: You may be prompted for your password (sudo access required)"
-sudo nix run nix-darwin -- switch --flake $(pwd)
+# Check if nix-darwin is already configured
+echo "🔧 Checking nix-darwin status..."
+if command -v darwin-rebuild >/dev/null 2>&1; then
+    echo "✅ nix-darwin already configured"
+    echo "🔄 Updating existing configuration..."
+    echo "This may take a few minutes as packages are updated..."
+    echo "Note: You may be prompted for your password (sudo access required)"
+    sudo darwin-rebuild switch --flake $(pwd)
+else
+    echo "🏗️  Running initial nix-darwin setup..."
+    echo "This may take several minutes as packages are downloaded and built..."
+    echo "Note: You may be prompted for your password (sudo access required)"
+    sudo nix run nix-darwin -- switch --flake $(pwd)
+fi
 
 echo ""
 echo "🎉 Setup complete!"
