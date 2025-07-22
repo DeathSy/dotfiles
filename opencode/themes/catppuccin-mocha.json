@@ -1,233 +1,221 @@
 {
   "$schema": "https://opencode.ai/theme.json",
   "defs": {
-    "rosewater": "#f5e0dc",
-    "flamingo": "#f2cdcd",
-    "pink": "#f5c2e7",
-    "mauve": "#cba6f7",
-    "red": "#f38ba8",
-    "maroon": "#eba0ac",
-    "peach": "#fab387",
-    "yellow": "#f9e2af",
-    "green": "#a6e3a1",
-    "teal": "#94e2d5",
-    "sky": "#89dceb",
-    "sapphire": "#74c7ec",
-    "blue": "#89b4fa",
-    "lavender": "#b4befe",
-    "text": "#cdd6f4",
-    "subtext1": "#bac2de",
-    "subtext0": "#a6adc8",
-    "overlay2": "#9399b2",
-    "overlay1": "#7f849c",
-    "overlay0": "#6c7086",
-    "surface2": "#585b70",
-    "surface1": "#45475a",
-    "surface0": "#313244",
-    "base": "#1e1e2e",
-    "mantle": "#181825",
-    "crust": "#11111b"
+    "cat_rosewater": "#f5e0dc",
+    "cat_flamingo": "#f2cdcd",
+    "cat_pink": "#f5c2e7",
+    "cat_mauve": "#cba6f7",
+    "cat_red": "#f38ba8",
+    "cat_maroon": "#eba0ac",
+    "cat_peach": "#fab387",
+    "cat_yellow": "#f9e2af",
+    "cat_green": "#a6e3a1",
+    "cat_teal": "#94e2d5",
+    "cat_sky": "#89dceb",
+    "cat_sapphire": "#74c7ec",
+    "cat_blue": "#89b4fa",
+    "cat_lavender": "#b4befe",
+    "cat_text": "#cdd6f4",
+    "cat_subtext1": "#bac2de",
+    "cat_subtext0": "#a6adc8",
+    "cat_overlay2": "#9399b2",
+    "cat_overlay1": "#7f849c",
+    "cat_overlay0": "#6c7086",
+    "cat_surface2": "#585b70",
+    "cat_surface1": "#45475a",
+    "cat_surface0": "#313244",
+    "cat_base": "#1e1e2e",
+    "cat_mantle": "#181825",
+    "cat_crust": "#11111b"
   },
   "theme": {
     "primary": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "cat_blue",
+      "light": "cat_blue"
     },
     "secondary": {
-      "dark": "mauve",
-      "light": "mauve"
+      "dark": "cat_mauve",
+      "light": "cat_mauve"
     },
     "accent": {
-      "dark": "sapphire",
-      "light": "sapphire"
+      "dark": "cat_sapphire",
+      "light": "cat_sapphire"
     },
     "error": {
-      "dark": "red",
-      "light": "red"
+      "dark": "cat_red",
+      "light": "cat_red"
     },
     "warning": {
-      "dark": "yellow",
-      "light": "yellow"
+      "dark": "cat_yellow",
+      "light": "cat_yellow"
     },
     "success": {
-      "dark": "green",
-      "light": "green"
+      "dark": "cat_green",
+      "light": "cat_green"
     },
     "info": {
-      "dark": "sky",
-      "light": "sky"
+      "dark": "cat_sky",
+      "light": "cat_sky"
     },
-    "text": {
-      "dark": "text",
-      "light": "text"
-    },
+    "text": "none",
     "textMuted": {
-      "dark": "subtext0",
-      "light": "subtext0"
+      "dark": "cat_subtext0",
+      "light": "cat_subtext0"
     },
-    "background": {
-      "dark": "base",
-      "light": "base"
-    },
-    "backgroundPanel": {
-      "dark": "mantle",
-      "light": "mantle"
-    },
-    "backgroundElement": {
-      "dark": "surface0",
-      "light": "surface0"
-    },
+    "background": "none",
+    "backgroundPanel": "none",
+    "backgroundElement": "none",
     "border": {
-      "dark": "surface1",
-      "light": "surface1"
+      "dark": "cat_surface1",
+      "light": "cat_surface1"
     },
     "borderActive": {
-      "dark": "surface2",
-      "light": "surface2"
+      "dark": "cat_surface2",
+      "light": "cat_surface2"
     },
     "borderSubtle": {
-      "dark": "surface0",
-      "light": "surface0"
+      "dark": "cat_surface0",
+      "light": "cat_surface0"
     },
     "diffAdded": {
-      "dark": "green",
-      "light": "green"
+      "dark": "cat_green",
+      "light": "cat_green"
     },
     "diffRemoved": {
-      "dark": "red",
-      "light": "red"
+      "dark": "cat_red",
+      "light": "cat_red"
     },
     "diffContext": {
-      "dark": "overlay0",
-      "light": "overlay0"
+      "dark": "cat_overlay0",
+      "light": "cat_overlay0"
     },
     "diffHunkHeader": {
-      "dark": "overlay1",
-      "light": "overlay1"
+      "dark": "cat_overlay1",
+      "light": "cat_overlay1"
     },
     "diffHighlightAdded": {
-      "dark": "green",
-      "light": "green"
+      "dark": "cat_green",
+      "light": "cat_green"
     },
     "diffHighlightRemoved": {
-      "dark": "red",
-      "light": "red"
+      "dark": "cat_red",
+      "light": "cat_red"
     },
     "diffAddedBg": {
-      "dark": "#313244",
-      "light": "#313244"
+      "dark": "cat_surface0",
+      "light": "cat_surface0"
     },
     "diffRemovedBg": {
-      "dark": "#313244",
-      "light": "#313244"
+      "dark": "cat_surface0",
+      "light": "cat_surface0"
     },
     "diffContextBg": {
-      "dark": "mantle",
-      "light": "mantle"
+      "dark": "cat_surface0",
+      "light": "cat_surface0"
     },
     "diffLineNumber": {
-      "dark": "overlay0",
-      "light": "overlay0"
+      "dark": "cat_overlay0",
+      "light": "cat_overlay0"
     },
     "diffAddedLineNumberBg": {
-      "dark": "#313244",
-      "light": "#313244"
+      "dark": "cat_surface0",
+      "light": "cat_surface0"
     },
     "diffRemovedLineNumberBg": {
-      "dark": "#313244",
-      "light": "#313244"
+      "dark": "cat_surface0",
+      "light": "cat_surface0"
     },
     "markdownText": {
-      "dark": "text",
-      "light": "text"
+      "dark": "cat_text",
+      "light": "cat_text"
     },
     "markdownHeading": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "cat_blue",
+      "light": "cat_blue"
     },
     "markdownLink": {
-      "dark": "sky",
-      "light": "sky"
+      "dark": "cat_sky",
+      "light": "cat_sky"
     },
     "markdownLinkText": {
-      "dark": "sapphire",
-      "light": "sapphire"
+      "dark": "cat_sapphire",
+      "light": "cat_sapphire"
     },
     "markdownCode": {
-      "dark": "green",
-      "light": "green"
+      "dark": "cat_green",
+      "light": "cat_green"
     },
     "markdownBlockQuote": {
-      "dark": "overlay1",
-      "light": "overlay1"
+      "dark": "cat_overlay1",
+      "light": "cat_overlay1"
     },
     "markdownEmph": {
-      "dark": "maroon",
-      "light": "maroon"
+      "dark": "cat_maroon",
+      "light": "cat_maroon"
     },
     "markdownStrong": {
-      "dark": "peach",
-      "light": "peach"
+      "dark": "cat_peach",
+      "light": "cat_peach"
     },
     "markdownHorizontalRule": {
-      "dark": "surface1",
-      "light": "surface1"
+      "dark": "cat_surface1",
+      "light": "cat_surface1"
     },
     "markdownListItem": {
-      "dark": "lavender",
-      "light": "lavender"
+      "dark": "cat_lavender",
+      "light": "cat_lavender"
     },
     "markdownListEnumeration": {
-      "dark": "mauve",
-      "light": "mauve"
+      "dark": "cat_mauve",
+      "light": "cat_mauve"
     },
     "markdownImage": {
-      "dark": "pink",
-      "light": "pink"
+      "dark": "cat_pink",
+      "light": "cat_pink"
     },
     "markdownImageText": {
-      "dark": "flamingo",
-      "light": "flamingo"
+      "dark": "cat_flamingo",
+      "light": "cat_flamingo"
     },
     "markdownCodeBlock": {
-      "dark": "text",
-      "light": "text"
+      "dark": "cat_text",
+      "light": "cat_text"
     },
     "syntaxComment": {
-      "dark": "overlay0",
-      "light": "overlay0"
+      "dark": "cat_overlay0",
+      "light": "cat_overlay0"
     },
     "syntaxKeyword": {
-      "dark": "mauve",
-      "light": "mauve"
+      "dark": "cat_mauve",
+      "light": "cat_mauve"
     },
     "syntaxFunction": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "cat_blue",
+      "light": "cat_blue"
     },
     "syntaxVariable": {
-      "dark": "text",
-      "light": "text"
+      "dark": "cat_text",
+      "light": "cat_text"
     },
     "syntaxString": {
-      "dark": "green",
-      "light": "green"
+      "dark": "cat_green",
+      "light": "cat_green"
     },
     "syntaxNumber": {
-      "dark": "peach",
-      "light": "peach"
+      "dark": "cat_peach",
+      "light": "cat_peach"
     },
     "syntaxType": {
-      "dark": "yellow",
-      "light": "yellow"
+      "dark": "cat_yellow",
+      "light": "cat_yellow"
     },
     "syntaxOperator": {
-      "dark": "sky",
-      "light": "sky"
+      "dark": "cat_sky",
+      "light": "cat_sky"
     },
     "syntaxPunctuation": {
-      "dark": "overlay2",
-      "light": "overlay2"
+      "dark": "cat_overlay2",
+      "light": "cat_overlay2"
     }
   }
 }

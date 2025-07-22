@@ -70,6 +70,7 @@
 
 		taps = [
 			"nikitabobko/tap"
+      "sst/tap"
 		];
 
     brews = [
@@ -81,6 +82,8 @@
       "sleepwatcher"
       "act"
       "helm"
+      "k6"
+      "opencode"
     ];
 
     casks = [
