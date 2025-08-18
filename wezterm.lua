@@ -26,9 +26,9 @@ config.window_padding = {
 
 config.max_fps = 30
 
-config.front_end = "Software"
+config.front_end = "WebGpu"
 
-config.window_background_opacity = 1.0
+config.window_background_opacity = 0.85
 config.text_background_opacity = 1.0
 
 return config

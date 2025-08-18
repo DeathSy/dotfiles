@@ -23,6 +23,7 @@
     ffmpeg
     gnupg
     pinentry_mac
+    superfile
 
     # Git $ Github related
     git
@@ -70,7 +71,6 @@
 
 		taps = [
 			"nikitabobko/tap"
-      "sst/tap"
 		];
 
     brews = [
@@ -83,7 +83,6 @@
       "act"
       "helm"
       "k6"
-      "opencode"
     ];
 
     casks = [
@@ -96,6 +95,8 @@
       "postman"
       "raycast"
       "karabiner-elements"
+      "claude"
+      "tunnelblick"
     ];
   };
 

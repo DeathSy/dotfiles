@@ -29,7 +29,6 @@ in
 		".config/neofetch/config.conf".source = ../../neofetch.conf;
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
-		".claude/CLAUDE.MD".source = ../../CLAUDE.md;
     ".sleep" = {
       text = ''
         #!/bin/bash

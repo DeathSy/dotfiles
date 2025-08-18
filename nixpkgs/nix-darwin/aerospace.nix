@@ -134,6 +134,10 @@
           run = "move-node-to-workspace 1";
         }
         {
+          "if".app-id = "com.spotify.client";
+          run = "move-node-to-workspace 1";
+        }
+        {
           "if".app-id = "company.thebrowser.Browser";
           run = "move-node-to-workspace A";
         }
@@ -156,6 +160,10 @@
         {
           "if".app-id = "com.tinyapp.TablePlus";
           run = "move-node-to-workspace D";
+        }
+        {
+          "if".app-id = "com.antropic.claudefordesktop";
+          run = "move-node-to-workspace N";
         }
         {
           "if".app-id = "com.postmanlabs.mac";

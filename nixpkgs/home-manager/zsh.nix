@@ -61,6 +61,8 @@
       lt="eza --tree --level=2 --color=always --group-directories-first --icons";
       "l."="eza -a | grep -E '^\.'";
       t = "sesh connect $(sesh list --icons | fzf --no-sort --ansi)";
+
+      claude="/Users/ksotis/.claude/local/claude";
 		};
 
 		initExtra = ''
