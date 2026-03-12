@@ -88,15 +88,12 @@
     casks = [
       "sf-symbols"
       "desktoppr"
-      "arc"
       "wezterm"
-      "anydesk"
       "ngrok"
-      "postman"
       "raycast"
       "karabiner-elements"
       "claude"
-      "tunnelblick"
+      "gcloud-cli"
     ];
   };
 

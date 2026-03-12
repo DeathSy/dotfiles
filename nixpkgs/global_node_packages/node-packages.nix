@@ -5254,24 +5254,6 @@ let
   };
 in
 {
-  "@anthropic-ai/claude-code-v0.2.45" = nodeEnv.buildNodePackage {
-    name = "_at_anthropic-ai_slash_claude-code";
-    packageName = "@anthropic-ai/claude-code";
-    version = "0.2.45";
-    src = fetchurl {
-      url = "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-0.2.45.tgz";
-      sha512 = "r8uSA59wuNUHjlU+snwkZBHGsuv7z5+sxDFhLxI+1wz6PU9CU2/V37k26c7YpN9OFfeRmt9hk7gb3KaIlTH2ZA==";
-    };
-    buildInputs = globalBuildInputs;
-    meta = {
-      description = "Use Claude, Anthropic's AI assistant, right from your terminal. Claude can understand your codebase, edit files, run terminal commands, and handle entire workflows for you.";
-      homepage = "https://github.com/anthropics/claude-code";
-      license = "SEE LICENSE IN README.md";
-    };
-    production = true;
-    bypassCache = true;
-    reconstructLock = true;
-  };
   "serverless-v3.38.0" = nodeEnv.buildNodePackage {
     name = "serverless";
     packageName = "serverless";

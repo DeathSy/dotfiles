@@ -83,24 +83,28 @@
         "alt-a" = "workspace A";
         "alt-c" = "workspace C";
         "alt-d" = "workspace D";
+        "alt-f" = "workspace F";
         "alt-n" = "workspace N";
         "alt-s" = "workspace S";
         "alt-w" = "workspace W";
         "alt-p" = "workspace P";
         "alt-t" = "workspace T";
         "alt-x" = "workspace X";
+        "alt-z" = "workspace Z";
 
         # Move to workspace
         "alt-shift-1" = "move-node-to-workspace 1";
         "alt-shift-a" = "move-node-to-workspace A";
         "alt-shift-c" = "move-node-to-workspace C";
         "alt-shift-d" = "move-node-to-workspace D";
+        "alt-shift-f" = "move-node-to-workspace F";
         "alt-shift-n" = "move-node-to-workspace N";
         "alt-shift-s" = "move-node-to-workspace S";
         "alt-shift-w" = "move-node-to-workspace W";
         "alt-shift-p" = "move-node-to-workspace P";
         "alt-shift-t" = "move-node-to-workspace T";
         "alt-shift-x" = "move-node-to-workspace X";
+        "alt-shift-z" = "move-node-to-workspace Z";
 
         # Fullscreen
         "ctrl-alt-enter" = "fullscreen";
@@ -138,28 +142,16 @@
           run = "move-node-to-workspace 1";
         }
         {
-          "if".app-id = "company.thebrowser.Browser";
+          "if".app-id = "com.google.Chrome";
           run = "move-node-to-workspace A";
-        }
-        {
-          "if".app-id = "notion.id";
-          run = "move-node-to-workspace C";
-        }
-        {
-          "if".app-id = "com.cron.electron";
-          run = "move-node-to-workspace C";
-        }
-        {
-          "if".app-id = "notion.id";
-          run = "move-node-to-workspace C";
-        }
-        {
-          "if".app-id = "notion.mail.id";
-          run = "move-node-to-workspace C";
         }
         {
           "if".app-id = "com.tinyapp.TablePlus";
           run = "move-node-to-workspace D";
+        }
+        {
+          "if".app-id = "com.figma.Desktop";
+          run = "move-node-to-workspace F";
         }
         {
           "if".app-id = "com.antropic.claudefordesktop";
@@ -196,6 +188,10 @@
         {
           "if".app-id = "com.github.wez.wezterm";
           run = "move-node-to-workspace W";
+        }
+        {
+          "if".app-id = "dev.zed.Zed";
+          run = "move-node-to-workspace Z";
         }
 
         ## Floating application

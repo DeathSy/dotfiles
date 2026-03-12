@@ -8,7 +8,6 @@
 			GOBIN = "$GOPATH/bin";
 			VISUAL = "nvim";
 			EDITOR = "nvim";
-      ANTHROPIC_API_KEY = "$(pass show claude/personal)";
       GITHUB_REGISTRY_TOKEN = "$(pass show github/personal)";
       DOCKER_CMD = "podman";
 		};
@@ -43,8 +42,6 @@
 			lg = "lazygit";
 			lk = "k9s";
 
-			cd = "z";
-
       cat="bat";
       
       find="fd";
@@ -61,8 +58,6 @@
       lt="eza --tree --level=2 --color=always --group-directories-first --icons";
       "l."="eza -a | grep -E '^\.'";
       t = "sesh connect $(sesh list --icons | fzf --no-sort --ansi)";
-
-      claude="/Users/ksotis/.claude/local/claude";
 		};
 
 		initExtra = ''
@@ -70,6 +65,7 @@
 
 			${pkgs.neofetch}/bin/neofetch
 
+      export PATH="$HOME/.local/bin:$PATH"
       export NVM_DIR="$HOME/.nvm"
       [ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && source "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
       [ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && source "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"
