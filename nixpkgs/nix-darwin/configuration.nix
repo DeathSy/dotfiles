@@ -94,6 +94,7 @@
       "karabiner-elements"
       "claude"
       "gcloud-cli"
+      "android-platform-tools"
     ];
   };
 
