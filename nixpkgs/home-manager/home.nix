@@ -26,6 +26,7 @@ in
 			source = ../../nvim;
 			recursive = true;
 		};
+		".config/fastfetch/config.jsonc".source = ../../fastfetch.jsonc;
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
     ".sleep" = {
