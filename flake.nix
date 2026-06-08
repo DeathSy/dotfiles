@@ -2,15 +2,15 @@
   description = "Garage Configs";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/master";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
     home-manager = {
-	    url = "github:nix-community/home-manager/master";
+	    url = "git+https://github.com/nix-community/home-manager?ref=master&shallow=1";
 	    inputs.nixpkgs.follows = "nixpkgs";
     };
 
     nix-darwin = {
-	    url = "github:LnL7/nix-darwin";
+	    url = "github:nix-darwin/nix-darwin/master";
 	    inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -21,6 +21,8 @@
 
     darwinConfigurations."garage" = nix-darwin.lib.darwinSystem {
 			system = "aarch64-darwin";
+
+			specialArgs = { inherit inputs; };
 
       modules = [
 				./nixpkgs/nix-darwin/configuration.nix
@@ -46,8 +48,6 @@
 				}
       ];
     };
-
-    specialArgs = { inherit inputs; };
 
 		darwinPackages = self.darwinConfigurations."garage".pkgs;
   };
