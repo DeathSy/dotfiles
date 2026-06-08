@@ -4,11 +4,10 @@
 		enable = true;
 
 		sessionVariables = {
-			GOPATH = "$(go env GOPATH)";
+			GOPATH = "$HOME/go";
 			GOBIN = "$GOPATH/bin";
 			VISUAL = "nvim";
 			EDITOR = "nvim";
-      GITHUB_REGISTRY_TOKEN = "$(pass show github/personal)";
       DOCKER_CMD = "podman";
 		};
 
@@ -60,10 +59,16 @@
       t = "sesh connect $(sesh list --icons | fzf --no-sort --ansi)";
 		};
 
-		initExtra = ''
+		initContent = ''
 			eval "$(/opt/homebrew/bin/brew shellenv)"
 
-			${pkgs.neofetch}/bin/neofetch
+			${pkgs.fastfetch}/bin/fastfetch
+
+      # Lazily load the GitHub registry token only when a tool needs it,
+      # instead of decrypting the secret into every shell on startup
+      # (which also triggered a GPG prompt). Run `gh-token` before commands
+      # that require GITHUB_REGISTRY_TOKEN.
+      gh-token() { export GITHUB_REGISTRY_TOKEN="$(pass show github/personal)"; }
 
       export PATH="$HOME/.local/bin:$PATH"
       export NVM_DIR="$HOME/.nvm"

@@ -4,7 +4,7 @@
     vim
     neovim
     direnv
-    neofetch
+    fastfetch
     fzf
     bash
     bat
@@ -45,7 +45,13 @@
       allowUnsupportedSystem = false;
     };
 
-    overlays = [ ];
+    overlays = [
+      # pipx 1.8.0's test suite fails on this nixpkgs snapshot (packaging
+      # whitespace-normalization change); skip its checks so it still builds.
+      (final: prev: {
+        pipx = prev.pipx.overridePythonAttrs (_: { doCheck = false; });
+      })
+    ];
 	};
 
   programs.zsh.enable = true;
@@ -111,7 +117,9 @@
 
   system = {
     stateVersion = 5;
-    
+
+    primaryUser = "ksotis";
+
     defaults =  {
       dock = {
         autohide = true;
@@ -170,7 +178,7 @@
       env = pkgs.buildEnv {
         name = "system-applications";
         paths = config.environment.systemPackages;
-        pathsToLink = "/Applications";
+        pathsToLink = [ "/Applications" ];
       };
     in
       pkgs.lib.mkForce ''

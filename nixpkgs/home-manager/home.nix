@@ -26,7 +26,6 @@ in
 			source = ../../nvim;
 			recursive = true;
 		};
-		".config/neofetch/config.conf".source = ../../neofetch.conf;
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
     ".sleep" = {
