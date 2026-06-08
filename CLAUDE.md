@@ -50,7 +50,7 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 
 ### Primary Tools
 - **Terminal**: WezTerm with Catppuccin theme
-- **Shell**: Zsh with Starship prompt and antigen
+- **Shell**: Zsh with Starship prompt and oh-my-zsh
 - **Editor**: Neovim with LazyVim configuration
 - **Git**: Configured via `nixpkgs/home-manager/git.nix`
 - **Session Manager**: Sesh for tmux session management

@@ -2,6 +2,8 @@
 
 	programs.zsh = {
 		enable = true;
+		autosuggestion.enable = true;
+		syntaxHighlighting.enable = true;
 
 		sessionVariables = {
 			GOPATH = "$HOME/go";
@@ -22,16 +24,28 @@
 			];
 		};
 
-		zplug = {
-			enable = true;
-			plugins = [
-				{ name = "nekofar/zsh-pnpm"; }
-				{ name = "ntnyq/omz-plugin-bun"; }
-				{ name = "zsh-users/zsh-autosuggestions"; }
-				{ name = "zsh-users/zsh-completions"; }
-				{ name = "zsh-users/zsh-syntax-highlighting"; }
-			];
-		};
+		plugins = [
+			{
+				name = "zsh-pnpm";
+				file = "zsh-pnpm.plugin.zsh";
+				src = pkgs.fetchFromGitHub {
+					owner = "nekofar";
+					repo = "zsh-pnpm";
+					rev = "bf5e51c1ee73ff90c73746531a8a775224b7f0df";
+					sha256 = "0ynbxqg66vr1dab4zixl51k26ylj7n5n055spyg3lfrfj5c5dxd6";
+				};
+			}
+			{
+				name = "omz-plugin-bun";
+				file = "bun.plugin.zsh";
+				src = pkgs.fetchFromGitHub {
+					owner = "ntnyq";
+					repo = "omz-plugin-bun";
+					rev = "6a8e432d233f96a5e312ab3a7c657eefcf5b5f6c";
+					sha256 = "14zfv1fawj3vr0a94hwxhgbn3gyyaf7l2cym1i8z0hkfk2i4y3zz";
+				};
+			}
+		];
 
 		shellAliases = {
 			vim = "nvim";
