@@ -33,6 +33,19 @@
 			set-option -g focus-events on
 			set-option -g aggressive-resize on
 
+			# Notify when a background agent rings the bell (Claude Code: finished
+			# / waiting for input). The window gets a bell flag in the status bar.
+			set-option -g monitor-bell on
+			set-option -g bell-action other
+			set-option -g visual-bell off
+			set-window-option -g monitor-activity off
+
+			# AI agent (Claude Code) management
+			# prefix C : jump to this project's claude agent, or spawn one (model picker)
+			bind-key C display-popup -E -w 40% -h 40% "$HOME/.config/tmux/agent.sh"
+			# prefix A : fuzzy-switch between running agents across all sessions
+			bind-key A display-popup -E -w 70% -h 50% "$HOME/.config/tmux/agent-switch.sh"
+
 			# auto rename window
 			set-option -g status-interval 5
 			set-option -g automatic-rename on
@@ -87,9 +100,16 @@
             rev = "863bb604550f6e599456082b14a9d91f4dabebdf";
             hash = "sha256-fXlBqc3nIEOcdL8Q1OOYb6javnwF9mT3gtgP3NpDPdw=";
           };
+          # Rename its option out of the "@open*" namespace, which the
+          # tmux-open plugin claims for search engines. Without this, tmux-open
+          # reads "@open-lazygit" as a key binding and errors on every reload.
+          postInstall = ''
+            substituteInPlace $target/neolazygit.tmux \
+              --replace '@open-lazygit' '@lazygit-key'
+          '';
         };
         extraConfig = ''
-        set -g @open-lazygit 'g'
+        set -g @lazygit-key 'g'
         '';
       }
       {
@@ -122,8 +142,8 @@
 				set -g @catppuccin_window_current_fill "number"
 
         set -g @catppuccin_window_default_text "#W"
-        set -g @catppuccin_window_text "#W"
-        set -g @catppuccin_window_current_text "#W"
+        set -g @catppuccin_window_text "#W#{?window_bell_flag, 🔔,}"
+        set -g @catppuccin_window_current_text "#W#{?window_bell_flag, 🔔,}"
 
 				set -g @catppuccin_status_modules_right "session"
 				set -g @catppuccin_status_left_separator  " "

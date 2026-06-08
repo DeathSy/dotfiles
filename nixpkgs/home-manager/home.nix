@@ -27,6 +27,8 @@ in
 			recursive = true;
 		};
 		".config/fastfetch/config.jsonc".source = ../../fastfetch.jsonc;
+		".config/tmux/agent.sh" = { source = ../../tmux/agent.sh; executable = true; };
+		".config/tmux/agent-switch.sh" = { source = ../../tmux/agent-switch.sh; executable = true; };
 		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
     ".sleep" = {
