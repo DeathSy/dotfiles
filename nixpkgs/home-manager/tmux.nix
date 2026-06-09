@@ -14,6 +14,11 @@
       set-option -g default-shell "${pkgs.zsh}/bin/zsh"
       set-option -g default-command "${pkgs.zsh}/bin/zsh"
 
+      # Truecolor passthrough — without this, tmux clamps to 256 colors and
+      # catppuccin (in nvim, etc.) renders as a washed-out approximation.
+      set -ag terminal-overrides ",*:Tc"
+      set -as terminal-features ",*:RGB"
+
       set -g status-style "bg=default"
       set -g status-bg default
 

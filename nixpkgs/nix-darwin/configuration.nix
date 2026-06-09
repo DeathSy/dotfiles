@@ -70,7 +70,11 @@
     };
 
 		onActivation = {
-      cleanup = "uninstall";
+      # "uninstall"/"zap" make nix-darwin pass `brew bundle --cleanup`, which
+      # Homebrew 5.x no longer accepts (cleanup is now its own subcommand) and
+      # which aborts activation. Keep off until nix-darwin emits the new form;
+      # run `brew bundle cleanup` manually to prune undeclared packages.
+      cleanup = "none";
       upgrade = true;
     };
 
