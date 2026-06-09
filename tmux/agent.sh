@@ -19,4 +19,7 @@ case "$model" in
   *)            cmd="claude --model $model" ;;
 esac
 
-tmux new-window -n claude -c "$path" "$cmd"
+# Lock the name to "claude" (automatic-rename is on globally and would
+# otherwise rename it to the folder, breaking agent detection).
+win=$(tmux new-window -n claude -c "$path" -P -F '#{window_id}' "$cmd")
+tmux set-window-option -t "$win" automatic-rename off

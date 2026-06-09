@@ -92,6 +92,7 @@
       "act"
       "helm"
       "k6"
+      "claude-squad"
     ];
 
     casks = [

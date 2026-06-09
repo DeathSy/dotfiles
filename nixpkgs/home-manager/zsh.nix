@@ -54,6 +54,7 @@
 
 			lg = "lazygit";
 			lk = "k9s";
+			cs = "claude-squad";
 
       cat="bat";
       

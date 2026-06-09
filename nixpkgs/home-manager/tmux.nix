@@ -50,6 +50,14 @@
 			bind-key C display-popup -E -w 40% -h 40% "$HOME/.config/tmux/agent.sh"
 			# prefix A : fuzzy-switch between running agents across all sessions
 			bind-key A display-popup -E -w 70% -h 50% "$HOME/.config/tmux/agent-switch.sh"
+			# prefix e : open the claude-squad agent dashboard (jump to it if open)
+			bind-key e run-shell "$HOME/.config/tmux/squad.sh"
+
+			# prefix Tab : toggle an IDE-style session sidebar that follows you
+			# across sessions/windows (persistent-feeling left panel of sessions).
+			bind-key Tab run-shell "$HOME/.config/tmux/ide-toggle.sh"
+			set-hook -g client-session-changed 'run-shell "$HOME/.config/tmux/ide-ensure.sh"'
+			set-hook -g after-select-window 'run-shell "$HOME/.config/tmux/ide-ensure.sh"'
 
 			# auto rename window
 			set-option -g status-interval 5
