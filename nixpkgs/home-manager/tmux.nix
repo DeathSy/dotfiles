@@ -18,6 +18,9 @@
       # catppuccin (in nvim, etc.) renders as a washed-out approximation.
       set -ag terminal-overrides ",*:Tc"
       set -as terminal-features ",*:RGB"
+      # Synchronized output (DECSET 2026) — lets nvim/TUIs batch redraws so
+      # tmux doesn't tear/flicker. WezTerm supports it.
+      set -as terminal-features ",*:sync"
 
       set -g status-style "bg=default"
       set -g status-bg default
