@@ -93,6 +93,8 @@
       "helm"
       "k6"
       "claude-squad"
+      "doctl"
+      "caddy"
     ];
 
     casks = [
