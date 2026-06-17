@@ -26,7 +26,9 @@ config.window_padding = {
 
 config.max_fps = 30
 
-config.front_end = "WebGpu"
+-- CPU rendering: avoids GPU usage entirely (battery-friendly, at the cost of
+-- slower redraws on large/busy screens)
+config.front_end = "Software"
 
 config.window_background_opacity = 1.0
 config.text_background_opacity = 1.0
