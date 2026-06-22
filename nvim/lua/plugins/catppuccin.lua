@@ -4,12 +4,6 @@ return {
     lazy = false,
     opts = {
       transparent_background = true,
-      -- Make window split separators visible (default blends into the bg)
-      custom_highlights = function(colors)
-        return {
-          WinSeparator = { fg = colors.subtext0 },
-        }
-      end,
       integrations = {
         aerial = true,
         alpha = true,
