@@ -22,6 +22,10 @@
       # tmux doesn't tear/flicker. WezTerm supports it.
       set -as terminal-features ",*:sync"
 
+      # More visible pane borders (defaults are too dark against the bg)
+      set -g pane-border-style "fg=#a6adc8"
+      set -g pane-active-border-style "fg=#cba6f7"
+
       set -g status-style "bg=default"
       set -g status-bg default
 
@@ -148,6 +152,8 @@
 				extraConfig = ''
 				set -g @catppuccin_flavour 'mocha'
         set -g @catppuccin_window_status_style "rounded"
+        # Brighter inactive pane border (catppuccin's default blends into the bg)
+        set -g @catppuccin_pane_border_style "fg=#a6adc8"
 
 				set -g @catppuccin_window_left_separator ""
 				set -g @catppuccin_window_right_separator " "
