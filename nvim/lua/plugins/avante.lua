@@ -7,9 +7,11 @@ return {
     opts = {
       -- add any opts here
       provider = "claude",
-      claude = {
-        endpoint = "https://api.anthropic.com",
-        model = "claude-3-7-sonnet-20250219",
+      providers = {
+        claude = {
+          endpoint = "https://api.anthropic.com",
+          model = "claude-sonnet-4-6",
+        },
       },
     },
     -- if you want to build from source then do `make BUILD_FROM_SOURCE=true`
