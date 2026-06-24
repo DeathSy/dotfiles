@@ -95,6 +95,7 @@
       "claude-squad"
       "doctl"
       "caddy"
+      "terminal-notifier"
     ];
 
     casks = [

@@ -11,7 +11,14 @@
 set -uo pipefail
 
 notify() { # title  body  sound
-  /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"$3\"" 2>/dev/null || true
+  # terminal-notifier gives a cleaner banner; fall back to osascript if absent.
+  # Backgrounded (&) so a hook can never block on the notifier. (macOS locks the
+  # banner icon to the posting app; -sender would set the Claude icon but hangs.)
+  if command -v terminal-notifier >/dev/null 2>&1; then
+    terminal-notifier -title "$1" -message "$2" -sound "$3" >/dev/null 2>&1 &
+  else
+    /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"$3\"" >/dev/null 2>&1 &
+  fi
 }
 
 kind="${1:-waiting}"
