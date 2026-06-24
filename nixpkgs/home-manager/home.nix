@@ -29,6 +29,7 @@ in
 		".config/fastfetch/config.jsonc".source = ../../fastfetch.jsonc;
 		".config/tmux/agent.sh" = { source = ../../tmux/agent.sh; executable = true; };
 		".config/tmux/agent-switch.sh" = { source = ../../tmux/agent-switch.sh; executable = true; };
+		".config/tmux/agent-notify.sh" = { source = ../../tmux/agent-notify.sh; executable = true; };
 		".config/tmux/squad.sh" = { source = ../../tmux/squad.sh; executable = true; };
 		".config/tmux/ide-sidebar.sh" = { source = ../../tmux/ide-sidebar.sh; executable = true; };
 		".config/tmux/ide-ensure.sh" = { source = ../../tmux/ide-ensure.sh; executable = true; };

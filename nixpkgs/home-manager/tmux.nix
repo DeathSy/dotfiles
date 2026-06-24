@@ -52,6 +52,10 @@
 			set-option -g visual-bell off
 			set-window-option -g monitor-activity off
 
+			# macOS notification when any (non-Claude) tool rings the bell.
+			# Claude agents notify themselves with precise messages via hooks.
+			set-hook -g alert-bell 'run-shell "$HOME/.config/tmux/agent-notify.sh bell \"#{session_name}\" \"#{window_name}\" \"#{pane_current_command}\""'
+
 			# AI agent (Claude Code) management
 			# prefix C : jump to this project's claude agent, or spawn one (model picker)
 			bind-key C display-popup -E -w 40% -h 40% "$HOME/.config/tmux/agent.sh"
