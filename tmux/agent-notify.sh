@@ -23,25 +23,27 @@ notify() { # title  body  sound
 
 kind="${1:-waiting}"
 
-# Current tmux location (Claude hooks run in the agent's pane).
-loc=""
-[ -n "${TMUX:-}" ] && loc=$(tmux display-message -p '#S:#W' 2>/dev/null)
+# The project = the tmux session name (Claude hooks run in the agent's pane).
+proj=""
+[ -n "${TMUX:-}" ] && proj=$(tmux display-message -p '#S' 2>/dev/null)
 
 case "$kind" in
   finished)
     printf '\a' > /dev/tty 2>/dev/null || true
-    notify "✅ Claude finished" "${loc:-claude} is done" "Glass"
+    if [ -n "$proj" ]; then body="All done in $proj"; else body="All done"; fi
+    notify "Claude finished ✅" "$body" "Glass"
     ;;
   waiting)
     printf '\a' > /dev/tty 2>/dev/null || true
-    notify "🔔 Claude needs you" "${loc:-claude} is waiting for input" "Ping"
+    if [ -n "$proj" ]; then body="Waiting for you in $proj"; else body="Waiting for your reply"; fi
+    notify "Claude needs you 💬" "$body" "Ping"
     ;;
   bell)
     sess="${2:-}"; win="${3:-}"; cmd="${4:-}"
-    # Skip Claude agents — they notify themselves with precise messages.
+    # Skip Claude agents — they notify themselves with friendlier messages.
     ver=$(basename "$(readlink "$HOME/.local/bin/claude" 2>/dev/null)" 2>/dev/null)
     { [ -n "$ver" ] && [ "$cmd" = "$ver" ]; } && exit 0
     [ "$win" = "claude" ] && exit 0
-    notify "🔔 ${sess}:${win}" "needs your attention" "Submarine"
+    notify "Heads up 🔔" "$sess needs your attention" "Submarine"
     ;;
 esac
