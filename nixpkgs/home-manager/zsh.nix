@@ -87,6 +87,20 @@
       # that require GITHUB_REGISTRY_TOKEN.
       gh-token() { export GITHUB_REGISTRY_TOKEN="$(pass show github/personal)"; }
 
+      # When AeroSpace shortcuts stop working, a password box left macOS
+      # "secure input" stuck on. Run `secureinput` to see which app holds it.
+      secureinput() {
+        local pid
+        pid=$(LC_ALL=C ioreg -l -w 0 | grep -o '"kCGSSessionSecureInputPID"=[0-9]*' | grep -o '[0-9]*' | head -1)
+        if [[ -z "$pid" || "$pid" == 0 ]]; then
+          echo "✅ secure input is OFF — AeroSpace shortcuts should work"
+        else
+          echo "🔒 secure input is ON, held by PID $pid:"
+          ps -p "$pid" -o pid=,comm=,args=
+          echo "→ refocus that app and dismiss its password field (Esc / click away), or quit it, to release it"
+        fi
+      }
+
       export PATH="$HOME/.local/bin:$PATH"
       export NVM_DIR="$HOME/.nvm"
       [ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && source "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
