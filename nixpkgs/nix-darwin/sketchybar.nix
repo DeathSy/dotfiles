@@ -39,6 +39,7 @@
 
       source "$ITEM_DIR/time.sh"
       source "$ITEM_DIR/calendar.sh"
+      source "$ITEM_DIR/claude_usage.sh"
       source "$ITEM_DIR/cpu.sh"
       source "$ITEM_DIR/memory.sh"
       source "$ITEM_DIR/battery.sh"
