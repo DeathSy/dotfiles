@@ -103,7 +103,6 @@
       "desktoppr"
       "wezterm"
       "ngrok"
-      "raycast"
       "karabiner-elements"
       "claude"
       "gcloud-cli"
