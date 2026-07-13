@@ -17,4 +17,4 @@ sketchybar --add item claude_usage right \
   background.border_color="$COLOR" \
   background.color="$BAR_COLOR" \
   background.drawing=on \
-  script="$PLUGIN_DIR/claude_usage.sh $CLAUDE_5H_LIMIT"
+  script="$PLUGIN_DIR/claude_usage.sh $CLAUDE_5H_LIMIT $FABLE_WEEK_LIMIT"

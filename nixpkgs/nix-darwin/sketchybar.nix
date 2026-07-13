@@ -13,12 +13,13 @@
       export CORNER_RADIUS=30
       export BORDER_WIDTH=2
 
-      # Billable-token ceiling for the 5-hour block (Claude + Fable combined).
-      # 0 = show used + reset only; a value shows "% used" too.
-      # NOTE: Anthropic doesn't publish an exact Max-20x cap — this is an
-      # estimate. Calibrate it: when you actually hit the limit, note the item's
-      # combined total and set that here. 0 to hide the %.
-      export CLAUDE_5H_LIMIT=100000000
+      # Usage limits for the claude_usage item, in billable tokens
+      # (input + output + cache-creation). Anthropic doesn't publish exact caps
+      # — these are calibrated from /usage (session 51%, weekly Fable 12%).
+      # Recalibrate if they drift: note the item's raw total (set the limit to 0
+      # to see it) when /usage reads a known %, then divide. 0 hides that %.
+      export CLAUDE_5H_LIMIT=40000000     # 5-hour session (all models combined)
+      export FABLE_WEEK_LIMIT=133000000   # weekly Fable
 
       sketchybar --bar \
         height=30 \
