@@ -13,6 +13,11 @@
       export CORNER_RADIUS=30
       export BORDER_WIDTH=2
 
+      # Billable-token ceiling for the 5-hour block (Claude + Fable combined).
+      # 0 = show used + reset only. Set to your calibrated Max-20x cap to also
+      # show "% used" in the claude_usage item.
+      export CLAUDE_5H_LIMIT=0
+
       sketchybar --bar \
         height=30 \
         color=$TRANSPARENT \
