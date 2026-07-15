@@ -47,6 +47,16 @@ in
       text = ''
         #!/bin/bash
         ${pkgs.podman}/bin/podman machine start
+
+        # Clear AeroSpace phantom windows that accumulate across sleep/wake
+        # (closed windows AeroSpace never got a close event for -> black tiles).
+        # A full restart re-scans windows; killall Finder clears Finder's, which
+        # it holds in its accessibility tree until relaunched.
+        (
+          sleep 3
+          launchctl kickstart -k "gui/$(id -u)/org.nixos.aerospace"
+          killall Finder
+        ) &
       '';
       executable = true;
     };
