@@ -104,7 +104,6 @@
       "wezterm"
       "ngrok"
       "karabiner-elements"
-      "claude"
       "codex"
       "gcloud-cli"
       "android-platform-tools"
