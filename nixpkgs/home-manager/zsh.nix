@@ -58,26 +58,32 @@
 			lk = "k9s";
 			cs = "claude-squad";
 
-      cat="bat";
-      
-      find="fd";
-
       ktx="kubectx";
 
-      ls="eza --color=always --group-directories-first --icons";
-      ll="eza -la --icons --octal-permissions --group-directories-first";
-      l="eza -bGF --header --git --color=always --group-directories-first --icons";
-      llm="eza -lbGd --header --git --sort=modified --color=always --group-directories-first --icons";
-      la="eza --long --all --group --group-directories-first";
-      lx="eza -lbhHigUmuSa@ --time-style=long-iso --git --color-scale --color=always --group-directories-first --icons";
-      lS="eza -1 --color=always --group-directories-first --icons";
-      lt="eza --tree --level=2 --color=always --group-directories-first --icons";
-      "l."="eza -a | grep -E '^\.'";
       t = "sesh connect $(sesh list --icons | fzf --no-sort --ansi)";
 		};
 
 		initContent = ''
 			eval "$(/opt/homebrew/bin/brew shellenv)"
+
+      # zsh-pnpm aliases ps to `pnpm run serve`; keep the real ps.
+      unalias ps 2>/dev/null
+
+      # Interactive-only replacements; they break Claude Code's Bash tool
+      # (CLAUDECODE=1 in its shells).
+      if [[ -z $CLAUDECODE ]]; then
+        alias cat="bat"
+        alias find="fd"
+        alias ls="eza --color=always --group-directories-first --icons"
+        alias ll="eza -la --icons --octal-permissions --group-directories-first"
+        alias l="eza -bGF --header --git --color=always --group-directories-first --icons"
+        alias llm="eza -lbGd --header --git --sort=modified --color=always --group-directories-first --icons"
+        alias la="eza --long --all --group --group-directories-first"
+        alias lx="eza -lbhHigUmuSa@ --time-style=long-iso --git --color-scale --color=always --group-directories-first --icons"
+        alias lS="eza -1 --color=always --group-directories-first --icons"
+        alias lt="eza --tree --level=2 --color=always --group-directories-first --icons"
+        alias l.="eza -a | grep -E '^\.'"
+      fi
 
 			${pkgs.fastfetch}/bin/fastfetch
 
