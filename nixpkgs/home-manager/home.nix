@@ -162,7 +162,7 @@ in
     enable = true;
     config = {
       ProgramArguments = [
-        "/opt/homebrew/bin/sleepwatcher"
+        "/opt/homebrew/sbin/sleepwatcher"
         "-V"
         "-s" "${config.home.homeDirectory}/.sleep"
         "-w" "${config.home.homeDirectory}/.wakeup"
