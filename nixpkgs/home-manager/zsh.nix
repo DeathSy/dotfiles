@@ -101,6 +101,13 @@
         fi
       }
 
+      # Claude Code with the iMessage channel. DISABLE_TELEMETRY (global
+      # settings.json) blocks --channels, so clear it for this launch only.
+      claude-imessage() {
+        claude --settings '{"env":{"DISABLE_TELEMETRY":""}}' \
+          --channels plugin:imessage@claude-plugins-official "$@"
+      }
+
       export PATH="$HOME/.local/bin:$PATH"
       export NVM_DIR="$HOME/.nvm"
       [ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && source "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
