@@ -19,8 +19,6 @@
 			enable = true;
 			plugins = [
 				"git"
-				"docker"
-				"docker-compose"
 				"yarn"
         "redis-cli"
 			];
