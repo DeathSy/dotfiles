@@ -80,6 +80,7 @@
 
 		taps = [
 			"nikitabobko/tap"
+			"devdotfast/tap"
 		];
 
     brews = [
@@ -107,6 +108,7 @@
       "codex"
       "gcloud-cli"
       "android-platform-tools"
+      "devdotfast/tap/whiteboard"
     ];
   };
 
