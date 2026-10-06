@@ -96,6 +96,8 @@ in
     # Container related applications
     podman
     podman-compose
+    # Real `docker` binary for tools that exec it directly (no shell aliases).
+    (writeShellScriptBin "docker" ''exec ${podman}/bin/podman "$@"'')
 
     # Data storage applications
     postgresql
