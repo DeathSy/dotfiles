@@ -134,7 +134,7 @@
         mru-spaces = false;
         show-recents = false;
         tilesize = 32;
-        expose-group-apps = true;
+        expose-group-apps = false;
       };
 
       NSGlobalDomain = {
