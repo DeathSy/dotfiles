@@ -72,8 +72,7 @@ in
     # Utilities applications
     awscli2
     gh
-
-    discord
+    ares-cli # LG webOS TV CLI (ares-*)
 
     # Python related
     python3
