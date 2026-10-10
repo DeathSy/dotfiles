@@ -129,8 +129,10 @@
       "upscayl"
       "android-commandlinetools"
 
-      # Installed by hand before they were declared; the first install needs
-      # --adopt (see the PR / docs) so brew takes over the existing apps.
+      # Installed by hand before they were declared. brew bundle adopts the
+      # existing apps automatically; .pkg casks (cloudflare-warp,
+      # openvpn-connect, tailscale-app, windows-app, zoom, microsoft-teams)
+      # reinstall over the existing apps instead.
       "anydesk"
       "discord"
       "chatgpt"
