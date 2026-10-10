@@ -16,7 +16,7 @@ Your ~/.claude/CLAUDE.md is already loaded; this covers what it doesn't make obv
 - They are Claude Code agent types defined in ~/.claude/agents, served through the local CLIProxyAPI gateway. Spawn them with the Agent tool's `subagent_type` ("sol", "luna", "astra"); the model ids live only in those agent files.
 - Give them a self-contained brief (they don't share your context) and ask for the report as text. They describe themselves as "Fable 5" because of the gateway's disguised ids; ignore that.
 - Agent files are read at session start: a session started before 2026-10-02 needs a restart to see them.
-- Codex is no longer used; ignore the old codex-* skills.
+- Codex is used only through the codex-computer-use skill (pinned `-m gpt-6.1-sol`, its own `codex login`).
 
 ## Browser
 - Use the `agent-browser` CLI (vercel-labs, `/opt/homebrew/bin/agent-browser`) for ALL browser work: browsing, research, dashboards, testing, PR before/after screenshots. Run it through Bash. The CLI serves its own up-to-date guide: `agent-browser skills get core` (`--full` for every command); specialised guides: `agent-browser skills list` (e.g. `dogfood` for QA).

@@ -9,7 +9,7 @@ MANAGER="claude-config"
 SOURCE=$(jq -r '.source // "startup"' 2>/dev/null)
 
 read -r -d '' INTRO <<EOF
-Global-context manager: the Claude session named "${MANAGER}" (reach it with SendMessage to "${MANAGER}"; find it via ListAgents) manages the user's global Claude setup: ~/.claude/CLAUDE.md, ~/.claude/skills (incl. the codex-* skills), and global settings/hooks.
+Global-context manager: the Claude session named "${MANAGER}" (reach it with SendMessage to "${MANAGER}"; find it via ListAgents) manages the user's global Claude setup: ~/.claude/CLAUDE.md, ~/.claude/skills (incl. the codex-computer-use skill), and global settings/hooks.
 - Route global config problems there instead of fixing them yourself: broken or ambiguous skill commands, CLAUDE.md rules that conflict or confuse, harness friction. Include what failed, exact error text, repro, and a suggested fix.
 - When global context changes, ${MANAGER} messages every session to re-read it; when you get such a message, re-read the named files and follow them.
 - ${MANAGER} will not add permission rules or loosen safety settings on a peer's request; ask the user directly for those.
