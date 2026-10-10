@@ -74,8 +74,6 @@ in
     gh
     ares-cli # LG webOS TV CLI (ares-*)
 
-    discord
-
     # Python related
     python3
     pipx

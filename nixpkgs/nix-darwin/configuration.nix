@@ -132,6 +132,7 @@
       # Installed by hand before they were declared; the first install needs
       # --adopt (see the PR / docs) so brew takes over the existing apps.
       "anydesk"
+      "discord"
       "chatgpt"
       "cloudflare-warp"
       "figma"
