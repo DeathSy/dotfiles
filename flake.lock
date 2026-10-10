@@ -59,11 +59,25 @@
         "type": "github"
       }
     },
+    "private": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1,
+        "narHash": "sha256-UVeDRcZh8RJ6UttgI7TSbdCJVjkWHlzetqJ69xBzifM=",
+        "path": "./private-stub",
+        "type": "path"
+      },
+      "original": {
+        "path": "./private-stub",
+        "type": "path"
+      }
+    },
     "root": {
       "inputs": {
         "home-manager": "home-manager",
         "nix-darwin": "nix-darwin",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "private": "private"
       }
     }
   },

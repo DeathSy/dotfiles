@@ -113,6 +113,15 @@
           --channels plugin:imessage@claude-plugins-official "$@"
       }
 
+      # Rebuild the system, with the private layer when it's checked out
+      # next to this repo (see docs/ai-setup.md).
+      rebuild() {
+        local repo="$HOME/workspace/dotfiles" priv="$HOME/workspace/dotfiles-private"
+        local -a extra
+        [[ -d $priv ]] && extra=(--override-input private "path:$priv")
+        sudo darwin-rebuild switch --flake "$repo" "''${extra[@]}" "$@"
+      }
+
       export PATH="$HOME/.local/bin:$PATH"
       export NVM_DIR="$HOME/.nvm"
       [ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && source "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
