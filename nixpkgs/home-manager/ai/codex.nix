@@ -38,22 +38,40 @@ let
     except Exception as e:
         sys.exit(f"codex-config-merge: {e}; {target} left unchanged")
 
+    backups = os.path.join(home, ".codex", "backups")
+
+
+    def tidy_backups():  # mode 600, keep the latest 5
+        if not os.path.isdir(backups):
+            return
+        old = [os.path.join(backups, f) for f in os.listdir(backups) if f.startswith("config.toml.dotfiles-")]
+        old.sort(key=os.path.getmtime, reverse=True)
+        for i, path in enumerate(old):
+            if i < 5:
+                os.chmod(path, 0o600)
+            else:
+                os.remove(path)
+
+
     if after == before:
+        tidy_backups()
         sys.exit(0)
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    if before:
-        backups = os.path.join(home, ".codex", "backups")
-        os.makedirs(backups, exist_ok=True)
-        shutil.copy2(target, os.path.join(backups, "config.toml.dotfiles-" + time.strftime("%Y%m%d-%H%M%S")))
-        old = sorted(f for f in os.listdir(backups) if f.startswith("config.toml.dotfiles-"))
-        for f in old[:-5]:  # keep the latest 5
-            os.remove(os.path.join(backups, f))
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(target))
-    with os.fdopen(fd, "w") as f:
-        f.write(after)
-    if before:
-        shutil.copymode(target, tmp)
-    os.replace(tmp, target)
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        if before:
+            os.makedirs(backups, mode=0o700, exist_ok=True)
+            fd, _ = tempfile.mkstemp(prefix="config.toml.dotfiles-" + time.strftime("%Y%m%d-%H%M%S") + ".", dir=backups)
+            with os.fdopen(fd, "w") as f:
+                f.write(before)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(target))
+        with os.fdopen(fd, "w") as f:
+            f.write(after)
+        if before:
+            shutil.copymode(target, tmp)
+        os.replace(tmp, target)
+    except Exception as e:
+        sys.exit(f"codex-config-merge: {e}; {target} left unchanged")
+    tidy_backups()
     print(f"codex-config-merge: updated {target}")
   '';
 

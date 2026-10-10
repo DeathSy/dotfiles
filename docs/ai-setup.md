@@ -39,18 +39,19 @@ sudo darwin-rebuild switch --flake ~/workspace/dotfiles \
 - Links `~/.claude/{CLAUDE.md,onboarding.md}`, `~/.claude/agents/*.md`,
   `~/.claude/hooks/*` and `~/.claude/skills/<own skill>/SKILL.md` to the files
   in the checkout at `~/workspace/dotfiles/claude/` (not the Nix store), so
-  editing them in place edits the repo. Live files that were real files are
-  moved to `~/.claude/backups/dotfiles-<timestamp>/` first, with a warning
-  naming each one. That also happens when an editor that saves by renaming
-  has replaced a link with a real file: diff the backup against the repo.
+  editing them in place edits the repo. A live real file in the way (on the
+  first rebuild, or after an editor that saves by renaming replaced a link) is
+  renamed to `<file>.backup` by home-manager, with a warning naming it: diff
+  it against the repo copy, then delete it (a leftover `.backup` makes the
+  next rebuild stop).
 - Links `~/.claude/skills/agent-browser/SKILL.md` to the skill that ships with
   the Homebrew `agent-browser` CLI.
 - Merges `~/.claude/settings.json`: live file ← `claude/settings.base.json` ←
   `dotfiles.ai.claude.settingsOverlay` ← secrets from `pass`. Keys from the repo win; anything else
   Claude Code wrote stays. The file is kept at mode 600 (it holds the token);
   the previous version is copied to
-  `~/.claude/backups/settings.json.dotfiles-<timestamp>` (private, latest 5
-  kept) when it changes. If
+  `~/.claude/backups/settings.json.dotfiles-<timestamp>.<random>` when it
+  changes; backups are mode 600 and only the latest 5 are kept. If
   `jq` or `pass` fails, the file is left alone with a warning. Run
   `claude-settings-merge` to redo it by hand. Removing a key from the base
   JSON does not remove it from the live file.
