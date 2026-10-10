@@ -103,9 +103,8 @@
       "sf-symbols"
       "desktoppr"
       "wezterm"
-      "ngrok"
-      "karabiner-elements"
       "codex"
+      "drawio"
       "gcloud-cli"
       "android-platform-tools"
       "devdotfast/tap/whiteboard"
@@ -151,7 +150,7 @@
         NSAutomaticSpellingCorrectionEnabled = false;
         NSNavPanelExpandedStateForSaveMode = true;
         NSNavPanelExpandedStateForSaveMode2 = true;
-        _HIHideMenuBar = true;
+        _HIHideMenuBar = false;
       };
 
       WindowManager = {
