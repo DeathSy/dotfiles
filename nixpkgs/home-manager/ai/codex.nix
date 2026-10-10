@@ -33,7 +33,7 @@ let
         before = open(target).read() if os.path.exists(target) else ""
         doc = tomlkit.parse(before)
         for path in sources:
-            merge(doc, tomlkit.parse(open(path).read().replace("@HOME@", home)))
+            merge(doc, tomlkit.parse(open(path).read()))
         after = tomlkit.dumps(doc)
     except Exception as e:
         sys.exit(f"codex-config-merge: {e}; {target} left unchanged")
@@ -54,7 +54,11 @@ let
     print(f"codex-config-merge: updated {target}")
   '';
 
-  sources = [ ../../../codex/config.base.toml ] ++ cfg.codex.configOverlays;
+  overlay = (pkgs.formats.toml { }).generate "codex-overlay.toml" (lib.recursiveUpdate cfg.codex.settings
+    (lib.optionalAttrs (cfg.codex.trustedProjects != [ ]) {
+      projects = lib.genAttrs cfg.codex.trustedProjects (_: { trust_level = "trusted"; });
+    }));
+  sources = [ ../../../codex/config.base.toml overlay ];
 in
 {
   home.packages = [ (pkgs.writeShellScriptBin "codex-config-sync" ''

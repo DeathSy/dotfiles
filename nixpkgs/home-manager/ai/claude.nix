@@ -18,12 +18,13 @@ let
   agentBrowserSkill = "/opt/homebrew/opt/agent-browser/libexec/lib/node_modules/agent-browser/skills/agent-browser/SKILL.md";
 
   passDir = config.programs.password-store.settings.PASSWORD_STORE_DIR or "";
+  overlay = pkgs.writeText "claude-settings-overlay.json" (builtins.toJSON cfg.claude.settingsOverlay);
 
-  # Deep-merge live settings.json <- settings.base.json <- private overlays <- secrets from pass.
+  # Deep-merge live settings.json <- settings.base.json <- settingsOverlay <- secrets from pass.
   # Keys the repo manages win; everything else Claude Code wrote stays.
   settingsMerge = pkgs.writeShellScriptBin "claude-settings-merge" ''
     set -uo pipefail
-    PATH=${lib.makeBinPath [ pkgs.jq pkgs.coreutils pkgs.gnused config.programs.password-store.package ]}:$PATH
+    PATH=${lib.makeBinPath [ pkgs.jq pkgs.coreutils config.programs.password-store.package ]}:$PATH
     ${lib.optionalString (passDir != "") "export PASSWORD_STORE_DIR=${lib.escapeShellArg passDir}"}
     target="$HOME/.claude/settings.json"
     fail() { echo "claude-settings-merge: $*; $target left unchanged" >&2; exit 1; }
@@ -43,10 +44,7 @@ let
 
     merged=$({
       printf '%s\n' "$live"
-      cat ${src + "/settings.base.json"}
-      for o in ${lib.concatMapStringsSep " " (o: lib.escapeShellArg "${o}") cfg.claude.settingsOverlays}; do
-        sed "s|@HOME@|$HOME|g" "$o"
-      done
+      cat ${src + "/settings.base.json"} ${overlay}
       printf '%s' "$secrets"
     } | jq -s 'reduce .[] as $x ({}; . * $x)') || fail "merge failed"
 
@@ -61,6 +59,41 @@ let
     echo "claude-settings-merge: updated $target"
   '';
 
+  mcpList = map (s: { scope = "user"; dir = ""; } // s)
+      (lib.mapAttrsToList (name: s: s // { inherit name; }) cfg.mcp.userServers)
+    ++ map (s: { scope = "local"; } // s) cfg.mcp.projectServers;
+
+  # Adds the MCP servers listed in a JSON file ([{scope, dir, name, transport,
+  # url, command}]) with `claude mcp add`, skipping ones ~/.claude.json
+  # already has. Never rewrites ~/.claude.json itself.
+  mcpAdd = pkgs.writeShellScriptBin "ai-mcp-add" ''
+    set -u
+    PATH=${lib.makeBinPath [ pkgs.jq ]}:$HOME/.local/bin:/opt/homebrew/bin:$PATH
+    list=''${1:-${pkgs.writeText "mcp-servers.json" (builtins.toJSON mcpList)}}
+    rc=0
+    mapfile -t servers < <(jq -c '.[]' "$list")
+    for s in "''${servers[@]}"; do
+      name=$(jq -r .name <<<"$s"); scope=$(jq -r .scope <<<"$s"); dir=$(jq -r .dir <<<"$s")
+      transport=$(jq -r .transport <<<"$s"); url=$(jq -r '.url // ""' <<<"$s")
+      mapfile -t cmd < <(jq -r '.command[]' <<<"$s")
+      label="$name''${dir:+ ($dir)}"
+      if [ "$scope" = local ] && [ ! -d "$dir" ]; then echo "mcp $label: not checked out, skipped"; continue; fi
+      if jq -e --arg d "$dir" --arg n "$name" \
+        '(if $d == "" then .mcpServers else .projects[$d].mcpServers end // {})[$n] != null' \
+        "$HOME/.claude.json" >/dev/null 2>&1; then
+        echo "mcp $label: exists"; continue
+      fi
+      if [ "$transport" = stdio ]; then args=("$name" -- "''${cmd[@]}")
+      else args=(--transport "$transport" "$name" "$url"); fi
+      if ( { [ -z "$dir" ] || cd "$dir"; } && claude mcp add -s "$scope" "''${args[@]}" ); then
+        echo "mcp $label: added"
+      else
+        echo "mcp $label: failed" >&2; rc=1
+      fi
+    done
+    exit $rc
+  '';
+
   # One-off, idempotent setup that needs logins or network: run by hand
   # after a rebuild (see docs/ai-setup.md). Safe to re-run.
   bootstrap = pkgs.writeShellScriptBin "ai-bootstrap" ''
@@ -71,26 +104,6 @@ let
     try() { "$@" || { echo "  failed: $*" >&2; failed+=("$*"); }; }
     in_dir() { (cd "$1" && shift && "$@"); }
 
-    have_mcp() { # <project dir or ""> <name>
-      "$jq" -e --arg d "$1" --arg n "$2" \
-        '(if $d == "" then .mcpServers else .projects[$d].mcpServers end // {})[$n] != null' \
-        "$HOME/.claude.json" >/dev/null 2>&1
-    }
-    # mcp_user <name> <http|sse|stdio> <url | command [args...]>
-    mcp_user() {
-      local name=$1 transport=$2; shift 2
-      if have_mcp "" "$name"; then echo "mcp $name: exists"; return; fi
-      if [ "$transport" = stdio ]; then try claude mcp add -s user "$name" -- "$@"
-      else try claude mcp add -s user --transport "$transport" "$name" "$1"; fi
-    }
-    # mcp_local <project dir> <name> <http|sse|stdio> <url | command [args...]>
-    mcp_local() {
-      local dir=$1 name=$2 transport=$3; shift 3
-      [ -d "$dir" ] || { echo "mcp $name: $dir not checked out, skipped"; return; }
-      if have_mcp "$dir" "$name"; then echo "mcp $name ($dir): exists"; return; fi
-      if [ "$transport" = stdio ]; then try in_dir "$dir" claude mcp add -s local "$name" -- "$@"
-      else try in_dir "$dir" claude mcp add -s local --transport "$transport" "$name" "$1"; fi
-    }
     # plugin_install <plugin@marketplace> [user|local] [project dir]
     plugin_install() {
       local id=$1 scope=''${2:-user} dir=''${3:-}
@@ -131,10 +144,12 @@ let
       plugin_install ${lib.escapeShellArg id}
     '') (lib.attrNames base.enabledPlugins)}
 
+    ${lib.concatMapStrings (p: ''
+      plugin_install ${lib.escapeShellArgs [ p.plugin "local" p.dir ]}
+    '') cfg.claude.projectPlugins}
+
     echo "== MCP servers"
-    mcp_user figma http https://mcp.figma.com/mcp
-    mcp_user monday http https://mcp.monday.com/mcp
-    mcp_user shadcn-ui stdio sh -c 'exec npx @jpisnice/shadcn-ui-mcp-server --github-api-key "$(pass show github/personal)"'
+    try ${mcpAdd}/bin/ai-mcp-add
 
     ${cfg.bootstrap}
 
@@ -153,7 +168,16 @@ in
     ".claude/skills/agent-browser/SKILL.md".source = mkOutOfStoreSymlink agentBrowserSkill;
   };
 
-  home.packages = [ settingsMerge bootstrap ];
+  home.packages = [ settingsMerge mcpAdd bootstrap ];
+
+  dotfiles.ai.mcp.userServers = {
+    figma.url = "https://mcp.figma.com/mcp";
+    monday.url = "https://mcp.monday.com/mcp";
+    shadcn-ui = {
+      transport = "stdio";
+      command = [ "sh" "-c" ''exec npx @jpisnice/shadcn-ui-mcp-server --github-api-key "$(pass show github/personal)"'' ];
+    };
+  };
 
   # Move live files that are about to become links out of the way, so
   # home-manager doesn't leave *.backup copies (a SKILL.md.backup is harmless,

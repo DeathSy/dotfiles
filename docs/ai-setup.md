@@ -5,15 +5,21 @@ new Mac.
 
 ## Layers
 
-- **Public (this repo):** Claude Code instructions, agents, hooks and own
-  skills (`claude/`), generic Claude Code settings (`claude/settings.base.json`),
-  generic Codex settings (`codex/config.base.toml`), the Headroom LaunchAgent,
-  Homebrew packages, and the `ai-bootstrap` command.
-- **Private (`~/workspace/dotfiles-private`, a separate private repo):** the
-  gateway model and proxy URL, plugin config with internal URLs, Codex project
-  trust entries, per-project MCP servers, and the CLIProxyAPI config template.
-  It sets the `dotfiles.ai.*` options (see `nixpkgs/home-manager/ai/default.nix`).
-  Secrets stay in `pass` and are read at activation.
+- **Public (this repo): everything that installs or runs.** Claude Code
+  instructions, agents, hooks and own skills (`claude/`), generic Claude Code
+  settings (`claude/settings.base.json`), generic Codex settings
+  (`codex/config.base.toml`), the CLIProxyAPI config template
+  (`cliproxyapi/config.yaml`), the merge and activation steps, the Headroom
+  LaunchAgent and plugin build, Homebrew packages, and the `ai-bootstrap` and
+  `ai-mcp-add` commands.
+- **Private (`~/workspace/dotfiles-private`, a separate private repo): data
+  only.** One home-manager module that sets the `dotfiles.ai.*` options
+  (`nixpkgs/home-manager/ai/default.nix`, `gateway.nix`):
+  `gateway.enable`, `claude.settingsOverlay` (gateway model id, internal
+  plugin config), `claude.projectPlugins`, `mcp.projectServers`,
+  `codex.trustedProjects`. All options default to empty, so the public repo
+  works without it.
+- **Secrets** stay in `pass` and are read at activation.
 
 The flake's `private` input defaults to the empty `private-stub/`, so the
 public repo evaluates on its own. `rebuild` (zsh function) overrides it with
@@ -34,17 +40,20 @@ sudo darwin-rebuild switch --flake ~/workspace/dotfiles \
 - Links `~/.claude/skills/agent-browser/SKILL.md` to the skill that ships with
   the Homebrew `agent-browser` CLI.
 - Merges `~/.claude/settings.json`: live file ← `claude/settings.base.json` ←
-  private overlays ← secrets from `pass`. Keys from the repo win; anything else
+  `dotfiles.ai.claude.settingsOverlay` ← secrets from `pass`. Keys from the repo win; anything else
   Claude Code wrote stays. The previous file is copied to
   `~/.claude/backups/settings.json.dotfiles-<timestamp>` when it changes. If
   `jq` or `pass` fails, the file is left alone with a warning. Run
   `claude-settings-merge` to redo it by hand. Removing a key from the base
   JSON does not remove it from the live file.
 - Merges `~/.codex/config.toml` the same way (`codex/config.base.toml` ←
-  private overlay), backing up to `~/.codex/backups/`. `codex-config-sync`
+  `codex.settings` and `codex.trustedProjects`), backing up to `~/.codex/backups/`. `codex-config-sync`
   redoes it by hand.
-- Writes `/opt/homebrew/etc/cliproxyapi.conf` from the private template, only
-  if the file doesn't exist yet (CLIProxyAPI rewrites it itself).
+- With `dotfiles.ai.gateway.enable`: points Claude Code at the local
+  CLIProxyAPI (`ANTHROPIC_BASE_URL`, gateway model discovery, and
+  `ANTHROPIC_AUTH_TOKEN` from `pass`), and writes
+  `/opt/homebrew/etc/cliproxyapi.conf` from `cliproxyapi/config.yaml`, only if
+  the file doesn't exist yet (CLIProxyAPI rewrites it itself).
 - Installs `agent-browser`, `googleworkspace-cli` (`gws`) and `cliproxyapi`
   (started as a brew service) with Homebrew, and runs the Headroom proxy as
   the `ai.headroom.proxy` LaunchAgent. To drop Headroom, remove the
@@ -59,8 +68,13 @@ off, claude.ai MCP servers off), `permissions.deny`, `skillOverrides`,
 `skipAutoPermissionPrompt`, `skipWorkflowUsageWarning`,
 `agentPushNotifEnabled`.
 
+With the gateway enabled it also manages `env.ANTHROPIC_BASE_URL`,
+`env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` and
+`env.ANTHROPIC_AUTH_TOKEN`; the private overlay adds `model` and
+`pluginConfigs`.
+
 The `sol`, `luna` and `astra` agents use model ids that only resolve through
-the CLIProxyAPI gateway (`ANTHROPIC_BASE_URL`, set by the private layer).
+the CLIProxyAPI gateway.
 
 ## New machine
 
@@ -68,10 +82,10 @@ the CLIProxyAPI gateway (`ANTHROPIC_BASE_URL`, set by the private layer).
 2. Restore GPG and `pass`: import the GPG key named in
    `nixpkgs/home-manager/password-store.nix`, then clone the password store to
    `~/.password-store`. Entries used:
-   - `cliproxyapi/api-key`: the CLIProxyAPI client key (also Claude Code's
+   - `ai/cliproxyapi-key`: the CLIProxyAPI client key (also Claude Code's
      `ANTHROPIC_AUTH_TOKEN`)
-   - `cliproxyapi/management-secret`: the CLIProxyAPI management key (plain
-     text; CLIProxyAPI hashes it on load)
+   - `ai/cliproxyapi-management-secret`: the CLIProxyAPI management key
+     (plain text; CLIProxyAPI hashes it on load)
    - `github/personal`: GitHub token (shadcn-ui MCP server, registry token)
 3. Clone the private repo to `~/workspace/dotfiles-private`, open a new shell
    and run `rebuild`.
@@ -84,8 +98,8 @@ the CLIProxyAPI gateway (`ANTHROPIC_BASE_URL`, set by the private layer).
 5. Run `ai-bootstrap`. It installs what Nix and Homebrew don't cover (the
    `claude` native installer, `graphify`, the Headroom server), skills from
    their sources (find-skills, frontend-design, graphify), Claude Code
-   marketplaces and plugins, and MCP servers (user scope; the private layer
-   adds per-project ones). It skips anything already present and can be
+   marketplaces and plugins, and MCP servers (`ai-mcp-add`: the user-scope
+   ones plus `mcp.projectServers`; it never rewrites `~/.claude.json`). It skips anything already present and can be
    re-run.
 6. Build the Headroom plugin for CLIProxyAPI: `cliproxyapi-headroom-build`,
    then `brew services restart cliproxyapi`.

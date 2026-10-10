@@ -14,7 +14,7 @@
 	    inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Private layer (secrets via pass, project paths, internal URLs). Defaults
+    # Private data layer (project paths, internal URLs; no logic). Defaults
     # to an empty module; `rebuild` overrides it with the private checkout.
     private = {
 	    url = "path:./private-stub";
