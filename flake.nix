@@ -13,10 +13,17 @@
 	    url = "github:nix-darwin/nix-darwin/master";
 	    inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Private data layer (project paths, internal URLs; no logic). Defaults
+    # to an empty module; `rebuild` overrides it with the private checkout.
+    private = {
+	    url = "path:./private-stub";
+	    flake = false;
+    };
   };
 
   outputs = inputs@{
-			self, nixpkgs, nix-darwin, home-manager
+			self, nixpkgs, nix-darwin, home-manager, private
 		}: {
 
     darwinConfigurations."garage" = nix-darwin.lib.darwinSystem {
@@ -41,6 +48,9 @@
 							./nixpkgs/home-manager/starship.nix
 							./nixpkgs/home-manager/zsh.nix
 							./nixpkgs/home-manager/tmux.nix
+							./nixpkgs/home-manager/ai
+							./nixpkgs/home-manager/ai/headroom.nix
+							private.outPath
 						];
 					};
 

@@ -43,6 +43,11 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 - `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
 - `sesh.toml` → `~/.config/sesh/sesh.toml`
 
+AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
+- `claude/` → `~/.claude/` (CLAUDE.md, onboarding.md, agents, hooks, own skills), linked to the checkout at `~/workspace/dotfiles` so edits land in the repo
+- `claude/settings.base.json` and `codex/config.base.toml` are merged into the live `~/.claude/settings.json` / `~/.codex/config.toml` at activation (those stay real files)
+- All install and merge logic lives here; the private repo `~/workspace/dotfiles-private` only sets `dotfiles.ai.*` options (project paths, internal URLs) through the `private` flake input. Secrets come from `pass`. Rebuild with `rebuild`
+
 ## Development Environment
 
 ### Primary Tools
