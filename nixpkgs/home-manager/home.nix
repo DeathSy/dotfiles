@@ -72,6 +72,7 @@ in
     # Utilities applications
     awscli2
     gh
+    ares-cli # LG webOS TV CLI (ares-*)
 
     discord
 

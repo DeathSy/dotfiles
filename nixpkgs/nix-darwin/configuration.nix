@@ -78,7 +78,6 @@
 
 		taps = [
 			"devdotfast/tap"
-			"anomalyco/tap"
 		];
 
     brews = [
@@ -99,7 +98,6 @@
       "agent-browser"
       "googleworkspace-cli"
       { name = "cliproxyapi"; start_service = true; }
-      "anomalyco/tap/opencode"
 
       # Dev tooling
       "actionlint"
