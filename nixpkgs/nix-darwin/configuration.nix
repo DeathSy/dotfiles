@@ -16,8 +16,6 @@
     ripgrep
     btop
     eza
-    sketchybar
-    jankyborders
     localstack
     ffmpeg
     gnupg
@@ -79,7 +77,6 @@
     };
 
 		taps = [
-			"nikitabobko/tap"
 			"devdotfast/tap"
 		];
 
@@ -201,10 +198,4 @@
       done
           '';
   };
-
-  imports = [
-    ./aerospace.nix
-    ./sketchybar.nix
-    ./jankyborders.nix
-  ];
 }

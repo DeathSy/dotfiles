@@ -27,7 +27,6 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 
 - **System packages and settings** via nix-darwin (`nixpkgs/nix-darwin/`)
 - **User environment and applications** via home-manager (`nixpkgs/home-manager/`)
-- **Window management** via AeroSpace + Sketchybar + JankyBorders
 - **Terminal environment** via WezTerm + Neovim + Zsh
 - **Keyboard customization** via Karabiner Elements
 
@@ -42,7 +41,6 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 
 Configuration files are symlinked from this repo to `~/.config/` via home-manager:
 - `nvim/` → `~/.config/nvim/`
-- `sketchybar/` → `~/.config/sketchybar/`
 - `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
 - `sesh.toml` → `~/.config/sesh/sesh.toml`
 
@@ -73,18 +71,13 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 - Sleepwatcher daemon stops/starts Podman machine on sleep/wake
 - Scripts: `~/.sleep` and `~/.wakeup`
 
-### Window Management Stack
-- **AeroSpace**: Tiling window manager (`nixpkgs/nix-darwin/aerospace.nix`)
-- **Sketchybar**: Status bar (`nixpkgs/nix-darwin/sketchybar.nix`)  
-- **JankyBorders**: Window borders (`nixpkgs/nix-darwin/jankyborders.nix`)
-
 ### macOS System Defaults
 Comprehensive macOS customization in `configuration.nix`:
 - Dock: autohide, small tiles, no recents
 - Keyboard: fast repeat, caps→ctrl
 - Trackpad: tap-to-click, right-click, three-finger drag
 - Finder: show extensions, path bar, hidden files
-- Global: dark mode, no autocorrect, hidden menu bar
+- Global: dark mode, no autocorrect
 
 ## Key Keyboard Customizations
 
