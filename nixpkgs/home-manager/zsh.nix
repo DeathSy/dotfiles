@@ -14,6 +14,11 @@
       # Catppuccin Mocha palette for every fzf invocation (shell + fzf-lua)
       FZF_DEFAULT_OPTS = "--color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8,fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc,marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8";
       CLAUDE_CODE_ENABLE_FUNCTION_HOOKS = 1;
+      # Homebrew's openjdk@17 is keg-only; Android tooling (sdkmanager from
+      # the android-commandlinetools cask) needs JAVA_HOME and the SDK root.
+      JAVA_HOME = "/opt/homebrew/opt/openjdk@17";
+      ANDROID_HOME = "/opt/homebrew/share/android-commandlinetools";
+      ANDROID_SDK_ROOT = "$ANDROID_HOME";
 		};
 
 		oh-my-zsh = {
@@ -122,7 +127,7 @@
         sudo darwin-rebuild switch --flake "$repo" "''${extra[@]}" "$@"
       }
 
-      export PATH="$HOME/.local/bin:$PATH"
+      export PATH="$HOME/.local/bin:$PATH:$ANDROID_HOME/emulator"
       export NVM_DIR="$HOME/.nvm"
       [ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && source "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
       [ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && source "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"
