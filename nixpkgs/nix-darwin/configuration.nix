@@ -78,6 +78,7 @@
 
 		taps = [
 			"devdotfast/tap"
+			"anomalyco/tap"
 		];
 
     brews = [
@@ -98,6 +99,20 @@
       "agent-browser"
       "googleworkspace-cli"
       { name = "cliproxyapi"; start_service = true; }
+      "anomalyco/tap/opencode"
+
+      # Dev tooling
+      "actionlint"
+      "argocd"
+      "codeburn"
+      "git-filter-repo"
+      "semgrep"
+      "openjdk@17"
+
+      # Documents and PDF
+      "pandoc"
+      "poppler"
+      "verapdf"
     ];
 
     casks = [
@@ -109,6 +124,32 @@
       "gcloud-cli"
       "android-platform-tools"
       "devdotfast/tap/whiteboard"
+      "claude"
+      "bruno"
+      "raycast"
+      "libreoffice"
+      "upscayl"
+      "android-commandlinetools"
+
+      # Installed by hand before they were declared; the first install needs
+      # --adopt (see the PR / docs) so brew takes over the existing apps.
+      "anydesk"
+      "chatgpt"
+      "cloudflare-warp"
+      "figma"
+      "google-chrome"
+      "linear"
+      "obsidian"
+      "openvpn-connect"
+      "raspberry-pi-imager"
+      "slack"
+      "tailscale-app"
+      "the-unarchiver"
+      "windows-app"
+      "wispr-flow"
+      "zoom"
+      "webex"
+      "microsoft-teams"
     ];
   };
 
