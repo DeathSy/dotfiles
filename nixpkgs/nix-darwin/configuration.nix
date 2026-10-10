@@ -148,7 +148,6 @@
       "the-unarchiver"
       "windows-app"
       "wispr-flow"
-      "zoom"
       "webex"
       "microsoft-teams"
     ];
