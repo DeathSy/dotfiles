@@ -48,14 +48,22 @@ let
       printf '%s' "$secrets"
     } | jq -s 'reduce .[] as $x ({}; . * $x)') || fail "merge failed"
 
+    # The file can hold secrets: keep it and its backups private.
+    umask 077
     if [ -e "$target" ] && printf '%s\n' "$merged" | cmp -s - <(jq . "$target"); then
+      chmod 600 "$target"
       exit 0
     fi
 
-    mkdir -p "$HOME/.claude/backups"
-    [ -e "$target" ] && cp -p "$target" "$HOME/.claude/backups/settings.json.dotfiles-$(date +%Y%m%d-%H%M%S)"
+    backups="$HOME/.claude/backups"
+    mkdir -p "$backups"
+    if [ -e "$target" ]; then
+      cp "$target" "$backups/settings.json.dotfiles-$(date +%Y%m%d-%H%M%S)"
+      # Keep the latest 5.
+      ls -1t "$backups"/settings.json.dotfiles-* | tail -n +6 | while IFS= read -r old; do rm -f "$old"; done
+    fi
     tmp=$(mktemp "$target.XXXXXX") || fail "mktemp failed"
-    printf '%s\n' "$merged" > "$tmp" && chmod 644 "$tmp" && mv "$tmp" "$target" || { rm -f "$tmp"; fail "write failed"; }
+    printf '%s\n' "$merged" > "$tmp" && chmod 600 "$tmp" && mv "$tmp" "$target" || { rm -f "$tmp"; fail "write failed"; }
     echo "claude-settings-merge: updated $target"
   '';
 
@@ -182,11 +190,22 @@ in
   # Move live files that are about to become links out of the way, so
   # home-manager doesn't leave *.backup copies (a SKILL.md.backup is harmless,
   # but this keeps one dated backup dir per rebuild).
+  # If the checkout is missing (e.g. rebuilding before ai-setup is merged and
+  # pulled), stop here: linking would replace the live files with dangling
+  # links. home-manager can't skip just the link step, so this aborts its
+  # activation with the live files untouched.
   home.activation.claudeBackupLinked = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+    if [ ! -e ${lib.escapeShellArg "${cfg.repoPath}/claude/CLAUDE.md"} ]; then
+      errorEcho "${cfg.repoPath}/claude/CLAUDE.md not found: merge and pull ai-setup into that checkout first. ~/.claude left untouched; home-manager activation aborted."
+      exit 1
+    fi
     claudeBackup="$HOME/.claude/backups/dotfiles-$(date +%Y%m%d-%H%M%S)"
     for f in ${lib.escapeShellArgs (linked ++ [ "skills/agent-browser/SKILL.md" ])}; do
       p="$HOME/.claude/$f"
       if [ -e "$p" ] && [ ! -L "$p" ]; then
+        # A real file where a link belongs (first rebuild, or an editor that
+        # saves by rename replaced the link): keep it and say where it went.
+        warnEcho "~/.claude/$f is not a link; moved to $claudeBackup/$f (diff it against the repo copy)"
         run mkdir -p "$claudeBackup/$(dirname "$f")"
         run mv "$p" "$claudeBackup/$f"
       fi

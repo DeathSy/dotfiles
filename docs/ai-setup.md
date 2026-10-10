@@ -32,17 +32,25 @@ sudo darwin-rebuild switch --flake ~/workspace/dotfiles \
 
 ## What a rebuild does
 
+**Before the first rebuild, merge `ai-setup` into `main` and pull it into
+`~/workspace/dotfiles`.** The `~/.claude` links point at that checkout. If
+`claude/CLAUDE.md` isn't there, activation stops before touching `~/.claude`.
+
 - Links `~/.claude/{CLAUDE.md,onboarding.md}`, `~/.claude/agents/*.md`,
   `~/.claude/hooks/*` and `~/.claude/skills/<own skill>/SKILL.md` to the files
   in the checkout at `~/workspace/dotfiles/claude/` (not the Nix store), so
   editing them in place edits the repo. Live files that were real files are
-  moved to `~/.claude/backups/dotfiles-<timestamp>/` first.
+  moved to `~/.claude/backups/dotfiles-<timestamp>/` first, with a warning
+  naming each one. That also happens when an editor that saves by renaming
+  has replaced a link with a real file: diff the backup against the repo.
 - Links `~/.claude/skills/agent-browser/SKILL.md` to the skill that ships with
   the Homebrew `agent-browser` CLI.
 - Merges `~/.claude/settings.json`: live file ← `claude/settings.base.json` ←
   `dotfiles.ai.claude.settingsOverlay` ← secrets from `pass`. Keys from the repo win; anything else
-  Claude Code wrote stays. The previous file is copied to
-  `~/.claude/backups/settings.json.dotfiles-<timestamp>` when it changes. If
+  Claude Code wrote stays. The file is kept at mode 600 (it holds the token);
+  the previous version is copied to
+  `~/.claude/backups/settings.json.dotfiles-<timestamp>` (private, latest 5
+  kept) when it changes. If
   `jq` or `pass` fails, the file is left alone with a warning. Run
   `claude-settings-merge` to redo it by hand. Removing a key from the base
   JSON does not remove it from the live file.
@@ -53,7 +61,8 @@ sudo darwin-rebuild switch --flake ~/workspace/dotfiles \
   CLIProxyAPI (`ANTHROPIC_BASE_URL`, gateway model discovery, and
   `ANTHROPIC_AUTH_TOKEN` from `pass`), and writes
   `/opt/homebrew/etc/cliproxyapi.conf` from `cliproxyapi/config.yaml`, only if
-  the file doesn't exist yet (CLIProxyAPI rewrites it itself).
+  the file doesn't exist yet (CLIProxyAPI rewrites it itself). The template
+  binds the proxy to `127.0.0.1`; an existing config keeps its own `host`.
 - Installs `agent-browser`, `googleworkspace-cli` (`gws`) and `cliproxyapi`
   (started as a brew service) with Homebrew, and runs the Headroom proxy as
   the `ai.headroom.proxy` LaunchAgent. To drop Headroom, remove the
@@ -94,7 +103,10 @@ the CLIProxyAPI gateway.
    - CLIProxyAPI OAuth accounts: `cliproxyapi --claude-login`,
      `cliproxyapi --codex-login` (and any other providers you use). The login
      files land in `~/.cli-proxy-api/*.json`; never commit them.
-   - `gws auth login`
+   - `gws auth login`. `gws` comes from the Homebrew `googleworkspace-cli`
+     formula; if an older npm-global copy exists, remove it
+     (`npm uninstall -g @googleworkspace/cli`) so the Homebrew one wins on
+     `PATH`.
 5. Run `ai-bootstrap`. It installs what Nix and Homebrew don't cover (the
    `claude` native installer, `graphify`, the Headroom server), skills from
    their sources (find-skills, frontend-design, graphify), Claude Code

@@ -45,6 +45,9 @@ let
         backups = os.path.join(home, ".codex", "backups")
         os.makedirs(backups, exist_ok=True)
         shutil.copy2(target, os.path.join(backups, "config.toml.dotfiles-" + time.strftime("%Y%m%d-%H%M%S")))
+        old = sorted(f for f in os.listdir(backups) if f.startswith("config.toml.dotfiles-"))
+        for f in old[:-5]:  # keep the latest 5
+            os.remove(os.path.join(backups, f))
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(target))
     with os.fdopen(fd, "w") as f:
         f.write(after)
