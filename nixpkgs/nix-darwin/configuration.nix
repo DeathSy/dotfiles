@@ -84,7 +84,6 @@
       "trivy"
       "pinentry"
       "ghostscript"
-      "goku"
       "nvm"
       "sleepwatcher"
       "act"

@@ -28,7 +28,6 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - **System packages and settings** via nix-darwin (`nixpkgs/nix-darwin/`)
 - **User environment and applications** via home-manager (`nixpkgs/home-manager/`)
 - **Terminal environment** via WezTerm + Neovim + Zsh
-- **Keyboard customization** via Karabiner Elements
 
 ### Key Configuration Modules
 
@@ -78,10 +77,6 @@ Comprehensive macOS customization in `configuration.nix`:
 - Trackpad: tap-to-click, right-click, three-finger drag
 - Finder: show extensions, path bar, hidden files
 - Global: dark mode, no autocorrect
-
-## Key Keyboard Customizations
-
-Karabiner Elements configuration in `karabiner/karabiner.edn` (currently empty - uses default Goku config)
 
 ## Troubleshooting
 
