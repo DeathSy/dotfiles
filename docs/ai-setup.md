@@ -12,7 +12,7 @@ new Mac.
   (`cliproxyapi/config.yaml`), the merge and activation steps, the Headroom
   LaunchAgent and plugin build, Homebrew packages, and the `ai-bootstrap` and
   `ai-mcp-add` commands.
-- **Private (`~/workspace/dotfiles-private`, a separate private repo): data
+- **Private (`~/studio/personal/dotfiles-private`, a separate private repo): data
   only.** One home-manager module that sets the `dotfiles.ai.*` options
   (`nixpkgs/home-manager/ai/default.nix`, `gateway.nix`):
   `gateway.enable`, `claude.settingsOverlay` (gateway model id, internal
@@ -26,19 +26,19 @@ public repo evaluates on its own. `rebuild` (zsh function) overrides it with
 the private checkout when it exists:
 
 ```sh
-sudo darwin-rebuild switch --flake ~/workspace/dotfiles \
-  --override-input private path:$HOME/workspace/dotfiles-private
+sudo darwin-rebuild switch --flake ~/studio/personal/dotfiles \
+  --override-input private path:$HOME/studio/personal/dotfiles-private
 ```
 
 ## What a rebuild does
 
 **Before the first rebuild, merge `ai-setup` into `main` and pull it into
-`~/workspace/dotfiles`.** The `~/.claude` links point at that checkout. If
+`~/studio/personal/dotfiles`.** The `~/.claude` links point at that checkout. If
 `claude/CLAUDE.md` isn't there, activation stops before touching `~/.claude`.
 
 - Links `~/.claude/{CLAUDE.md,onboarding.md}`, `~/.claude/agents/*.md`,
   `~/.claude/hooks/*` and `~/.claude/skills/<own skill>/SKILL.md` to the files
-  in the checkout at `~/workspace/dotfiles/claude/` (not the Nix store), so
+  in the checkout at `~/studio/personal/dotfiles/claude/` (not the Nix store), so
   editing them in place edits the repo. A live real file in the way (on the
   first rebuild, or after an editor that saves by renaming replaced a link) is
   renamed to `<file>.backup` by home-manager, with a warning naming it: diff
@@ -97,7 +97,7 @@ the CLIProxyAPI gateway.
    - `ai/cliproxyapi-management-secret`: the CLIProxyAPI management key
      (plain text; CLIProxyAPI hashes it on load)
    - `github/personal`: GitHub token (shadcn-ui MCP server, registry token)
-3. Clone the private repo to `~/workspace/dotfiles-private`, open a new shell
+3. Clone the private repo to `~/studio/personal/dotfiles-private`, open a new shell
    and run `rebuild`.
 4. Log in:
    - `claude` (first run), and `codex login`

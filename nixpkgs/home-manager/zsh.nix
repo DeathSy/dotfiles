@@ -121,7 +121,7 @@
       # Rebuild the system, with the private layer when it's checked out
       # next to this repo (see docs/ai-setup.md).
       rebuild() {
-        local repo="$HOME/workspace/dotfiles" priv="$HOME/workspace/dotfiles-private"
+        local repo="$HOME/studio/personal/dotfiles" priv="$HOME/studio/personal/dotfiles-private"
         local -a extra
         [[ -d $priv ]] && extra=(--override-input private "path:$priv")
         sudo darwin-rebuild switch --flake "$repo" "''${extra[@]}" "$@"

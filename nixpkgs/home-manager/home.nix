@@ -138,6 +138,6 @@ in
   };
 
   home.activation.startup-application = lib.mkAfter ''
-  /usr/local/bin/desktoppr ~/workspace/dotfiles/wallpapers/Cloudsnight-landscape.jpg
+  /usr/local/bin/desktoppr ~/studio/personal/dotfiles/wallpapers/Cloudsnight-landscape.jpg
   '';
 }

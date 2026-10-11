@@ -32,7 +32,7 @@ in
   options.dotfiles.ai = with lib; {
     repoPath = mkOption {
       type = types.str;
-      default = "${config.home.homeDirectory}/workspace/dotfiles";
+      default = "${config.home.homeDirectory}/studio/personal/dotfiles";
       description = ''
         Checkout of this repo. ~/.claude files link here (not into the Nix
         store), so edits made in place show up as repo diffs.
