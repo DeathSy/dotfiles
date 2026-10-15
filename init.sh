@@ -95,7 +95,8 @@ fi
 
 # Set experimental features
 echo "⚙️  Configuring Nix experimental features..."
-# sudo drops NIX_CONFIG, so the first switch below also passes the flag itself.
+# sudo drops NIX_CONFIG and may not have nix on its PATH, so the first switch
+# below calls nix by absolute path and passes the flag itself.
 export NIX_CONFIG="experimental-features = nix-command flakes"
 
 # Check if nix-darwin is already configured
@@ -105,12 +106,12 @@ if command -v darwin-rebuild >/dev/null 2>&1; then
     echo "🔄 Updating existing configuration..."
     echo "This may take a few minutes as packages are updated..."
     echo "Note: You may be prompted for your password (sudo access required)"
-    sudo darwin-rebuild switch --flake "$(pwd)#garage"
+    sudo "$(command -v darwin-rebuild)" switch --flake "$(pwd)#garage"
 else
     echo "🏗️  Running initial nix-darwin setup..."
     echo "This may take several minutes as packages are downloaded and built..."
     echo "Note: You may be prompted for your password (sudo access required)"
-    sudo nix --extra-experimental-features "nix-command flakes" run nix-darwin -- switch --flake "$(pwd)#garage"
+    sudo "$(command -v nix)" --extra-experimental-features "nix-command flakes" run nix-darwin -- switch --flake "$(pwd)#garage"
 fi
 
 echo ""
