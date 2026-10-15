@@ -111,6 +111,14 @@ else
     echo "🏗️  Running initial nix-darwin setup..."
     echo "This may take several minutes as packages are downloaded and built..."
     echo "Note: You may be prompted for your password (sudo access required)"
+    # The Nix installer edits these; nix-darwin replaces them (its versions
+    # load Nix too) but refuses to overwrite files it doesn't recognize.
+    for f in /etc/bashrc /etc/zshrc; do
+        if [ -f "$f" ] && [ ! -L "$f" ] && [ ! -e "$f.before-nix-darwin" ]; then
+            echo "Moving $f to $f.before-nix-darwin"
+            sudo mv "$f" "$f.before-nix-darwin"
+        fi
+    done
     sudo "$(command -v nix)" --extra-experimental-features "nix-command flakes" run nix-darwin -- switch --flake "$(pwd)#garage"
 fi
 
