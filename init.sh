@@ -95,6 +95,7 @@ fi
 
 # Set experimental features
 echo "⚙️  Configuring Nix experimental features..."
+# sudo drops NIX_CONFIG, so the first switch below also passes the flag itself.
 export NIX_CONFIG="experimental-features = nix-command flakes"
 
 # Check if nix-darwin is already configured
@@ -109,7 +110,7 @@ else
     echo "🏗️  Running initial nix-darwin setup..."
     echo "This may take several minutes as packages are downloaded and built..."
     echo "Note: You may be prompted for your password (sudo access required)"
-    sudo nix run nix-darwin -- switch --flake "$(pwd)#garage"
+    sudo nix --extra-experimental-features "nix-command flakes" run nix-darwin -- switch --flake "$(pwd)#garage"
 fi
 
 echo ""
