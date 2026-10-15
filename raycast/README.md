@@ -1,11 +1,12 @@
 # Raycast
 
-Raycast keeps its settings in an encrypted database, so they live here as an
-export rather than a config file.
+Raycast keeps its settings in an encrypted database tied to this Mac's
+Keychain, so they can't be copied or symlinked; they live here as an export.
 
-- Export: Raycast → Settings → Advanced → Export, with a password, saved as
-  `settings.rayconfig` in this folder. The password encrypts the file; don't
-  export without one, since extension preferences can hold API tokens.
+- Export: run the `Export Settings & Data` command in Raycast and save the file
+  as `settings.rayconfig` in this folder. Raycast requires a password (8+
+  characters) and encrypts the file with it, so it's safe in this public repo;
+  keep the password out of the repo.
 - Import: open Raycast once on the new Mac and finish its onboarding, then run
   `rebuild`; that opens the file in Raycast once, and you enter the password to
   import. To import again later, run
