@@ -105,6 +105,7 @@
       "codeburn"
       "git-filter-repo"
       "semgrep"
+      "sevenzip"
       "openjdk@17"
 
       # Documents and PDF
