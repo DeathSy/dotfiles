@@ -32,7 +32,8 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 ### Key Configuration Modules
 
 - `flake.nix` - Main flake configuration defining the "garage" system
-- `nixpkgs/nix-darwin/configuration.nix` - System-level packages, homebrew, macOS defaults
+- `nixpkgs/nix-darwin/configuration.nix` - System-level packages, homebrew
+- `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, hostname, power), captured from the live machine
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
 - Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
 
@@ -42,6 +43,7 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 - `nvim/` → `~/.config/nvim/`
 - `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
 - `sesh.toml` → `~/.config/sesh/sesh.toml`
+- `raycast/settings.rayconfig` → imported once per machine on the first rebuild after Raycast has been opened (password-protected export; see `raycast/README.md`)
 
 AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - `claude/` → `~/.claude/` (CLAUDE.md, onboarding.md, agents, hooks, own skills), linked to the checkout at `~/studio/personal/dotfiles` so edits land in the repo
@@ -76,7 +78,7 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - Scripts: `~/.sleep` and `~/.wakeup`
 
 ### macOS System Defaults
-Comprehensive macOS customization in `configuration.nix`:
+Comprehensive macOS customization in `nixpkgs/nix-darwin/macos.nix`:
 - Dock: autohide, small tiles, no recents
 - Keyboard: fast repeat, caps→ctrl
 - Trackpad: tap-to-click, right-click, three-finger drag
