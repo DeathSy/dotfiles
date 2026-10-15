@@ -137,15 +137,6 @@ in {
       FlashDateSeparators = false;
     };
 
-    controlcenter = {
-      BatteryShowPercentage = true;
-      AirDrop = false;
-      Bluetooth = false;
-      Display = false;
-      FocusModes = false;
-      Sound = false;
-    };
-
     screencapture = {
       location = "${home}/Pictures/screenshots";
       target = "file";
@@ -172,6 +163,35 @@ in {
         AppleMenuBarVisibleInFullscreen = false;
         AppleMiniaturizeOnDoubleClick = false;
       };
+      # Menu bar items: "Visible" = shown in the menu bar, "VisibleCC" = shown in Control Center.
+      "com.apple.controlcenter" = {
+        "NSStatusItem Visible BentoBox" = true;
+        "NSStatusItem Visible Item-0" = false;
+        "NSStatusItem Visible Item-1" = false;
+        "NSStatusItem Visible Item-10" = false;
+        "NSStatusItem Visible Item-2" = false;
+        "NSStatusItem Visible Item-3" = false;
+        "NSStatusItem Visible Item-4" = false;
+        "NSStatusItem Visible Item-5" = false;
+        "NSStatusItem Visible Item-6" = false;
+        "NSStatusItem Visible Item-7" = false;
+        "NSStatusItem Visible Item-8" = false;
+        "NSStatusItem Visible Item-9" = false;
+        "NSStatusItem Visible Shortcuts" = false;
+        "NSStatusItem VisibleCC Battery" = true;
+        "NSStatusItem VisibleCC BentoBox-0" = true;
+        "NSStatusItem VisibleCC Clock" = true;
+        "NSStatusItem VisibleCC WiFi" = true;
+      };
+      "com.apple.Spotlight" = {
+        "NSStatusItem VisibleCC Item-0" = true;
+      };
+      "com.apple.TextInputMenuAgent" = {
+        "NSStatusItem VisibleCC Item-0" = true;
+      };
+      "com.apple.Passwords" = {
+        "showMenuBarExtra" = false;
+      };
       # Input sources: ABC + Thai. Takes effect after the next login.
       "com.apple.HIToolbox" = {
         AppleEnabledInputSources = [
@@ -179,6 +199,7 @@ in {
           { InputSourceKind = "Keyboard Layout"; "KeyboardLayout ID" = -26624; "KeyboardLayout Name" = "Thai"; }
           { InputSourceKind = "Non Keyboard Input Method"; "Bundle ID" = "com.apple.CharacterPaletteIM"; }
           { InputSourceKind = "Non Keyboard Input Method"; "Bundle ID" = "com.apple.PressAndHold"; }
+          { InputSourceKind = "Non Keyboard Input Method"; "Bundle ID" = "com.apple.inputmethod.ironwood"; }
         ];
       };
       "com.apple.Siri" = {
@@ -192,6 +213,15 @@ in {
     # screencapture.location points here; macOS falls back to the Desktop
     # when the folder is missing.
     sudo -u ${user} mkdir -p ${home}/Pictures/screenshots
+
+    # Menu bar / Control Center modules, per-host (ByHost) prefs, as set on
+    # macOS 27: 8 = hidden; Battery shows the percentage inside the icon.
+    for kv in AirDrop=8 Battery=2 BatteryShowEnergyMode=1 BatteryShowPercentage=1 \
+      Bluetooth=8 Display=8 FocusModes=8 KeyboardBrightness=8 ShowSuggestions=1 \
+      Sound=8 Spotlight=8 Timer=8 VoiceControl=8; do
+      launchctl asuser "$(id -u ${user})" sudo -u ${user} defaults -currentHost write com.apple.controlcenter "''${kv%%=*}" -int "''${kv#*=}"
+    done
+    launchctl asuser "$(id -u ${user})" sudo -u ${user} defaults -currentHost write com.apple.Spotlight MenuItemHidden -bool true
 
     # Power: display never sleeps; the system never sleeps on AC and sleeps
     # after 1 minute on battery (if present); wake for network access on AC only.

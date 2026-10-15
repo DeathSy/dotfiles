@@ -34,6 +34,7 @@
       modules = [
 				./nixpkgs/nix-darwin/configuration.nix
 				./nixpkgs/nix-darwin/macos.nix
+				./nixpkgs/nix-darwin/vorssaint.nix
 
 				home-manager.darwinModules.home-manager {
 					home-manager = {

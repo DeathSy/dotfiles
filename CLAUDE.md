@@ -34,6 +34,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `flake.nix` - Main flake configuration defining the "garage" system
 - `nixpkgs/nix-darwin/configuration.nix` - System-level packages, homebrew
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, hostname, power), captured from the live machine
+- `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
 - Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
 
