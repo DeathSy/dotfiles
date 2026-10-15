@@ -104,12 +104,12 @@ if command -v darwin-rebuild >/dev/null 2>&1; then
     echo "🔄 Updating existing configuration..."
     echo "This may take a few minutes as packages are updated..."
     echo "Note: You may be prompted for your password (sudo access required)"
-    sudo darwin-rebuild switch --flake $(pwd)
+    sudo darwin-rebuild switch --flake "$(pwd)#garage"
 else
     echo "🏗️  Running initial nix-darwin setup..."
     echo "This may take several minutes as packages are downloaded and built..."
     echo "Note: You may be prompted for your password (sudo access required)"
-    sudo nix run nix-darwin -- switch --flake $(pwd)
+    sudo nix run nix-darwin -- switch --flake "$(pwd)#garage"
 fi
 
 echo ""
@@ -117,11 +117,13 @@ echo "🎉 Setup complete!"
 echo ""
 echo "📝 Next steps:"
 echo "1. Restart your terminal to load the new shell configuration"
-echo "2. Some GUI applications may require manual permission grants"
-echo "3. Run 'darwin-rebuild switch --flake .' for future updates"
+echo "2. Log out and back in so the menu bar, input source and screenshot settings apply"
+echo "3. Open Raycast once, then run 'rebuild' to import its settings"
+echo "4. Some GUI applications may require manual permission grants"
+echo "5. Run 'darwin-rebuild switch --flake .#garage' for future updates"
 echo ""
 echo "🔧 Useful commands:"
-echo "  - sudo darwin-rebuild switch --flake .  # Update system configuration"
+echo "  - sudo darwin-rebuild switch --flake .#garage  # Update system configuration"
 echo "  - nix flake update                      # Update flake inputs"
 echo "  - home-manager switch                   # Update user configuration only"
 echo ""

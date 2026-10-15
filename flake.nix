@@ -33,6 +33,7 @@
 
       modules = [
 				./nixpkgs/nix-darwin/configuration.nix
+				./nixpkgs/nix-darwin/macos.nix
 
 				home-manager.darwinModules.home-manager {
 					home-manager = {

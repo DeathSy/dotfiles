@@ -150,6 +150,8 @@
       "wispr-flow"
       "webex"
       "microsoft-teams"
+      "vorssaint"
+      "open-design"
     ];
   };
 
@@ -169,60 +171,6 @@
 
     primaryUser = "ksotis";
 
-    defaults =  {
-      dock = {
-        autohide = true;
-        mru-spaces = false;
-        show-recents = false;
-        tilesize = 32;
-        expose-group-apps = false;
-      };
-
-      NSGlobalDomain = {
-        ApplePressAndHoldEnabled = false;
-        InitialKeyRepeat = 10;
-        KeyRepeat = 2;
-        AppleEnableSwipeNavigateWithScrolls = false;
-        AppleInterfaceStyle = "Dark";
-        AppleShowAllExtensions = true;
-        NSAutomaticCapitalizationEnabled = false;
-        NSAutomaticDashSubstitutionEnabled = false;
-        NSAutomaticPeriodSubstitutionEnabled = false;
-        NSAutomaticQuoteSubstitutionEnabled = false;
-        NSAutomaticSpellingCorrectionEnabled = false;
-        NSNavPanelExpandedStateForSaveMode = true;
-        NSNavPanelExpandedStateForSaveMode2 = true;
-        _HIHideMenuBar = false;
-      };
-
-      WindowManager = {
-        EnableStandardClickToShowDesktop = false;
-        GloballyEnabled = false;
-        AppWindowGroupingBehavior = true;
-        HideDesktop = false;
-        StageManagerHideWidgets = false;
-      };
-
-      finder = {
-        AppleShowAllExtensions = true;
-        ShowPathbar = true;
-        AppleShowAllFiles = true;
-        FXEnableExtensionChangeWarning = false;
-      };
-
-      trackpad = {
-        Clicking = true;
-        TrackpadRightClick = true;
-        TrackpadThreeFingerDrag = true;
-      };
-
-      screensaver.askForPasswordDelay = 10;
-    };
-
-    keyboard = {
-      enableKeyMapping = true;
-      remapCapsLockToControl = true;
-    };
     activationScripts.applications.text = let
       env = pkgs.buildEnv {
         name = "system-applications";

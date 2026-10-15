@@ -124,7 +124,7 @@
         local repo="$HOME/studio/personal/dotfiles" priv="$HOME/studio/personal/dotfiles-private"
         local -a extra
         [[ -d $priv ]] && extra=(--override-input private "path:$priv")
-        sudo darwin-rebuild switch --flake "$repo" "''${extra[@]}" "$@"
+        sudo darwin-rebuild switch --flake "$repo#garage" "''${extra[@]}" "$@"
       }
 
       export PATH="$HOME/.local/bin:$PATH:$ANDROID_HOME/emulator"
