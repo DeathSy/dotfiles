@@ -1,0 +1,65 @@
+# System keyboard shortcuts (System Settings → Keyboard → Shortcuts), captured
+# from the live machine. Spotlight's shortcuts are off; ⌘Space switches the
+# input source (ABC/Thai).
+{ ... }: {
+  system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
+    "15" = { enabled = false; };
+    "16" = { enabled = false; };
+    "17" = { enabled = false; };
+    "18" = { enabled = false; };
+    "19" = { enabled = false; };
+    "20" = { enabled = false; };
+    "21" = { enabled = false; };
+    "22" = { enabled = false; };
+    "23" = { enabled = false; };
+    "24" = { enabled = false; };
+    "25" = { enabled = false; };
+    "26" = { enabled = false; };
+    "27" = { enabled = false; value = { parameters = [ 96 50 1048576 ]; type = "standard"; }; };
+    "32" = { enabled = false; value = { parameters = [ 65535 126 8650752 ]; type = "standard"; }; };
+    "33" = { enabled = false; value = { parameters = [ 65535 125 8650752 ]; type = "standard"; }; };
+    "36" = { enabled = true; value = { parameters = [ 65535 103 8388608 ]; type = "standard"; }; };
+    "37" = { enabled = true; value = { parameters = [ 65535 103 8519680 ]; type = "standard"; }; };
+    "52" = { enabled = false; value = { parameters = [ 100 2 1572864 ]; type = "standard"; }; };
+    "59" = { enabled = false; value = { parameters = [ 65535 96 9437184 ]; type = "standard"; }; };
+    "60" = { enabled = false; value = { parameters = [ 32 49 262144 ]; type = "standard"; }; };
+    "61" = { enabled = true; value = { parameters = [ 32 49 1048576 ]; type = "standard"; }; };
+    "64" = { enabled = false; value = { parameters = [ 32 49 1048576 ]; type = "standard"; }; };
+    "65" = { enabled = false; value = { parameters = [ 32 49 1572864 ]; type = "standard"; }; };
+    "79" = { enabled = false; value = { parameters = [ 65535 123 8650752 ]; type = "standard"; }; };
+    "80" = { enabled = true; value = { parameters = [ 65535 123 8781824 ]; type = "standard"; }; };
+    "81" = { enabled = false; value = { parameters = [ 65535 124 8650752 ]; type = "standard"; }; };
+    "82" = { enabled = true; };
+    "118" = { enabled = false; value = { parameters = [ 65535 18 262144 ]; type = "standard"; }; };
+    "119" = { enabled = false; value = { parameters = [ 65535 19 262144 ]; type = "standard"; }; };
+    "159" = { enabled = false; value = { parameters = [ 65535 36 262144 ]; type = "standard"; }; };
+    "162" = { enabled = false; value = { parameters = [ 65535 96 9961472 ]; type = "standard"; }; };
+    "164" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "190" = { enabled = false; value = { parameters = [ 113 12 8388608 ]; type = "standard"; }; };
+    "215" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "216" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "217" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "218" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "219" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "222" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "225" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "226" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "227" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "228" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "229" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "233" = { enabled = false; value = { parameters = [ 109 46 1048576 ]; type = "standard"; }; };
+    "235" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+    "237" = { enabled = false; value = { parameters = [ 102 3 8650752 ]; type = "standard"; }; };
+    "238" = { enabled = false; value = { parameters = [ 99 8 8650752 ]; type = "standard"; }; };
+    "239" = { enabled = false; value = { parameters = [ 114 15 8650752 ]; type = "standard"; }; };
+    "240" = { enabled = false; value = { parameters = [ 65535 123 8650752 ]; type = "standard"; }; };
+    "241" = { enabled = false; value = { parameters = [ 65535 124 8650752 ]; type = "standard"; }; };
+    "242" = { enabled = false; value = { parameters = [ 65535 126 8650752 ]; type = "standard"; }; };
+    "243" = { enabled = false; value = { parameters = [ 65535 125 8650752 ]; type = "standard"; }; };
+    "248" = { enabled = false; value = { parameters = [ 65535 123 8781824 ]; type = "standard"; }; };
+    "249" = { enabled = false; value = { parameters = [ 65535 124 8781824 ]; type = "standard"; }; };
+    "250" = { enabled = false; value = { parameters = [ 65535 126 8781824 ]; type = "standard"; }; };
+    "251" = { enabled = false; value = { parameters = [ 65535 125 8781824 ]; type = "standard"; }; };
+    "256" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
+  };
+}
