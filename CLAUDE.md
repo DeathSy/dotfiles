@@ -43,7 +43,7 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 - `nvim/` → `~/.config/nvim/`
 - `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
 - `sesh.toml` → `~/.config/sesh/sesh.toml`
-- `raycast/settings.rayconfig` → imported once per machine on the first rebuild after Raycast has been opened (password-protected export; see `raycast/README.md`)
+- `raycast/settings.rayconfig` → imported once per machine on the first rebuild after Raycast has been opened (see `raycast/README.md`)
 
 AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - `claude/` → `~/.claude/` (CLAUDE.md, onboarding.md, agents, hooks, own skills), linked to the checkout at `~/studio/personal/dotfiles` so edits land in the repo
