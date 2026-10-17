@@ -126,6 +126,7 @@
       "claude"
       "bruno"
       "raycast"
+      "hammerspoon"
       "libreoffice"
       "upscayl"
       "android-commandlinetools"

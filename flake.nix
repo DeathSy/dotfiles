@@ -48,6 +48,7 @@
 							./nixpkgs/home-manager/git.nix
 							./nixpkgs/home-manager/home.nix
 							./nixpkgs/home-manager/desktop.nix
+							./nixpkgs/home-manager/hammerspoon.nix
 							./nixpkgs/home-manager/node-globals.nix
 							./nixpkgs/home-manager/k9s.nix
 							./nixpkgs/home-manager/password-store.nix
