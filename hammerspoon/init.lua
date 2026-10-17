@@ -4,8 +4,8 @@
 
 -- Hide borders in Mission Control; Nix supplies the restore colour after rebuild.
 local hasBorderColor, borderColor = pcall(dofile, "/etc/hammerspoon-borders.lua")
+local missionControl, borderTask
 if hasBorderColor then
-  local missionControl, borderTask
   MissionControlWatcher = hs.timer.doEvery(0.1, function()
     local open = false
     -- true lists every on-screen window without the name-dependent Dock filter.
@@ -17,10 +17,9 @@ if hasBorderColor then
       end
     end
     if open == missionControl then return end
-    missionControl = open
-    borderTask = hs.task.new("/run/current-system/sw/bin/borders", nil,
+    local task = hs.task.new("/run/current-system/sw/bin/borders", nil,
       { "active_color=" .. (open and "0x00000000" or borderColor) })
-    borderTask:start()
+    if task and task:start() then borderTask, missionControl = task, open end
   end)
 end
 
@@ -84,7 +83,12 @@ local function cleanup()
     pcall(hs.mouse.absolutePosition, h.home)
   end
 end
-hs.shutdownCallback = cleanup -- runs on reload and quit
+hs.shutdownCallback = function() -- runs on reload and quit
+  cleanup()
+  if hasBorderColor and missionControl then
+    hs.execute("/run/current-system/sw/bin/borders active_color=" .. borderColor)
+  end
+end
 
 -- Run fn, and let go of the window if it fails.
 local function guarded(fn)
