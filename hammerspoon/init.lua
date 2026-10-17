@@ -27,52 +27,81 @@ local function heldModifiers()
   return mods.alt or mods.shift or mods.cmd
 end
 
--- Pressing one of these would click it instead of holding the window.
-local clickable = { AXButton = true, AXRadioButton = true, AXTab = true }
+-- Pressing inside one of these would click it instead of holding the window.
+local controls = { AXButton = true, AXRadioButton = true, AXTab = true, AXTabGroup = true,
+  AXTextField = true, AXTextArea = true, AXLink = true }
+
+-- True only if the point is on the window itself, not on a control in it.
+-- Anything unreadable counts as "no".
+local function bareTitleBar(point)
+  local el = hs.axuielement.systemElementAtPosition(point)
+  for _ = 1, 20 do
+    local role = el and el:attributeValue("AXRole")
+    if not role or controls[role] then return false end
+    if role == "AXWindow" then return true end
+    el = el:attributeValue("AXParent")
+  end
+  return false
+end
+
+-- The running throw: its current timer (referenced so it isn't garbage
+-- collected) and, while the mouse is held, where to release and restore it.
+local pending, held
+local function cleanup()
+  if pending then pending:stop() end
+  pending = nil
+  if held then
+    local h = held
+    held = nil
+    pcall(mouse, events.leftMouseUp, h.drag)
+    pcall(hs.mouse.absolutePosition, h.home)
+  end
+end
+hs.shutdownCallback = cleanup -- runs on reload and quit
+
+-- Run fn, and let go of the window if it fails.
+local function guarded(fn)
+  return function(...)
+    local ok, result = pcall(fn, ...)
+    if ok then return result end
+    cleanup()
+    print("throw failed: " .. tostring(result))
+  end
+end
 
 -- hs.spaces.moveWindowToSpace silently does nothing on recent macOS, so hold
 -- the window by its title bar, switch Desktop, and let go there.
-local pending -- the running throw's timer, referenced so it isn't garbage collected
-local function throw(n)
+local throw = guarded(function(n)
   local win = hs.window.focusedWindow()
-  if pending or not win or not win:isStandard() then return end
+  if held or not win or not win:isStandard() then return end
   if win:isFullScreen() then return hs.alert.show("Can't move a full-screen window") end
 
   -- Grab just right of the zoom button: empty title bar in most apps, and the
   -- empty start of WezTerm's tab bar.
   local zoom = win:zoomButtonRect()
   local grab = zoom and { x = zoom.x + zoom.w + 6, y = zoom.y + zoom.h / 2 }
-  local hit = grab and hs.axuielement.systemElementAtPosition(grab)
-  if not grab or (hit and clickable[hit:attributeValue("AXRole")]) then
-    return hs.alert.show("No title bar to grab")
-  end
-  local drag = { x = grab.x + 1, y = grab.y }
-  local home = hs.mouse.absolutePosition()
-  local function release()
-    pending = nil
-    mouse(events.leftMouseUp, drag)
-    hs.mouse.absolutePosition(home)
-  end
+  if not grab or not bareTitleBar(grab) then return hs.alert.show("No title bar to grab") end
 
+  held = { drag = { x = grab.x + 1, y = grab.y }, home = hs.mouse.absolutePosition() }
   hs.mouse.absolutePosition(grab)
   mouse(events.leftMouseDown, grab)
-  pending = hs.timer.doAfter(0.05, function()
+  pending = hs.timer.doAfter(0.05, guarded(function()
     -- A small drag makes macOS treat the press as a window move.
-    mouse(events.leftMouseDragged, drag)
+    mouse(events.leftMouseDragged, held.drag)
     -- Wait for ⌥⇧ to come up so it doesn't leak into ⌃N.
     local deadline = hs.timer.secondsSinceEpoch() + 1.5
-    pending = hs.timer.waitUntil(function()
+    pending = hs.timer.waitUntil(guarded(function()
       return not heldModifiers() or hs.timer.secondsSinceEpoch() > deadline
-    end, function()
+    end), guarded(function()
       if heldModifiers() then
-        release()
+        cleanup()
         return hs.alert.show("Let go of ⌥⇧ to throw the window")
       end
       gotoSpace(n)
-      pending = hs.timer.doAfter(0.4, release)
-    end, 0.02)
-  end)
-end
+      pending = hs.timer.doAfter(0.4, cleanup)
+    end), 0.02)
+  end))
+end)
 
 -- ⌥⇧1…9: throw the focused window to Desktop N and follow it.
 for n, key in ipairs(digits) do
