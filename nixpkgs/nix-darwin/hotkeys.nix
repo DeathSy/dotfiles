@@ -1,6 +1,7 @@
 # System keyboard shortcuts (System Settings → Keyboard → Shortcuts), captured
 # from the live machine. Spotlight's shortcuts are off; ⌘Space switches the
-# input source (ABC/Thai).
+# input source (ABC/Thai). ⌃1…⌃9 switch to Desktop 1–9 (118–126); Hammerspoon's
+# throw-window-to-Space relies on them.
 { ... }: {
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
     "15" = { enabled = false; };
@@ -30,8 +31,15 @@
     "80" = { enabled = true; value = { parameters = [ 65535 123 8781824 ]; type = "standard"; }; };
     "81" = { enabled = false; value = { parameters = [ 65535 124 8650752 ]; type = "standard"; }; };
     "82" = { enabled = true; };
-    "118" = { enabled = false; value = { parameters = [ 65535 18 262144 ]; type = "standard"; }; };
-    "119" = { enabled = false; value = { parameters = [ 65535 19 262144 ]; type = "standard"; }; };
+    "118" = { enabled = true; value = { parameters = [ 65535 18 262144 ]; type = "standard"; }; };
+    "119" = { enabled = true; value = { parameters = [ 65535 19 262144 ]; type = "standard"; }; };
+    "120" = { enabled = true; value = { parameters = [ 65535 20 262144 ]; type = "standard"; }; };
+    "121" = { enabled = true; value = { parameters = [ 65535 21 262144 ]; type = "standard"; }; };
+    "122" = { enabled = true; value = { parameters = [ 65535 23 262144 ]; type = "standard"; }; };
+    "123" = { enabled = true; value = { parameters = [ 65535 22 262144 ]; type = "standard"; }; };
+    "124" = { enabled = true; value = { parameters = [ 65535 26 262144 ]; type = "standard"; }; };
+    "125" = { enabled = true; value = { parameters = [ 65535 28 262144 ]; type = "standard"; }; };
+    "126" = { enabled = true; value = { parameters = [ 65535 25 262144 ]; type = "standard"; }; };
     "159" = { enabled = false; value = { parameters = [ 65535 36 262144 ]; type = "standard"; }; };
     "162" = { enabled = false; value = { parameters = [ 65535 96 9961472 ]; type = "standard"; }; };
     "164" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
