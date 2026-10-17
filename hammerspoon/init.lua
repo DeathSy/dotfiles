@@ -3,13 +3,18 @@
 -- Keys are raw keycodes so they work with any input source (ABC or Thai).
 
 local events = hs.eventtap.event.types
-local windows = hs.window.filter.defaultCurrentSpace
 local digits = { 18, 19, 20, 21, 23, 22, 26, 28, 25 } -- 1…9
 
--- ⌃⌥h/j/k/l: focus the nearest window in that direction on this Space.
+-- ⌃⌥h/j/k/l: focus the nearest standard, visible window on this Space.
 for key, dir in pairs({ [4] = "West", [38] = "South", [40] = "North", [37] = "East" }) do
   hs.hotkey.bind({ "ctrl", "alt" }, key, function()
-    windows["focusWindow" .. dir](windows, nil, true, true)
+    local win = hs.window.focusedWindow()
+    if not win then return end
+    local candidates = {}
+    for _, w in ipairs(hs.window.orderedWindows()) do
+      if w:isStandard() and w:isVisible() then candidates[#candidates + 1] = w end
+    end
+    win["focusWindow" .. dir](win, candidates, true, true)
   end)
 end
 
