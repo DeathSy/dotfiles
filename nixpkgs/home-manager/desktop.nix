@@ -1,5 +1,5 @@
 # Desktop session: apps started at login and default browser/PDF handlers.
-{ config, lib, pkgs, ... }:
+{ lib, pkgs, ... }:
 let
   # Apps that start at login. `open -g` keeps them in the background, and the
   # pgrep guard skips apps already running (e.g. via their own login item), so
@@ -7,7 +7,6 @@ let
   loginApps = {
     raycast = "Raycast";
     cloudflare-warp = "Cloudflare WARP";
-    codeburn-menubar = "${config.home.homeDirectory}/Applications/CodeBurnMenubar.app";
     openvpn-connect = "OpenVPN Connect";
     claude = "Claude";
     vorssaint = "Vorssaint";
