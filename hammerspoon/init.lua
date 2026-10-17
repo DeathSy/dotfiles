@@ -24,21 +24,21 @@ end
 
 local function heldModifiers()
   local mods = hs.eventtap.checkKeyboardModifiers()
-  return mods.alt or mods.shift or mods.cmd
+  return mods.alt or mods.shift or mods.cmd or mods.ctrl
 end
 
 -- Pressing inside one of these would click it instead of holding the window.
-local controls = { AXButton = true, AXRadioButton = true, AXTab = true, AXTabGroup = true,
+local controls = { AXButton = true, AXRadioButton = true, AXTab = true,
   AXTextField = true, AXTextArea = true, AXLink = true }
 
--- True only if the point is on the window itself, not on a control in it.
--- Anything unreadable counts as "no".
-local function bareTitleBar(point)
+-- True only if the point is on win itself, not on a control in it or on
+-- another window floating over it. Anything unreadable counts as "no".
+local function bareTitleBar(win, point)
   local el = hs.axuielement.systemElementAtPosition(point)
   for _ = 1, 20 do
     local role = el and el:attributeValue("AXRole")
     if not role or controls[role] then return false end
-    if role == "AXWindow" then return true end
+    if role == "AXWindow" then return el == hs.axuielement.windowElement(win) end
     el = el:attributeValue("AXParent")
   end
   return false
@@ -66,6 +66,7 @@ local function guarded(fn)
     if ok then return result end
     cleanup()
     print("throw failed: " .. tostring(result))
+    hs.alert.show("Throw failed")
   end
 end
 
@@ -80,7 +81,7 @@ local throw = guarded(function(n)
   -- empty start of WezTerm's tab bar.
   local zoom = win:zoomButtonRect()
   local grab = zoom and { x = zoom.x + zoom.w + 6, y = zoom.y + zoom.h / 2 }
-  if not grab or not bareTitleBar(grab) then return hs.alert.show("No title bar to grab") end
+  if not grab or not bareTitleBar(win, grab) then return hs.alert.show("No title bar to grab") end
 
   held = { drag = { x = grab.x + 1, y = grab.y }, home = hs.mouse.absolutePosition() }
   hs.mouse.absolutePosition(grab)
@@ -88,11 +89,11 @@ local throw = guarded(function(n)
   pending = hs.timer.doAfter(0.05, guarded(function()
     -- A small drag makes macOS treat the press as a window move.
     mouse(events.leftMouseDragged, held.drag)
-    -- Wait for ⌥⇧ to come up so it doesn't leak into ⌃N.
+    -- Wait for the modifiers to come up so they don't leak into ⌃N.
     local deadline = hs.timer.secondsSinceEpoch() + 1.5
-    pending = hs.timer.waitUntil(guarded(function()
+    pending = hs.timer.waitUntil(function()
       return not heldModifiers() or hs.timer.secondsSinceEpoch() > deadline
-    end), guarded(function()
+    end, guarded(function()
       if heldModifiers() then
         cleanup()
         return hs.alert.show("Let go of ⌥⇧ to throw the window")
