@@ -155,7 +155,6 @@
       "webex"
       "microsoft-teams"
       "vorssaint"
-      "open-design"
     ];
   };
 
