@@ -86,10 +86,11 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 
 ### Window Focus (no tiling)
 Hammerspoon (`hammerspoon/init.lua`) moves focus and windows; JankyBorders marks the focused window:
-- ⌥h/j/k/l: focus the nearest window west/south/north/east on the current Space
-- ⌥⇧1…9: throw the focused window to Desktop N on the same display and follow it (holds the title bar and presses ⌃N, so windows without a title bar and full-screen windows can't be thrown)
-- `space N` / `space throw N`: the same from a terminal, via `hammerspoon://` URLs
-- Hammerspoon needs Accessibility permission, granted by hand in System Settings → Privacy & Security → Accessibility. Desktop N must exist (add it in Mission Control)
+- ⌃⌥h/j/k/l: focus the nearest window west/south/north/east on the current Space
+- ⌥⇧1…9: throw the focused window to Desktop N on the same display and follow it. It holds the title bar just right of the zoom button and presses ⌃N, so windows without one and full-screen windows can't be thrown. WezTerm shows a tab bar with the traffic lights for this. ⌥⇧1…9 no longer types ⁄ € ‹ › ﬁ ﬂ ‡ ° ·
+- `space N`: switch to Desktop N from a terminal, via `hammerspoon://space?n=N`
+- Hammerspoon needs Accessibility permission, granted by hand in System Settings → Privacy & Security → Accessibility. Desktop N must exist (add it in Mission Control). Log out once if ⌃1…9 doesn't switch Desktops after a rebuild
+- Throw cases to test first after a change: Chrome with many tabs, and WezTerm. If a throw is refused ("No title bar to grab"), print the Accessibility roles at the grab point in the Hammerspoon console (`p` = the point just right of the zoom button): `local p=…; local e=hs.axuielement.systemElementAtPosition(p); while e do print(e:attributeValue("AXRole")); e=e:attributeValue("AXParent") end`
 
 ### macOS System Defaults
 Comprehensive macOS customization in `nixpkgs/nix-darwin/macos.nix`:
