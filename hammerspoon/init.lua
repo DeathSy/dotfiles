@@ -2,14 +2,40 @@
 -- Needs Accessibility permission (System Settings → Privacy & Security).
 -- Keys are raw keycodes so they work with any input source (ABC or Thai).
 
+-- Hide borders in Mission Control; Nix supplies the restore colour after rebuild.
+local hasBorderColor, borderColor = pcall(dofile, "/etc/hammerspoon-borders.lua")
+local missionControl, borderTask
+if hasBorderColor then
+  MissionControlWatcher = hs.timer.doEvery(0.1, function()
+    local open = false
+    -- true lists every on-screen window without the name-dependent Dock filter.
+    for _, w in ipairs(hs.window.list(true)) do
+      local layer = w.kCGWindowLayer
+      if w.kCGWindowOwnerName == "WindowManager" and layer >= 14 and layer <= 19 then
+        open = true
+        break
+      end
+    end
+    if open == missionControl then return end
+    local task = hs.task.new("/run/current-system/sw/bin/borders", nil,
+      { "active_color=" .. (open and "0x00000000" or borderColor) })
+    if task and task:start() then borderTask, missionControl = task, open end
+  end)
+end
+
 local events = hs.eventtap.event.types
-local windows = hs.window.filter.defaultCurrentSpace
 local digits = { 18, 19, 20, 21, 23, 22, 26, 28, 25 } -- 1…9
 
--- ⌃⌥h/j/k/l: focus the nearest window in that direction on this Space.
+-- ⌃⌥h/j/k/l: focus the nearest standard, visible window on this Space.
 for key, dir in pairs({ [4] = "West", [38] = "South", [40] = "North", [37] = "East" }) do
   hs.hotkey.bind({ "ctrl", "alt" }, key, function()
-    windows["focusWindow" .. dir](windows, nil, true, true)
+    local win = hs.window.focusedWindow()
+    if not win then return end
+    local candidates = {}
+    for _, w in ipairs(hs.window.orderedWindows()) do
+      if w:isStandard() and w:isVisible() then candidates[#candidates + 1] = w end
+    end
+    win["focusWindow" .. dir](win, candidates, true, true)
   end)
 end
 
@@ -57,7 +83,12 @@ local function cleanup()
     pcall(hs.mouse.absolutePosition, h.home)
   end
 end
-hs.shutdownCallback = cleanup -- runs on reload and quit
+hs.shutdownCallback = function() -- runs on reload and quit
+  cleanup()
+  if hasBorderColor and missionControl then
+    hs.execute("/run/current-system/sw/bin/borders active_color=" .. borderColor)
+  end
+end
 
 -- Run fn, and let go of the window if it fails.
 local function guarded(fn)
