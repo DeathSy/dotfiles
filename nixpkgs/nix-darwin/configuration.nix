@@ -86,10 +86,8 @@
       "ghostscript"
       "nvm"
       "sleepwatcher"
-      "act"
       "helm"
       "k6"
-      "claude-squad"
       "doctl"
       "caddy"
       "terminal-notifier"
@@ -104,8 +102,6 @@
 
       # Dev tooling
       "actionlint"
-      "argocd"
-      "codeburn"
       "git-filter-repo"
       "semgrep"
       "sevenzip"
@@ -136,7 +132,7 @@
 
       # Installed by hand before they were declared. brew bundle adopts the
       # existing apps automatically; .pkg casks (cloudflare-warp,
-      # openvpn-connect, windows-app, zoom, microsoft-teams)
+      # openvpn-connect, zoom, microsoft-teams)
       # reinstall over the existing apps instead.
       "anydesk"
       "discord"
@@ -144,13 +140,11 @@
       "cloudflare-warp"
       "figma"
       "google-chrome"
-      "linear"
       "obsidian"
       "openvpn-connect"
       "raspberry-pi-imager"
       "slack"
       "the-unarchiver"
-      "windows-app"
       "wispr-flow"
       "webex"
       "microsoft-teams"

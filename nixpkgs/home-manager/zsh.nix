@@ -60,7 +60,6 @@
 
 			lg = "lazygit";
 			lk = "k9s";
-			cs = "claude-squad";
 
       ktx="kubectx";
 
