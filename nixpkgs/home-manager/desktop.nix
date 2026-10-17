@@ -11,6 +11,7 @@ let
     openvpn-connect = "OpenVPN Connect";
     claude = "Claude";
     vorssaint = "Vorssaint";
+    hammerspoon = "Hammerspoon";
   };
 in {
   launchd.agents = lib.mapAttrs' (name: app: lib.nameValuePair "login-${name}" {

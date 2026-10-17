@@ -35,9 +35,11 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/nix-darwin/configuration.nix` - System-level packages, homebrew
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, hostname, power), captured from the live machine
 - `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
-- `nixpkgs/nix-darwin/hotkeys.nix` - System keyboard shortcuts, captured from the live machine
+- `nixpkgs/nix-darwin/hotkeys.nix` - System keyboard shortcuts, captured from the live machine, plus ⌃1…⌃9 to switch Desktops
+- `nixpkgs/nix-darwin/jankyborders.nix` - JankyBorders, a border around the focused window
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
 - `nixpkgs/home-manager/desktop.nix` - Login items and default browser/PDF handlers
+- `nixpkgs/home-manager/hammerspoon.nix` - Hammerspoon config link and the `space` CLI
 - `nixpkgs/home-manager/node-globals.nix` - Global npm tools installed into nvm's default Node
 - Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
 
@@ -47,6 +49,7 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 - `nvim/` → `~/.config/nvim/`
 - `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
 - `sesh.toml` → `~/.config/sesh/sesh.toml`
+- `hammerspoon/init.lua` → `~/.hammerspoon/init.lua`, linked to the checkout at `~/studio/personal/dotfiles`; Hammerspoon reloads it on save
 - `raycast/settings.rayconfig` → imported once per machine on the first rebuild after Raycast has been opened (see `raycast/README.md`)
 
 AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
@@ -80,6 +83,13 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 ### Automatic Sleep/Wake Management
 - Sleepwatcher daemon stops/starts Podman machine on sleep/wake
 - Scripts: `~/.sleep` and `~/.wakeup`
+
+### Window Focus (no tiling)
+Hammerspoon (`hammerspoon/init.lua`) moves focus and windows; JankyBorders marks the focused window:
+- ⌥h/j/k/l: focus the nearest window west/south/north/east on the current Space
+- ⌥⇧1…9: throw the focused window to Desktop N on the same display and follow it (holds the title bar and presses ⌃N, so windows without a title bar and full-screen windows can't be thrown)
+- `space N` / `space throw N`: the same from a terminal, via `hammerspoon://` URLs
+- Hammerspoon needs Accessibility permission, granted by hand in System Settings → Privacy & Security → Accessibility. Desktop N must exist (add it in Mission Control)
 
 ### macOS System Defaults
 Comprehensive macOS customization in `nixpkgs/nix-darwin/macos.nix`:

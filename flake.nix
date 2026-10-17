@@ -36,6 +36,7 @@
 				./nixpkgs/nix-darwin/macos.nix
 				./nixpkgs/nix-darwin/vorssaint.nix
 				./nixpkgs/nix-darwin/hotkeys.nix
+				./nixpkgs/nix-darwin/jankyborders.nix
 
 				home-manager.darwinModules.home-manager {
 					home-manager = {
@@ -47,6 +48,7 @@
 							./nixpkgs/home-manager/git.nix
 							./nixpkgs/home-manager/home.nix
 							./nixpkgs/home-manager/desktop.nix
+							./nixpkgs/home-manager/hammerspoon.nix
 							./nixpkgs/home-manager/node-globals.nix
 							./nixpkgs/home-manager/k9s.nix
 							./nixpkgs/home-manager/password-store.nix
