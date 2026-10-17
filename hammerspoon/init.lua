@@ -2,6 +2,28 @@
 -- Needs Accessibility permission (System Settings → Privacy & Security).
 -- Keys are raw keycodes so they work with any input source (ABC or Thai).
 
+-- Hide borders in Mission Control; Nix supplies the restore colour after rebuild.
+local hasBorderColor, borderColor = pcall(dofile, "/etc/hammerspoon-borders.lua")
+if hasBorderColor then
+  local missionControl, borderTask
+  MissionControlWatcher = hs.timer.doEvery(0.1, function()
+    local open = false
+    -- true lists every on-screen window without the name-dependent Dock filter.
+    for _, w in ipairs(hs.window.list(true)) do
+      local layer = w.kCGWindowLayer
+      if w.kCGWindowOwnerName == "WindowManager" and layer >= 14 and layer <= 19 then
+        open = true
+        break
+      end
+    end
+    if open == missionControl then return end
+    missionControl = open
+    borderTask = hs.task.new("/run/current-system/sw/bin/borders", nil,
+      { "active_color=" .. (open and "0x00000000" or borderColor) })
+    borderTask:start()
+  end)
+end
+
 local events = hs.eventtap.event.types
 local digits = { 18, 19, 20, 21, 23, 22, 26, 28, 25 } -- 1…9
 
