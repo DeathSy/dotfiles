@@ -93,6 +93,9 @@
       "doctl"
       "caddy"
       "terminal-notifier"
+      # tailscaled needs root: start it once per machine with
+      # `sudo brew services start tailscale` (start_service would run it as the user).
+      "tailscale"
 
       # AI tooling (see docs/ai-setup.md)
       "agent-browser"
@@ -133,7 +136,7 @@
 
       # Installed by hand before they were declared. brew bundle adopts the
       # existing apps automatically; .pkg casks (cloudflare-warp,
-      # openvpn-connect, tailscale-app, windows-app, zoom, microsoft-teams)
+      # openvpn-connect, windows-app, zoom, microsoft-teams)
       # reinstall over the existing apps instead.
       "anydesk"
       "discord"
@@ -146,7 +149,6 @@
       "openvpn-connect"
       "raspberry-pi-imager"
       "slack"
-      "tailscale-app"
       "the-unarchiver"
       "windows-app"
       "wispr-flow"
