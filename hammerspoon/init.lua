@@ -2,26 +2,25 @@
 -- Needs Accessibility permission (System Settings → Privacy & Security).
 -- Keys are raw keycodes so they work with any input source (ABC or Thai).
 
--- Hide borders in Mission Control; Nix supplies the restore colour after rebuild.
+-- Track Mission Control always; hide borders when Nix supplies a restore colour.
 local hasBorderColor, borderColor = pcall(dofile, "/etc/hammerspoon-borders.lua")
-local missionControl, borderTask
-if hasBorderColor then
-  MissionControlWatcher = hs.timer.doEvery(0.1, function()
-    local open = false
-    -- true lists every on-screen window without the name-dependent Dock filter.
-    for _, w in ipairs(hs.window.list(true)) do
-      local layer = w.kCGWindowLayer
-      if w.kCGWindowOwnerName == "WindowManager" and layer >= 14 and layer <= 19 then
-        open = true
-        break
-      end
+local missionControl, bordersHidden, borderTask = false, false
+MissionControlWatcher = hs.timer.doEvery(0.1, function()
+  local open = false
+  -- true lists every on-screen window without the name-dependent Dock filter.
+  for _, w in ipairs(hs.window.list(true)) do
+    local layer = w.kCGWindowLayer
+    if w.kCGWindowOwnerName == "WindowManager" and layer >= 14 and layer <= 19 then
+      open = true
+      break
     end
-    if open == missionControl then return end
-    local task = hs.task.new("/run/current-system/sw/bin/borders", nil,
-      { "active_color=" .. (open and "0x00000000" or borderColor) })
-    if task and task:start() then borderTask, missionControl = task, open end
-  end)
-end
+  end
+  missionControl = open
+  if not hasBorderColor or bordersHidden == missionControl then return end
+  local task = hs.task.new("/run/current-system/sw/bin/borders", nil,
+    { "active_color=" .. (open and "0x00000000" or borderColor) })
+  if task and task:start() then borderTask, bordersHidden = task, open end
+end)
 
 local events = hs.eventtap.event.types
 local digits = { 18, 19, 20, 21, 23, 22, 26, 28, 25 } -- 1…9
@@ -85,22 +84,24 @@ local function cleanup()
 end
 hs.shutdownCallback = function() -- runs on reload and quit
   cleanup()
-  if hasBorderColor and missionControl then
+  if hasBorderColor and bordersHidden then
     hs.execute("/run/current-system/sw/bin/borders active_color=" .. borderColor)
   end
 end
 
 -- Follow focus from any source, without disturbing clicks or a running throw.
 FocusWatcher = hs.window.filter.new(true):subscribe(hs.window.filter.windowFocused, function(win)
-  if held or missionControl or not win or not win:isStandard() then return end
-  for _, down in pairs(hs.eventtap.checkMouseButtons()) do
-    if down then return end
-  end
-  local frame = win:frame()
-  if not frame then return end
-  if not hs.geometry.new(hs.mouse.absolutePosition()):inside(frame) then
-    hs.mouse.absolutePosition(frame.center)
-  end
+  pcall(function()
+    if held or missionControl or not win or not win:isStandard() then return end
+    for _, down in pairs(hs.eventtap.checkMouseButtons()) do
+      if down then return end
+    end
+    local frame = win:frame()
+    if not frame then return end
+    if not hs.geometry.new(hs.mouse.absolutePosition()):inside(frame) then
+      hs.mouse.absolutePosition(frame.center)
+    end
+  end)
 end)
 
 -- Run fn, and let go of the window if it fails.
