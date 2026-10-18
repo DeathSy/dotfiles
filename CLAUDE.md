@@ -87,6 +87,7 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 ### Window Focus (no tiling)
 Hammerspoon (`hammerspoon/init.lua`) moves focus and windows; JankyBorders marks the focused window:
 - ⌃⌥h/j/k/l: focus the nearest window west/south/north/east on the current Space
+- The mouse follows focus to the window centre unless already inside, a mouse button is held, a throw is running, Mission Control is open, or the window is non-standard or has no frame; successful throws also centre the mouse
 - ⌥⇧1…9: throw the focused window to Desktop N on the same display and follow it. It holds the title bar just right of the zoom button and presses ⌃N, so windows without one and full-screen windows can't be thrown. WezTerm shows a tab bar with the traffic lights for this. ⌥⇧1…9 no longer types ⁄ € ‹ › ﬁ ﬂ ‡ ° ·
 - `space N`: switch to Desktop N from a terminal, via `hammerspoon://space?n=N`
 - Hammerspoon needs Accessibility permission, granted by hand in System Settings → Privacy & Security → Accessibility. Desktop N must exist (add it in Mission Control). Log out once if ⌃1…9 doesn't switch Desktops after a rebuild

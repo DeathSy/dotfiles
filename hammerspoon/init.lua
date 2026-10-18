@@ -78,9 +78,9 @@ local function cleanup()
   pending = nil
   if held then
     local h = held
-    held = nil
     pcall(mouse, events.leftMouseUp, h.drag)
     pcall(hs.mouse.absolutePosition, h.home)
+    held = nil
   end
 end
 hs.shutdownCallback = function() -- runs on reload and quit
@@ -89,6 +89,19 @@ hs.shutdownCallback = function() -- runs on reload and quit
     hs.execute("/run/current-system/sw/bin/borders active_color=" .. borderColor)
   end
 end
+
+-- Follow focus from any source, without disturbing clicks or a running throw.
+FocusWatcher = hs.window.filter.new(true):subscribe(hs.window.filter.windowFocused, function(win)
+  if held or missionControl or not win or not win:isStandard() then return end
+  for _, down in pairs(hs.eventtap.checkMouseButtons()) do
+    if down then return end
+  end
+  local frame = win:frame()
+  if not frame then return end
+  if not hs.geometry.new(hs.mouse.absolutePosition()):inside(frame) then
+    hs.mouse.absolutePosition(frame.center)
+  end
+end)
 
 -- Run fn, and let go of the window if it fails.
 local function guarded(fn)
@@ -130,7 +143,10 @@ local throw = guarded(function(n)
         return hs.alert.show("Let go of ⌥⇧ to throw the window")
       end
       gotoSpace(n)
-      pending = hs.timer.doAfter(0.4, cleanup)
+      pending = hs.timer.doAfter(0.4, guarded(function()
+        held.home = win:frame().center
+        cleanup()
+      end))
     end), 0.02)
   end))
 end)
