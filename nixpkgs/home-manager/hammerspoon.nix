@@ -2,7 +2,7 @@
 # init.lua links to the checkout, not the Nix store, so edits reload live.
 { config, pkgs, ... }:
 let
-  # `space N` switches to Desktop N.
+  # `space N` switches to Desktop N of the focused window's display.
   space = pkgs.writeShellScriptBin "space" ''
     case "$1" in
       [1-9]) exec /usr/bin/open -g "hammerspoon://space?n=$1" ;;

@@ -206,6 +206,13 @@ in {
         StatusMenuVisible = false;
         VoiceTriggerUserEnabled = false;
       };
+      # Hammerspoon (brew cask, configuration.nix): its own updater is off.
+      # Accessibility is still granted by hand.
+      "org.hammerspoon.Hammerspoon" = {
+        SUAutomaticallyUpdate = false;
+        SUEnableAutomaticChecks = false;
+        SUSendProfileInfo = false;
+      };
     };
   };
 

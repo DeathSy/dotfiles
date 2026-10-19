@@ -38,9 +38,32 @@ for key, dir in pairs({ [4] = "West", [38] = "South", [40] = "North", [37] = "Ea
   end)
 end
 
--- Native "Switch to Desktop N" shortcut, ⌃N (nix-darwin/hotkeys.nix).
-local function gotoSpace(n)
-  hs.eventtap.keyStroke({ "ctrl" }, digits[n], 0)
+-- macOS's "Switch to Desktop K" counts Desktops (type 0) across all displays,
+-- in this list's order, skipping full-screen apps. Returns the shortcut for
+-- Desktop n of screen, or nil and why not.
+local function desktopShortcut(screen, n)
+  local uuid, primary = screen:getUUID(), screen == hs.screen.primaryScreen()
+  local k, total, count = nil, 0, 0
+  for _, display in ipairs(hs.spaces.data_managedDisplaySpaces()) do
+    local id = display["Display Identifier"]
+    local mine = id == uuid or (id == "Main" and primary)
+    for _, space in ipairs(display.Spaces) do
+      if space.type == 0 then
+        total = total + 1
+        if mine then count = count + 1 end
+        if mine and count == n then k = total end
+      end
+    end
+  end
+  if not k then return nil, "No Desktop " .. n .. " on this display" end
+  -- Must match nix-darwin/hotkeys.nix 118–133: ⌃1…⌃9, then ⌃⌥⌘1…7.
+  if k <= 9 then return { mods = { "ctrl" }, key = digits[k] } end
+  if k <= 16 then return { mods = { "ctrl", "alt", "cmd" }, key = digits[k - 9] } end
+  return nil, "Desktop " .. n .. " of this display has no shortcut (#" .. k .. ")"
+end
+
+local function gotoSpace(shortcut)
+  hs.eventtap.keyStroke(shortcut.mods, shortcut.key, 0)
 end
 
 local function mouse(type, point)
@@ -121,6 +144,8 @@ local throw = guarded(function(n)
   local win = hs.window.focusedWindow()
   if held or not win or not win:isStandard() then return end
   if win:isFullScreen() then return hs.alert.show("Can't move a full-screen window") end
+  local shortcut, why = desktopShortcut(win:screen(), n)
+  if not shortcut then return hs.alert.show(why) end
 
   -- Grab just right of the zoom button: empty title bar in most apps, and the
   -- empty start of WezTerm's tab bar.
@@ -134,7 +159,7 @@ local throw = guarded(function(n)
   pending = hs.timer.doAfter(0.05, guarded(function()
     -- A small drag makes macOS treat the press as a window move.
     mouse(events.leftMouseDragged, held.drag)
-    -- Wait for the modifiers to come up so they don't leak into ⌃N.
+    -- Wait for the modifiers to come up so they don't leak into the shortcut.
     local deadline = hs.timer.secondsSinceEpoch() + 1.5
     pending = hs.timer.waitUntil(function()
       return not heldModifiers() or hs.timer.secondsSinceEpoch() > deadline
@@ -143,7 +168,7 @@ local throw = guarded(function(n)
         cleanup()
         return hs.alert.show("Let go of ⌥⇧ to throw the window")
       end
-      gotoSpace(n)
+      gotoSpace(shortcut)
       pending = hs.timer.doAfter(0.4, guarded(function()
         held.home = win:frame().center
         cleanup()
@@ -152,15 +177,19 @@ local throw = guarded(function(n)
   end))
 end)
 
--- ⌥⇧1…9: throw the focused window to Desktop N and follow it.
+-- ⌥⇧1…9: throw the focused window to Desktop N of its display and follow it.
 for n, key in ipairs(digits) do
   hs.hotkey.bind({ "alt", "shift" }, key, function() throw(n) end)
 end
 
--- hammerspoon://space?n=N switches to Desktop N; used by the `space` CLI.
+-- hammerspoon://space?n=N switches to Desktop N of the focused window's
+-- display, or the one under the mouse; used by the `space` CLI.
 hs.urlevent.bind("space", function(_, params)
   local n = params.n and params.n:match("^[1-9]$")
-  if n then gotoSpace(tonumber(n)) end
+  if not n then return end
+  local win = hs.window.focusedWindow()
+  local shortcut, why = desktopShortcut(win and win:screen() or hs.mouse.getCurrentScreen(), tonumber(n))
+  if shortcut then gotoSpace(shortcut) else hs.alert.show(why) end
 end)
 
 -- Reload when a .lua file changes in the checkout init.lua links to.
