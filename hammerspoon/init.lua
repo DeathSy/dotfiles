@@ -38,21 +38,25 @@ for key, dir in pairs({ [4] = "West", [38] = "South", [40] = "North", [37] = "Ea
   end)
 end
 
--- Steps from screen's current Space to its Desktop n, in Mission Control order
--- (a full-screen app counts as a step), negative = left; or nil and why not.
-local function desktopSteps(screen, n)
-  local current, from, to, count = hs.spaces.activeSpaceOnScreen(screen), nil, nil, 0
-  for i, id in ipairs(hs.spaces.spacesForScreen(screen) or {}) do
-    if id == current then from = i end
+-- Screen's Desktop n as a Space id; or nil and why not.
+local function desktopSpace(screen, n)
+  local count = 0
+  for _, id in ipairs(hs.spaces.spacesForScreen(screen) or {}) do
     if hs.spaces.spaceType(id) == "user" then
       count = count + 1
-      if count == n then to = i end
+      if count == n then
+        if id == hs.spaces.activeSpaceOnScreen(screen) then return nil, "Already on Desktop " .. n end
+        return id
+      end
     end
   end
-  if not to then return nil, "No Desktop " .. n .. " on this display" end
-  if not from then return nil, "Can't find this display's current Space" end
-  if to == from then return nil, "Already on Desktop " .. n end
-  return to - from
+  return nil, "No Desktop " .. n .. " on this display"
+end
+
+local function screenAt(point)
+  for _, screen in ipairs(hs.screen.allScreens()) do
+    if hs.geometry.new(point):inside(screen:fullFrame()) then return screen end
+  end
 end
 
 local function mouse(type, point)
@@ -122,26 +126,35 @@ local function guarded(fn)
     local ok, result = pcall(fn, ...)
     if ok then return result end
     cleanup()
-    print("throw failed: " .. tostring(result))
-    hs.alert.show("Throw failed")
+    print("failed: " .. tostring(result))
+    hs.alert.show("Failed, see the Hammerspoon console")
   end
 end
 
--- Press "Move left/right a space" (nix-darwin/hotkeys.nix 79/81: ⌃⌥⌘←/→,
--- which acts on the display under the mouse) steps times, waiting for each
--- slide to land since macOS drops keys mid-animation. Then done(ok).
-local function stepSpaces(screen, steps, done)
-  local before = hs.spaces.activeSpaceOnScreen(screen)
-  hs.eventtap.keyStroke({ "fn", "ctrl", "alt", "cmd" }, steps > 0 and 124 or 123, 0)
-  local deadline = hs.timer.secondsSinceEpoch() + 1
-  pending = hs.timer.waitUntil(function()
-    return hs.spaces.activeSpaceOnScreen(screen) ~= before or hs.timer.secondsSinceEpoch() > deadline
-  end, guarded(function()
-    if hs.spaces.activeSpaceOnScreen(screen) == before then return done(false) end
-    local rest = steps > 0 and steps - 1 or steps + 1
-    if rest == 0 then return done(true) end
-    stepSpaces(screen, rest, done)
-  end), 0.02)
+-- Step screen to Space target with "Move left/right a space" (hotkeys.nix
+-- 79/81: ⌃⌥⌘←/→, assumed to act on the display under the mouse). Each press
+-- waits up to 1 s for the slide to land (assumed: macOS drops keys mid-
+-- animation), then re-aims from where it is, so dropped or doubled presses
+-- correct themselves. Then done(), or done(err) once the deadline passes.
+local function stepSpaces(screen, target, done)
+  local deadline
+  local function tick()
+    local current, from, to = hs.spaces.activeSpaceOnScreen(screen)
+    if current == target then return done() end
+    for i, id in ipairs(hs.spaces.spacesForScreen(screen) or {}) do
+      if id == current then from = i end
+      if id == target then to = i end
+    end
+    if not from or not to then return done("Can't find this display's current Space") end
+    local now = hs.timer.secondsSinceEpoch()
+    deadline = deadline or now + math.abs(to - from) + 1
+    if now > deadline then return done("Desktop didn't switch") end
+    hs.eventtap.keyStroke({ "fn", "ctrl", "alt", "cmd" }, to > from and 124 or 123, 0)
+    pending = hs.timer.waitUntil(function()
+      return hs.spaces.activeSpaceOnScreen(screen) ~= current or hs.timer.secondsSinceEpoch() > now + 1
+    end, guarded(tick), 0.02)
+  end
+  tick()
 end
 
 -- hs.spaces.moveWindowToSpace silently does nothing on recent macOS, so hold
@@ -150,15 +163,15 @@ local throw = guarded(function(n)
   local win = hs.window.focusedWindow()
   if pending or held or not win or not win:isStandard() then return end
   if win:isFullScreen() then return hs.alert.show("Can't move a full-screen window") end
-  local screen = win:screen()
-  local steps, why = desktopSteps(screen, n)
-  if not steps then return hs.alert.show(why) end
-
   -- Grab just right of the zoom button: empty title bar in most apps, and the
   -- empty start of WezTerm's tab bar.
   local zoom = win:zoomButtonRect()
   local grab = zoom and { x = zoom.x + zoom.w + 6, y = zoom.y + zoom.h / 2 }
   if not grab or not bareTitleBar(win, grab) then return hs.alert.show("No title bar to grab") end
+  -- The mouse will be on the grab point, so that display is the one stepped.
+  local screen = screenAt(grab) or win:screen()
+  local target, why = desktopSpace(screen, n)
+  if not target then return hs.alert.show(why) end
 
   held = { drag = { x = grab.x + 1, y = grab.y }, home = hs.mouse.absolutePosition() }
   hs.mouse.absolutePosition(grab)
@@ -175,11 +188,10 @@ local throw = guarded(function(n)
         cleanup()
         return hs.alert.show("Let go of ⌥⇧ to throw the window")
       end
-      -- The mouse is on the title bar, so the steps move the window's display.
-      stepSpaces(screen, steps, function(ok)
-        if not ok then
+      stepSpaces(screen, target, function(err)
+        if err then
           cleanup()
-          return hs.alert.show("Desktop didn't switch")
+          return hs.alert.show(err)
         end
         pending = hs.timer.doAfter(0.4, guarded(function()
           held.home = win:frame().center
@@ -196,20 +208,21 @@ for n, key in ipairs(digits) do
 end
 
 -- hammerspoon://space?n=N switches to Desktop N of the focused window's
--- display, or the one under the mouse, moving the mouse there first for the
--- step shortcut; used by the `space` CLI.
+-- display, or the one under the mouse; used by the `space` CLI.
 hs.urlevent.bind("space", guarded(function(_, params)
   local n = params.n and params.n:match("^[1-9]$")
   if pending or held or not n then return end
-  local win = hs.window.focusedWindow()
-  local screen = win and win:screen() or hs.mouse.getCurrentScreen()
-  local steps, why = desktopSteps(screen, tonumber(n))
-  if not steps then return hs.alert.show(why) end
-  local under = hs.mouse.getCurrentScreen()
-  if not under or under:id() ~= screen:id() then hs.mouse.absolutePosition(screen:frame().center) end
-  stepSpaces(screen, steps, function(ok)
+  local win, under = hs.window.focusedWindow(), hs.mouse.getCurrentScreen()
+  local screen = win and win:screen() or under
+  if not screen then return end
+  local target, why = desktopSpace(screen, tonumber(n))
+  if not target then return hs.alert.show(why) end
+  -- The step shortcut is assumed to act on the display under the mouse, so
+  -- warp to the window as FocusWatcher would.
+  if not under or under:id() ~= screen:id() then hs.mouse.absolutePosition(win:frame().center) end
+  stepSpaces(screen, target, function(err)
     pending = nil
-    if not ok then hs.alert.show("Desktop didn't switch") end
+    if err then hs.alert.show(err) end
   end)
 end))
 
