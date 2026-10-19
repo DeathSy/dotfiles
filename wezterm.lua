@@ -12,8 +12,7 @@ config.font = wezterm.font_with_fallback({
 	{ family = "FiraCode Nerd Font", scale = 1.1 },
 })
 config.font_size = 12
--- Native traffic lights in the tab bar: the empty bar beside them is what
--- Hammerspoon grabs to throw the window to another Space.
+-- Native traffic lights in the tab bar.
 config.window_decorations = "INTEGRATED_BUTTONS|RESIZE"
 config.window_close_confirmation = "NeverPrompt"
 config.scrollback_lines = 3000
