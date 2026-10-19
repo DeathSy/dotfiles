@@ -1,7 +1,9 @@
 # System keyboard shortcuts (System Settings → Keyboard → Shortcuts), captured
 # from the live machine. Spotlight's shortcuts are off; ⌘Space switches the
-# input source (ABC/Thai). ⌃1…⌃9 switch to Desktop 1–9 (118–126); Hammerspoon's
-# throw-window-to-Space relies on them.
+# input source (ABC/Thai). ⌃1…⌃9 switch to Desktop 1–9 (118–126) and ⌃⌥⌘1…7
+# to Desktop 10–16 (127–133). macOS numbers Desktops across all displays, so
+# Hammerspoon's throw-window-to-Space sends these to reach a later display's
+# Desktops; ⌃⌥⌘ is only for it, not for pressing by hand.
 { ... }: {
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
     "15" = { enabled = false; };
@@ -40,6 +42,13 @@
     "124" = { enabled = true; value = { parameters = [ 65535 26 262144 ]; type = "standard"; }; };
     "125" = { enabled = true; value = { parameters = [ 65535 28 262144 ]; type = "standard"; }; };
     "126" = { enabled = true; value = { parameters = [ 65535 25 262144 ]; type = "standard"; }; };
+    "127" = { enabled = true; value = { parameters = [ 65535 18 1835008 ]; type = "standard"; }; };
+    "128" = { enabled = true; value = { parameters = [ 65535 19 1835008 ]; type = "standard"; }; };
+    "129" = { enabled = true; value = { parameters = [ 65535 20 1835008 ]; type = "standard"; }; };
+    "130" = { enabled = true; value = { parameters = [ 65535 21 1835008 ]; type = "standard"; }; };
+    "131" = { enabled = true; value = { parameters = [ 65535 23 1835008 ]; type = "standard"; }; };
+    "132" = { enabled = true; value = { parameters = [ 65535 22 1835008 ]; type = "standard"; }; };
+    "133" = { enabled = true; value = { parameters = [ 65535 26 1835008 ]; type = "standard"; }; };
     "159" = { enabled = false; value = { parameters = [ 65535 36 262144 ]; type = "standard"; }; };
     "162" = { enabled = false; value = { parameters = [ 65535 96 9961472 ]; type = "standard"; }; };
     "164" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
