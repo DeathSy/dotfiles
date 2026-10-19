@@ -38,32 +38,21 @@ for key, dir in pairs({ [4] = "West", [38] = "South", [40] = "North", [37] = "Ea
   end)
 end
 
--- macOS's "Switch to Desktop K" counts Desktops (type 0) across all displays,
--- in this list's order, skipping full-screen apps. Returns the shortcut for
--- Desktop n of screen, or nil and why not.
-local function desktopShortcut(screen, n)
-  local uuid, primary = screen:getUUID(), screen == hs.screen.primaryScreen()
-  local k, total, count = nil, 0, 0
-  for _, display in ipairs(hs.spaces.data_managedDisplaySpaces()) do
-    local id = display["Display Identifier"]
-    local mine = id == uuid or (id == "Main" and primary)
-    for _, space in ipairs(display.Spaces) do
-      if space.type == 0 then
-        total = total + 1
-        if mine then count = count + 1 end
-        if mine and count == n then k = total end
-      end
+-- Steps from screen's current Space to its Desktop n, in Mission Control order
+-- (a full-screen app counts as a step), negative = left; or nil and why not.
+local function desktopSteps(screen, n)
+  local current, from, to, count = hs.spaces.activeSpaceOnScreen(screen), nil, nil, 0
+  for i, id in ipairs(hs.spaces.spacesForScreen(screen) or {}) do
+    if id == current then from = i end
+    if hs.spaces.spaceType(id) == "user" then
+      count = count + 1
+      if count == n then to = i end
     end
   end
-  if not k then return nil, "No Desktop " .. n .. " on this display" end
-  -- Must match nix-darwin/hotkeys.nix 118–133: ⌃1…⌃9, then ⌃⌥⌘1…7.
-  if k <= 9 then return { mods = { "ctrl" }, key = digits[k] } end
-  if k <= 16 then return { mods = { "ctrl", "alt", "cmd" }, key = digits[k - 9] } end
-  return nil, "Desktop " .. n .. " of this display has no shortcut (#" .. k .. ")"
-end
-
-local function gotoSpace(shortcut)
-  hs.eventtap.keyStroke(shortcut.mods, shortcut.key, 0)
+  if not to then return nil, "No Desktop " .. n .. " on this display" end
+  if not from then return nil, "Can't find this display's current Space" end
+  if to == from then return nil, "Already on Desktop " .. n end
+  return to - from
 end
 
 local function mouse(type, point)
@@ -138,14 +127,32 @@ local function guarded(fn)
   end
 end
 
+-- Press "Move left/right a space" (nix-darwin/hotkeys.nix 79/81: ⌃⌥⌘←/→,
+-- which acts on the display under the mouse) steps times, waiting for each
+-- slide to land since macOS drops keys mid-animation. Then done(ok).
+local function stepSpaces(screen, steps, done)
+  local before = hs.spaces.activeSpaceOnScreen(screen)
+  hs.eventtap.keyStroke({ "fn", "ctrl", "alt", "cmd" }, steps > 0 and 124 or 123, 0)
+  local deadline = hs.timer.secondsSinceEpoch() + 1
+  pending = hs.timer.waitUntil(function()
+    return hs.spaces.activeSpaceOnScreen(screen) ~= before or hs.timer.secondsSinceEpoch() > deadline
+  end, guarded(function()
+    if hs.spaces.activeSpaceOnScreen(screen) == before then return done(false) end
+    local rest = steps > 0 and steps - 1 or steps + 1
+    if rest == 0 then return done(true) end
+    stepSpaces(screen, rest, done)
+  end), 0.02)
+end
+
 -- hs.spaces.moveWindowToSpace silently does nothing on recent macOS, so hold
 -- the window by its title bar, switch Desktop, and let go there.
 local throw = guarded(function(n)
   local win = hs.window.focusedWindow()
-  if held or not win or not win:isStandard() then return end
+  if pending or held or not win or not win:isStandard() then return end
   if win:isFullScreen() then return hs.alert.show("Can't move a full-screen window") end
-  local shortcut, why = desktopShortcut(win:screen(), n)
-  if not shortcut then return hs.alert.show(why) end
+  local screen = win:screen()
+  local steps, why = desktopSteps(screen, n)
+  if not steps then return hs.alert.show(why) end
 
   -- Grab just right of the zoom button: empty title bar in most apps, and the
   -- empty start of WezTerm's tab bar.
@@ -168,11 +175,17 @@ local throw = guarded(function(n)
         cleanup()
         return hs.alert.show("Let go of ⌥⇧ to throw the window")
       end
-      gotoSpace(shortcut)
-      pending = hs.timer.doAfter(0.4, guarded(function()
-        held.home = win:frame().center
-        cleanup()
-      end))
+      -- The mouse is on the title bar, so the steps move the window's display.
+      stepSpaces(screen, steps, function(ok)
+        if not ok then
+          cleanup()
+          return hs.alert.show("Desktop didn't switch")
+        end
+        pending = hs.timer.doAfter(0.4, guarded(function()
+          held.home = win:frame().center
+          cleanup()
+        end))
+      end)
     end), 0.02)
   end))
 end)
@@ -183,14 +196,22 @@ for n, key in ipairs(digits) do
 end
 
 -- hammerspoon://space?n=N switches to Desktop N of the focused window's
--- display, or the one under the mouse; used by the `space` CLI.
-hs.urlevent.bind("space", function(_, params)
+-- display, or the one under the mouse, moving the mouse there first for the
+-- step shortcut; used by the `space` CLI.
+hs.urlevent.bind("space", guarded(function(_, params)
   local n = params.n and params.n:match("^[1-9]$")
-  if not n then return end
+  if pending or held or not n then return end
   local win = hs.window.focusedWindow()
-  local shortcut, why = desktopShortcut(win and win:screen() or hs.mouse.getCurrentScreen(), tonumber(n))
-  if shortcut then gotoSpace(shortcut) else hs.alert.show(why) end
-end)
+  local screen = win and win:screen() or hs.mouse.getCurrentScreen()
+  local steps, why = desktopSteps(screen, tonumber(n))
+  if not steps then return hs.alert.show(why) end
+  local under = hs.mouse.getCurrentScreen()
+  if not under or under:id() ~= screen:id() then hs.mouse.absolutePosition(screen:frame().center) end
+  stepSpaces(screen, steps, function(ok)
+    pending = nil
+    if not ok then hs.alert.show("Desktop didn't switch") end
+  end)
+end))
 
 -- Reload when a .lua file changes in the checkout init.lua links to.
 local dir = hs.fs.pathToAbsolute(hs.configdir .. "/init.lua"):match("^(.*)/")

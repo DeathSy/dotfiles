@@ -1,9 +1,10 @@
 # System keyboard shortcuts (System Settings → Keyboard → Shortcuts), captured
 # from the live machine. Spotlight's shortcuts are off; ⌘Space switches the
-# input source (ABC/Thai). ⌃1…⌃9 switch to Desktop 1–9 (118–126) and ⌃⌥⌘1…7
-# to Desktop 10–16 (127–133). macOS numbers Desktops across all displays, so
-# Hammerspoon's throw-window-to-Space sends these to reach a later display's
-# Desktops; ⌃⌥⌘ is only for it, not for pressing by hand.
+# input source (ABC/Thai). ⌃1…⌃9 switch to Desktop 1–9 (118–126), to press by
+# hand. "Move left/right a space" (79/81) is ⌃⌥⌘←/→, which nobody presses by
+# hand: Hammerspoon's throw-window-to-Space and `space` step with it, since
+# ⌃N numbers Desktops across all displays and stops at 16. Arrow keys carry
+# the fn flag (0x800000). ⌃←/→ stay free for terminals and tmux.
 { ... }: {
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
     "15" = { enabled = false; };
@@ -29,9 +30,9 @@
     "61" = { enabled = true; value = { parameters = [ 32 49 1048576 ]; type = "standard"; }; };
     "64" = { enabled = false; value = { parameters = [ 32 49 1048576 ]; type = "standard"; }; };
     "65" = { enabled = false; value = { parameters = [ 32 49 1572864 ]; type = "standard"; }; };
-    "79" = { enabled = false; value = { parameters = [ 65535 123 8650752 ]; type = "standard"; }; };
+    "79" = { enabled = true; value = { parameters = [ 65535 123 10223616 ]; type = "standard"; }; };
     "80" = { enabled = true; value = { parameters = [ 65535 123 8781824 ]; type = "standard"; }; };
-    "81" = { enabled = false; value = { parameters = [ 65535 124 8650752 ]; type = "standard"; }; };
+    "81" = { enabled = true; value = { parameters = [ 65535 124 10223616 ]; type = "standard"; }; };
     "82" = { enabled = true; };
     "118" = { enabled = true; value = { parameters = [ 65535 18 262144 ]; type = "standard"; }; };
     "119" = { enabled = true; value = { parameters = [ 65535 19 262144 ]; type = "standard"; }; };
@@ -42,13 +43,6 @@
     "124" = { enabled = true; value = { parameters = [ 65535 26 262144 ]; type = "standard"; }; };
     "125" = { enabled = true; value = { parameters = [ 65535 28 262144 ]; type = "standard"; }; };
     "126" = { enabled = true; value = { parameters = [ 65535 25 262144 ]; type = "standard"; }; };
-    "127" = { enabled = true; value = { parameters = [ 65535 18 1835008 ]; type = "standard"; }; };
-    "128" = { enabled = true; value = { parameters = [ 65535 19 1835008 ]; type = "standard"; }; };
-    "129" = { enabled = true; value = { parameters = [ 65535 20 1835008 ]; type = "standard"; }; };
-    "130" = { enabled = true; value = { parameters = [ 65535 21 1835008 ]; type = "standard"; }; };
-    "131" = { enabled = true; value = { parameters = [ 65535 23 1835008 ]; type = "standard"; }; };
-    "132" = { enabled = true; value = { parameters = [ 65535 22 1835008 ]; type = "standard"; }; };
-    "133" = { enabled = true; value = { parameters = [ 65535 26 1835008 ]; type = "standard"; }; };
     "159" = { enabled = false; value = { parameters = [ 65535 36 262144 ]; type = "standard"; }; };
     "162" = { enabled = false; value = { parameters = [ 65535 96 9961472 ]; type = "standard"; }; };
     "164" = { enabled = false; value = { parameters = [ 65535 65535 0 ]; type = "standard"; }; };
