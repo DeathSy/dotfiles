@@ -150,9 +150,10 @@ local function stepSpaces(screen, target, done)
     deadline = deadline or now + math.abs(to - from) + 1
     if now > deadline then return done("Desktop didn't switch") end
     hs.eventtap.keyStroke({ "fn", "ctrl", "alt", "cmd" }, to > from and 124 or 123, 0)
-    pending = hs.timer.waitUntil(function()
+    -- Guarded too: a display unplugged mid-step would error on every poll.
+    pending = hs.timer.waitUntil(guarded(function()
       return hs.spaces.activeSpaceOnScreen(screen) ~= current or hs.timer.secondsSinceEpoch() > now + 1
-    end, guarded(tick), 0.02)
+    end), guarded(tick), 0.02)
   end
   tick()
 end
