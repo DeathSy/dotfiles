@@ -12,8 +12,8 @@
     "brightnessControlEnabled" = true;
     "brightnessOSDEnabled" = false;
     "clamshellPreferred" = true;
-    "clipboardAutoClearDelaySeconds" = 20;
-    "clipboardHistoryEnabled" = true;
+    "clipboardAutoClearDelaySeconds" = 0;
+    "clipboardHistoryEnabled" = false;
     "clipboardHistoryLimit" = 50;
     "defaultDurationMinutes" = 0;
     "extraBrightnessEnabled" = true;
@@ -24,7 +24,7 @@
     "featureAvailable.cameraPreview" = false;
     "featureAvailable.cleaner" = false;
     "featureAvailable.cleaningMode" = false;
-    "featureAvailable.clipboardHistory" = true;
+    "featureAvailable.clipboardHistory" = false;
     "featureAvailable.colorPicker" = false;
     "featureAvailable.commandBar" = false;
     "featureAvailable.diskImageInstaller" = false;
