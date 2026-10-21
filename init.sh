@@ -3,6 +3,9 @@
 # Exit on any error
 set -e
 
+# Host to set up, as named in flake.nix: garage (default) or garage-server
+HOST="${1:-garage}"
+
 echo "🚀 Starting macOS device setup with Nix and nix-darwin..."
 echo "This script will install and configure your complete development environment."
 echo "Note: This script is idempotent - safe to run multiple times."
@@ -106,7 +109,7 @@ if command -v darwin-rebuild >/dev/null 2>&1; then
     echo "🔄 Updating existing configuration..."
     echo "This may take a few minutes as packages are updated..."
     echo "Note: You may be prompted for your password (sudo access required)"
-    sudo "$(command -v darwin-rebuild)" switch --flake "$(pwd)#garage"
+    sudo "$(command -v darwin-rebuild)" switch --flake "$(pwd)#$HOST"
 else
     echo "🏗️  Running initial nix-darwin setup..."
     echo "This may take several minutes as packages are downloaded and built..."
@@ -119,7 +122,7 @@ else
             sudo mv "$f" "$f.before-nix-darwin"
         fi
     done
-    sudo "$(command -v nix)" --extra-experimental-features "nix-command flakes" run nix-darwin -- switch --flake "$(pwd)#garage"
+    sudo "$(command -v nix)" --extra-experimental-features "nix-command flakes" run nix-darwin -- switch --flake "$(pwd)#$HOST"
 fi
 
 echo ""
@@ -132,10 +135,10 @@ echo "3. Open Raycast once, then run 'rebuild' to import its settings"
 echo "4. Confirm Chrome as the default browser when macOS asks"
 echo "5. Start Tailscale's daemon once: 'sudo brew services start tailscale', then 'tailscale up'"
 echo "6. Some GUI applications may require manual permission grants"
-echo "7. Run 'darwin-rebuild switch --flake .#garage' for future updates"
+echo "7. Run 'darwin-rebuild switch --flake .#$HOST' for future updates"
 echo ""
 echo "🔧 Useful commands:"
-echo "  - sudo darwin-rebuild switch --flake .#garage  # Update system configuration"
+echo "  - sudo darwin-rebuild switch --flake .#$HOST  # Update system configuration"
 echo "  - nix flake update                      # Update flake inputs"
 echo "  - home-manager switch                   # Update user configuration only"
 echo ""

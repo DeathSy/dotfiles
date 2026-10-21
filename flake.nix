@@ -24,14 +24,14 @@
 
   outputs = inputs@{
 			self, nixpkgs, nix-darwin, home-manager, private
-		}: {
-
-    darwinConfigurations."garage" = nix-darwin.lib.darwinSystem {
+		}: let
+    mkHost = hostName: { computerName }: nix-darwin.lib.darwinSystem {
 			system = "aarch64-darwin";
 
 			specialArgs = { inherit inputs; };
 
       modules = [
+				{ networking = { inherit hostName computerName; }; }
 				./nixpkgs/nix-darwin/configuration.nix
 				./nixpkgs/nix-darwin/macos.nix
 				./nixpkgs/nix-darwin/vorssaint.nix
@@ -64,6 +64,14 @@
 					users.users.ksotis.home = "/Users/ksotis";
 				}
       ];
+    };
+  in {
+
+    # Every Mac gets the same config; only its names differ. darwin-rebuild
+    # picks the host by LocalHostName, which networking.hostName sets.
+    darwinConfigurations = nixpkgs.lib.mapAttrs mkHost {
+      garage-server = { computerName = "ksotis-server"; };
+      garage = { computerName = "ksotis"; };
     };
 
 		darwinPackages = self.darwinConfigurations."garage".pkgs;

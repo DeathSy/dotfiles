@@ -5,11 +5,8 @@ let
   user = config.system.primaryUser;
   home = "/Users/${user}";
 in {
+  # computerName and hostName are set per host in flake.nix.
   networking = {
-    computerName = "ksotis";
-    # Also sets LocalHostName; matches darwinConfigurations."garage".
-    hostName = "garage";
-
     applicationFirewall = {
       enable = true;
       enableStealthMode = true;

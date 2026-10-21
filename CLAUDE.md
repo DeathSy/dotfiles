@@ -17,7 +17,7 @@ This is a Nix-based dotfiles repository for macOS (Darwin) systems using nix-dar
 # Rebuild the system configuration
 nix run nix-darwin -- switch --flake $(pwd)/nixpkgs
 
-# Or rebuild specifically for the "garage" configuration
+# Or rebuild a specific host: garage (main Mac) or garage-server
 darwin-rebuild switch --flake .#garage
 ```
 
@@ -31,7 +31,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 
 ### Key Configuration Modules
 
-- `flake.nix` - Main flake configuration defining the "garage" system
+- `flake.nix` - Main flake configuration defining the "garage" and "garage-server" hosts
 - `nixpkgs/nix-darwin/configuration.nix` - System-level packages, homebrew
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, hostname, power) and Hammerspoon's updater settings, captured from the live machine
 - `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
