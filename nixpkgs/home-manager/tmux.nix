@@ -35,7 +35,6 @@
 			set-option -g renumber-windows on
 			set-option -g allow-rename off
 			set -s set-clipboard on
-			set -s set-clipboard external
 			set -g base-index 1
 			set -g pane-base-index 1
 			set -g status-keys vi
