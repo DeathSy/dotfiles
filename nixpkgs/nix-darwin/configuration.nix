@@ -76,10 +76,6 @@
       upgrade = true;
     };
 
-		taps = [
-			"devdotfast/tap"
-		];
-
     brews = [
       "trivy"
       "pinentry"
@@ -121,7 +117,6 @@
       "drawio"
       "gcloud-cli"
       "android-platform-tools"
-      "devdotfast/tap/whiteboard"
       "claude"
       "bruno"
       "raycast"
