@@ -31,8 +31,9 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 
 ### Key Configuration Modules
 
-- `flake.nix` - Main flake configuration defining the "garage" and "garage-server" hosts
-- `nixpkgs/nix-darwin/configuration.nix` - System-level packages, homebrew
+- `flake.nix` - Main flake configuration: the shared (global) module list in `mkHost`, plus the hosts "garage" and "garage-server"
+- `nixpkgs/hosts/<host>.nix` - Per-device layer, added on top of the global one: the host's computerName and its own Homebrew casks/brews (`garage.nix`: main Mac, `garage-server.nix`: server Mac). Homebrew lists merge, so a host module only lists its extras. To add a device type, add a file here and its name to `darwinConfigurations` in `flake.nix`
+- `nixpkgs/nix-darwin/configuration.nix` - System-level packages and the Homebrew brews/casks every machine gets
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, hostname, power) and Hammerspoon's updater settings, captured from the live machine
 - `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
 - `nixpkgs/nix-darwin/hotkeys.nix` - System keyboard shortcuts, captured from the live machine, plus ⌃1…⌃9 and ⌃⌥⌘1…7 to switch to Desktop 1–16
@@ -109,7 +110,7 @@ Comprehensive macOS customization in `nixpkgs/nix-darwin/macos.nix`:
 Some GUI applications may need manual permission grants after installation.
 
 ### Homebrew vs Nix Conflicts  
-System uses both Nix packages and Homebrew casks. Check `configuration.nix` for the current split.
+System uses both Nix packages and Homebrew casks. Check `configuration.nix` and `nixpkgs/hosts/` for the current split.
 
 ### Service Restart
 ```bash

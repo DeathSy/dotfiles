@@ -109,16 +109,14 @@
       "verapdf"
     ];
 
+    # Every machine gets these; nixpkgs/hosts/<host>.nix adds its own casks.
     casks = [
       "sf-symbols"
       "desktoppr"
       "wezterm"
       "codex"
-      "drawio"
       "gcloud-cli"
       "android-platform-tools"
-      "claude"
-      "bruno"
       "raycast"
       "hammerspoon"
       "libreoffice"
@@ -126,23 +124,11 @@
       "android-commandlinetools"
 
       # Installed by hand before they were declared. brew bundle adopts the
-      # existing apps automatically; .pkg casks (cloudflare-warp,
-      # openvpn-connect, zoom, microsoft-teams)
-      # reinstall over the existing apps instead.
-      "anydesk"
-      "discord"
-      "chatgpt"
+      # existing apps automatically; .pkg casks (cloudflare-warp) reinstall
+      # over the existing apps instead.
       "cloudflare-warp"
-      "figma"
       "google-chrome"
       "obsidian"
-      "openvpn-connect"
-      "raspberry-pi-imager"
-      "slack"
-      "the-unarchiver"
-      "wispr-flow"
-      "webex"
-      "microsoft-teams"
       "vorssaint"
     ];
   };

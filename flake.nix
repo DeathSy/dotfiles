@@ -25,18 +25,21 @@
   outputs = inputs@{
 			self, nixpkgs, nix-darwin, home-manager, private
 		}: let
-    mkHost = hostName: { computerName }: nix-darwin.lib.darwinSystem {
+    # The shared modules below are the global layer every Mac gets;
+    # nixpkgs/hosts/<hostName>.nix adds that device's names and extra apps.
+    mkHost = hostName: nix-darwin.lib.darwinSystem {
 			system = "aarch64-darwin";
 
 			specialArgs = { inherit inputs; };
 
       modules = [
-				{ networking = { inherit hostName computerName; }; }
+				{ networking = { inherit hostName; }; }
 				./nixpkgs/nix-darwin/configuration.nix
 				./nixpkgs/nix-darwin/macos.nix
 				./nixpkgs/nix-darwin/vorssaint.nix
 				./nixpkgs/nix-darwin/hotkeys.nix
 				./nixpkgs/nix-darwin/jankyborders.nix
+				./nixpkgs/hosts/${hostName}.nix
 
 				home-manager.darwinModules.home-manager {
 					home-manager = {
@@ -67,12 +70,12 @@
     };
   in {
 
-    # Every Mac gets the same config; only its names differ. darwin-rebuild
+    # One entry per device, each with a nixpkgs/hosts/<name>.nix. darwin-rebuild
     # picks the host by LocalHostName, which networking.hostName sets.
-    darwinConfigurations = nixpkgs.lib.mapAttrs mkHost {
-      garage-server = { computerName = "ksotis-server"; };
-      garage = { computerName = "ksotis"; };
-    };
+    darwinConfigurations = nixpkgs.lib.genAttrs [
+      "garage"
+      "garage-server"
+    ] mkHost;
 
 		darwinPackages = self.darwinConfigurations."garage".pkgs;
   };

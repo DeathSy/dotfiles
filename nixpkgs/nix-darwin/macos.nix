@@ -5,7 +5,7 @@ let
   user = config.system.primaryUser;
   home = "/Users/${user}";
 in {
-  # computerName and hostName are set per host in flake.nix.
+  # hostName comes from flake.nix, computerName from nixpkgs/hosts/<host>.nix.
   networking = {
     applicationFirewall = {
       enable = true;
