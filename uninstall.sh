@@ -14,6 +14,11 @@ if [ "$(uname)" != "Darwin" ]; then
     exit 1
 fi
 
+# Homebrew packages the dotfiles declare: nixpkgs/nix-darwin/configuration.nix
+# (every machine) plus nixpkgs/hosts/*.nix. Keep in sync with those files.
+BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-notifier tailscale agent-browser googleworkspace-cli cliproxyapi actionlint git-filter-repo semgrep sevenzip openjdk@17 pandoc poppler verapdf"
+CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools raycast hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp google-chrome obsidian vorssaint anydesk bruno chatgpt claude discord drawio figma raspberry-pi-imager slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
+
 # Function to check if file/directory exists and report
 check_exists() {
     local path="$1"
@@ -81,14 +86,14 @@ scan_system() {
     if command -v brew >/dev/null 2>&1; then
         echo "  ✓ Homebrew is installed"
         # Check for specific packages from our config
-        for pkg in trivy pinentry ghostscript goku nvm sleepwatcher act helm; do
+        for pkg in $BREWS; do
             if brew list "$pkg" >/dev/null 2>&1; then
                 echo "  ✓ Found brew package: $pkg"
             else
                 echo "  - Not found brew package: $pkg"
             fi
         done
-        for cask in sf-symbols desktoppr arc wezterm anydesk ngrok postman raycast karabiner-elements; do
+        for cask in $CASKS; do
             if brew list --cask "$cask" >/dev/null 2>&1; then
                 echo "  ✓ Found brew cask: $cask"
             else
@@ -312,25 +317,19 @@ if [ "$REMOVE_HOMEBREW" = true ]; then
     if command -v brew >/dev/null 2>&1; then
         # Remove specific packages from our configuration
         echo "Removing Homebrew packages..."
-        for pkg in trivy pinentry ghostscript goku nvm sleepwatcher act helm; do
+        for pkg in $BREWS; do
             if brew list "$pkg" >/dev/null 2>&1; then
                 echo "  Removing brew package: $pkg"
                 brew uninstall --ignore-dependencies "$pkg" 2>/dev/null || echo "    ⚠️  Could not remove $pkg"
             fi
         done
         
-        for cask in sf-symbols desktoppr arc wezterm anydesk ngrok postman raycast karabiner-elements; do
+        for cask in $CASKS; do
             if brew list --cask "$cask" >/dev/null 2>&1; then
                 echo "  Removing brew cask: $cask"
                 brew uninstall --cask "$cask" 2>/dev/null || echo "    ⚠️  Could not remove $cask"
             fi
         done
-        
-        # Remove tap
-        if brew tap | grep -q "nikitabobko/tap" 2>/dev/null; then
-            echo "  Removing tap: nikitabobko/tap"
-            brew untap nikitabobko/tap 2>/dev/null || true
-        fi
         
         echo "⚠️  Note: Homebrew itself is still installed. To remove it completely, run:"
         echo "    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\""
