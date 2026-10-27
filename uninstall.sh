@@ -15,9 +15,14 @@ if [ "$(uname)" != "Darwin" ]; then
 fi
 
 # Homebrew packages the dotfiles declare: nixpkgs/nix-darwin/configuration.nix
-# (every machine) plus nixpkgs/hosts/*.nix. Keep in sync with those files.
+# (every machine) plus nixpkgs/hosts/<host>.nix. Keep in sync with those files.
 BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-notifier tailscale agent-browser googleworkspace-cli cliproxyapi actionlint git-filter-repo semgrep sevenzip openjdk@17 pandoc poppler verapdf"
-CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools raycast hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp google-chrome obsidian vorssaint anydesk bruno chatgpt claude discord drawio figma raspberry-pi-imager slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
+CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools raycast hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp google-chrome obsidian vorssaint"
+# nixpkgs/hosts/garage.nix
+GARAGE_CASKS="anydesk bruno chatgpt claude discord drawio figma raspberry-pi-imager slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
+if [ "$(scutil --get LocalHostName 2>/dev/null)" = "garage" ]; then
+    CASKS="$CASKS $GARAGE_CASKS"
+fi
 
 # Function to check if file/directory exists and report
 check_exists() {
