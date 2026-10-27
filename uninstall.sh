@@ -145,6 +145,13 @@ case $choice in
         ;;
 esac
 
+if [ "$REMOVE_HOMEBREW" = true ]; then
+    echo ""
+    echo "🍺 These Homebrew packages will be removed if installed:"
+    echo "  Brews: $BREWS"
+    echo "  Casks: $CASKS"
+fi
+
 echo ""
 read -p "Are you sure you want to proceed? Type 'YES' to confirm: " confirm
 if [ "$confirm" != "YES" ]; then
@@ -317,6 +324,16 @@ if [ "$REMOVE_HOMEBREW" = true ]; then
     if command -v brew >/dev/null 2>&1; then
         # Remove specific packages from our configuration
         echo "Removing Homebrew packages..."
+        # Stop brew services first so their launchd plists don't stay behind
+        if brew list cliproxyapi >/dev/null 2>&1; then
+            echo "  Stopping brew service: cliproxyapi"
+            brew services stop cliproxyapi 2>/dev/null || true
+        fi
+        if brew list tailscale >/dev/null 2>&1; then
+            echo "  Stopping brew service: tailscale (runs as root)"
+            sudo brew services stop tailscale 2>/dev/null || true
+        fi
+
         for pkg in $BREWS; do
             if brew list "$pkg" >/dev/null 2>&1; then
                 echo "  Removing brew package: $pkg"
