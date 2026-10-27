@@ -71,8 +71,7 @@
     "swift-lsp@claude-plugins-official": true,
     "slack@claude-plugins-official": true,
     "codex@openai-codex": false,
-    "typesafe@typesafe-ai": true,
-    "whiteboard@devfast": true
+    "typesafe@typesafe-ai": true
   },
   "extraKnownMarketplaces": {
     "ui-ux-pro-max-skill": {
@@ -91,12 +90,6 @@
       "source": {
         "source": "github",
         "repo": "typesafe-ai/skills"
-      }
-    },
-    "devfast": {
-      "source": {
-        "source": "github",
-        "repo": "devdotfast/whiteboard"
       }
     }
   },
