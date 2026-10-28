@@ -94,7 +94,6 @@
       # AI tooling (see docs/ai-setup.md)
       "agent-browser"
       "googleworkspace-cli"
-      { name = "cliproxyapi"; start_service = true; }
 
       # Dev tooling
       "actionlint"

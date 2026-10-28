@@ -59,7 +59,6 @@
 							./nixpkgs/home-manager/zsh.nix
 							./nixpkgs/home-manager/tmux.nix
 							./nixpkgs/home-manager/ai
-							./nixpkgs/home-manager/ai/headroom.nix
 							private.outPath
 						];
 					};

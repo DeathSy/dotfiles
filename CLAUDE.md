@@ -32,7 +32,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 ### Key Configuration Modules
 
 - `flake.nix` - Main flake configuration: the shared (global) module list in `mkHost`, plus the hosts "garage" and "garage-server"
-- `nixpkgs/hosts/<host>.nix` - Per-device layer, added on top of the global one: the host's computerName and its own Homebrew casks/brews (`garage.nix`: main Mac, `garage-server.nix`: server Mac). Homebrew lists merge, so a host module only lists its extras. To add a device type, add a file here and its name to `darwinConfigurations` in `flake.nix`
+- `nixpkgs/hosts/<host>.nix` - Per-device layer, added on top of the global one: the host's computerName and its own Homebrew casks/brews (`garage.nix`: main Mac, `garage-server.nix`: server Mac, which also runs the CLIProxyAPI gateway and Headroom for the other Macs, see `docs/ai-setup.md`). Homebrew lists merge, so a host module only lists its extras. To add a device type, add a file here and its name to `darwinConfigurations` in `flake.nix`
 - `nixpkgs/nix-darwin/configuration.nix` - System-level packages and the Homebrew brews/casks every machine gets
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, power; the host names come from `flake.nix` and `nixpkgs/hosts/`) and Hammerspoon's updater settings, captured from the live machine
 - `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
