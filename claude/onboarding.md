@@ -36,6 +36,15 @@ Your ~/.claude/CLAUDE.md is already loaded; this covers what it doesn't make obv
 - Final results truncate at about 4,000 characters. For long reports, ask for SendMessage parts of 3,500 characters or less, or use `schema`.
 - `isolation: "worktree"` is unreliable: every Bash call in the agent can fail with "The working-directory isolation context for this agent was lost…" and the worktree gets removed. Seen on 2026-09-29 (session launched outside a git repo) and 2026-10-02 (inside a git repo, background agent); EnterWorktree inside the agent doesn't help. Until it's fixed: create the worktree yourself (`git -C <repo> worktree add <path> -b <branch>`), spawn the agent WITHOUT `isolation`, tell it to work only in that absolute path, and remove the worktree when done.
 - Never SendMessage an agent that is still running inside a Workflow, even if its id appears in a `from=` attribute: the reply starts a second copy of the agent while the first keeps running, and both write the same worktree. Wait for it to finish, or edit the script and rerun with `resumeFromRunId`.
+- An Agent call with a `name` becomes a teammate. Its completion notice often never arrives, and reports it sends to `team-lead` (the name Claude Code gives it for you) are dropped; reports to `main` arrive. Seen in four sessions, 2026-10-27/29. For one-off research, omit `name`. For a named agent, tell it in the brief to report with SendMessage to `main`. If one goes idle without reporting, message it by name for the report, or read its transcript under ~/.claude/projects/<project>/<session>/subagents/.
+
+## Auto mode
+- When the classifier denies an action, don't route around it: no renaming, other paths, splitting, heredocs or reworded retries. Bring the exact command to the user.
+- The user's approval in your conversation doesn't reach your subagents: each is judged on its own brief. Seen three times on 2026-10-28 ("Production Reads", "Excess Sensitive Detail"). Run a user-approved sensitive step in the main session, with the user switching it out of Auto mode for that step (Shift+Tab) and approving the prompt, or have the user run it with `! <command>`.
+- UAT and other non-production reads (e.g. `kubectl exec`, credential-backed calls) can still be denied as "Production Reads"; handle them the same way.
+
+## Skills
+- graphify triggers on codebase questions by design (the user wants that). If a graphify-out/ exists, query it. Building a new graph is a large job that writes graphify-out/ into the repo, so for a quick question with no graph you can also read the sources directly.
 
 ## Shell pitfalls
 - A global kill guard blocks pattern kills (`pkill -f`, `pkill` without `-x`, `killall -m`, `pgrep <pattern> | xargs kill`, `kill -1`/`kill 0`); `pkill -f "cat"` once killed 37 of the user's apps. Kill by recorded PID (`$!`, a pidfile) or port owner (`lsof -ti :PORT -sTCP:LISTEN`; without `-sTCP:LISTEN` it also returns clients such as the user's browser). If a hung `cat`/`tail` is blocking you, find its PID with `pgrep -lx cat` and kill only that PID.

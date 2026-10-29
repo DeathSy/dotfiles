@@ -12,6 +12,12 @@
 - Exception: starting a dev server, local stack or build is allowed only to capture PR before/after evidence (see below); stop it afterwards
 - Never kill processes by pattern (`pkill -f`, `pkill` without `-x`, `killall -m`, `pgrep <pattern> | xargs kill`, `kill -1`/`kill 0`): on 2026-09-29 `pkill -f "cat"` killed 37 of the user's apps. Kill by recorded PID (`$!`, a pidfile) or port owner (`lsof -ti :PORT -sTCP:LISTEN`; without `-sTCP:LISTEN` it also returns clients such as the user's browser). A global hook enforces this
 
+## Containers
+
+- Use the remote Podman on the Linux workstation (connection `workstation`), not the local Podman VM. Don't silently fall back to the local VM or reset the default connection; if a workflow can't run remotely, report it
+- Remote bind mounts resolve on the workstation's filesystem, and images build as amd64
+- Publish dev ports on the workstation's loopback (`127.0.0.1:<port>:<port>`) and reach them through an SSH forward; exposing a port to the network needs the user's explicit go
+
 ## Package Manager
 
 - Use yarn or npm if the project already use it, otherwise pnpm
