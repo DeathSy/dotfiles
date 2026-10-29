@@ -5,7 +5,6 @@ let
   # pgrep guard skips apps already running (e.g. via their own login item), so
   # they don't get a reopen event. A missing app just makes that agent exit.
   loginApps = {
-    raycast = "Raycast";
     cloudflare-warp = "Cloudflare WARP";
     openvpn-connect = "OpenVPN Connect";
     claude = "Claude";

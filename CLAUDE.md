@@ -32,14 +32,15 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 ### Key Configuration Modules
 
 - `flake.nix` - Main flake configuration: the shared (global) module list in `mkHost`, plus the hosts "garage" and "garage-server"
-- `nixpkgs/hosts/<host>.nix` - Per-device layer, added on top of the global one: the host's computerName and its own Homebrew casks/brews (`garage.nix`: main Mac, `garage-server.nix`: server Mac, which also runs the CLIProxyAPI gateway and Headroom for the other Macs, see `docs/ai-setup.md`). Homebrew lists merge, so a host module only lists its extras. To add a device type, add a file here and its name to `darwinConfigurations` in `flake.nix`
+- `nixpkgs/hosts/<host>.nix` - Per-device layer, added on top of the global one: the host's computerName and its own Homebrew casks/brews (`garage.nix`: main Mac, also the only one with Raycast and JankyBorders; `garage-server.nix`: server Mac, which also runs the CLIProxyAPI gateway and Headroom for the other Macs, see `docs/ai-setup.md`). Homebrew lists merge, so a host module only lists its extras. To add a device type, add a file here and its name to `darwinConfigurations` in `flake.nix`
 - `nixpkgs/nix-darwin/configuration.nix` - System-level packages and the Homebrew brews/casks every machine gets
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, power; the host names come from `flake.nix` and `nixpkgs/hosts/`) and Hammerspoon's updater settings, captured from the live machine
 - `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
 - `nixpkgs/nix-darwin/hotkeys.nix` - System keyboard shortcuts, captured from the live machine, plus ⌃1…⌃9 and ⌃⌥⌘1…7 to switch to Desktop 1–16
-- `nixpkgs/nix-darwin/jankyborders.nix` - JankyBorders, a border around the focused window
+- `nixpkgs/nix-darwin/jankyborders.nix` - JankyBorders, a border around the focused window (imported by `garage.nix` only)
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
 - `nixpkgs/home-manager/desktop.nix` - Login items and default browser/PDF handlers
+- `nixpkgs/home-manager/raycast.nix` - Raycast's login item and one-shot settings import (imported by `garage.nix` only)
 - `nixpkgs/home-manager/hammerspoon.nix` - Hammerspoon config link and the `space` CLI
 - `nixpkgs/home-manager/node-globals.nix` - Global npm tools installed into nvm's default Node
 - Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
@@ -51,7 +52,7 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 - `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
 - `sesh.toml` → `~/.config/sesh/sesh.toml`
 - `hammerspoon/init.lua` → `~/.hammerspoon/init.lua`, linked to the checkout at `~/studio/personal/dotfiles`; Hammerspoon reloads it on save
-- `raycast/settings.rayconfig` → imported once per machine on the first rebuild after Raycast has been opened (see `raycast/README.md`)
+- `raycast/settings.rayconfig` → imported once on garage on the first rebuild after Raycast has been opened (see `raycast/README.md`)
 
 AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - `claude/` → `~/.claude/` (CLAUDE.md, onboarding.md, agents, hooks, own skills), linked to the checkout at `~/studio/personal/dotfiles` so edits land in the repo
@@ -86,7 +87,7 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - Scripts: `~/.sleep` and `~/.wakeup`
 
 ### Window Focus (no tiling)
-Hammerspoon (`hammerspoon/init.lua`) moves focus and windows; JankyBorders marks the focused window:
+Hammerspoon (`hammerspoon/init.lua`) moves focus and windows; JankyBorders marks the focused window on garage:
 - ⌃⌥h/j/k/l: focus the nearest window west/south/north/east on the current Space
 - The mouse follows focus to the window centre unless already inside, a mouse button is held, a throw is running, Mission Control is open, or the window is non-standard or has no frame; successful throws also centre the mouse
 - ⌥⇧1…9: throw the focused window to Desktop N on the same display and follow it. It holds the title bar just right of the zoom button and presses the "Switch to Desktop" shortcut, so windows without one and full-screen windows can't be thrown. WezTerm shows a tab bar with the traffic lights for this. ⌥⇧1…9 no longer types ⁄ € ‹ › ﬁ ﬂ ‡ ° ·

@@ -139,15 +139,4 @@ in
   home.activation.startup-application = lib.mkAfter ''
   /usr/local/bin/desktoppr ~/studio/personal/dotfiles/wallpapers/Cloudsnight-landscape.jpg
   '';
-
-  # One-shot Raycast import, on the first rebuild after Raycast has been opened once (see raycast/README.md).
-  home.activation.raycast-import = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    rayconfig=${config.home.homeDirectory}/studio/personal/dotfiles/raycast/settings.rayconfig
-    marker=${config.xdg.stateHome}/dotfiles/raycast-imported
-    if [ -f "$rayconfig" ] && [ ! -e "$marker" ] && [ -d /Applications/Raycast.app ] && [ "$(/usr/bin/defaults read com.raycast.macos raycast_OnboardingCompleted 2>/dev/null)" = 1 ]; then
-      run /usr/bin/open -a Raycast "$rayconfig"
-      run mkdir -p "$(dirname "$marker")"
-      run touch "$marker"
-    fi
-  '';
 }

@@ -17,9 +17,9 @@ fi
 # Homebrew packages the dotfiles declare: nixpkgs/nix-darwin/configuration.nix
 # (every machine) plus nixpkgs/hosts/<host>.nix. Keep in sync with those files.
 BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-notifier tailscale agent-browser googleworkspace-cli actionlint git-filter-repo semgrep sevenzip openjdk@17 pandoc poppler verapdf"
-CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools raycast hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp google-chrome obsidian vorssaint"
+CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp google-chrome obsidian vorssaint"
 # nixpkgs/hosts/garage.nix
-GARAGE_CASKS="anydesk bruno chatgpt claude discord drawio figma raspberry-pi-imager slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
+GARAGE_CASKS="anydesk bruno chatgpt claude discord drawio figma raspberry-pi-imager raycast slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
 # nixpkgs/hosts/garage-server.nix
 GARAGE_SERVER_BREWS="cliproxyapi"
 HOST="$(scutil --get LocalHostName 2>/dev/null)"

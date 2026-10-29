@@ -1,5 +1,8 @@
 # garage: the main Mac. Added on top of the shared config in flake.nix.
+# Raycast and JankyBorders run only here.
 { ... }: {
+  imports = [ ../nix-darwin/jankyborders.nix ];
+
   networking.computerName = "ksotis";
 
   homebrew.casks = [
@@ -11,6 +14,7 @@
     "drawio"
     "figma"
     "raspberry-pi-imager"
+    "raycast"
     "slack"
     "the-unarchiver"
     "webex"
@@ -20,4 +24,6 @@
     "microsoft-teams"
     "openvpn-connect"
   ];
+
+  home-manager.users.ksotis.imports = [ ../home-manager/raycast.nix ];
 }

@@ -38,7 +38,6 @@
 				./nixpkgs/nix-darwin/macos.nix
 				./nixpkgs/nix-darwin/vorssaint.nix
 				./nixpkgs/nix-darwin/hotkeys.nix
-				./nixpkgs/nix-darwin/jankyborders.nix
 				./nixpkgs/hosts/${hostName}.nix
 
 				home-manager.darwinModules.home-manager {

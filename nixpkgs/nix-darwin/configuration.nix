@@ -116,7 +116,6 @@
       "codex"
       "gcloud-cli"
       "android-platform-tools"
-      "raycast"
       "hammerspoon"
       "libreoffice"
       "upscayl"
