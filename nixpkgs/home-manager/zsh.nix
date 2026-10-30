@@ -68,8 +68,11 @@
 
 		# See the ~/.terminfo/6e/network entry below; use a standard name from
 		# here on so tmux, nvim and onward SSH hops get a TERM they know.
+		# Tailscale SSH also ignores the client's LANG/LC_*; without a locale tmux
+		# marks the client non-UTF-8 and draws every non-ASCII glyph as "_".
 		envExtra = ''
 			[[ $TERM == network ]] && export TERM=xterm-256color
+			[[ -z $LANG$LC_ALL$LC_CTYPE ]] && export LANG=en_US.UTF-8
 		'';
 
 		initContent = ''
