@@ -66,6 +66,12 @@
       t = "sesh connect $(sesh list --icons | fzf --no-sort --ansi)";
 		};
 
+		# See the ~/.terminfo/6e/network entry below; use a standard name from
+		# here on so tmux, nvim and onward SSH hops get a TERM they know.
+		envExtra = ''
+			[[ $TERM == network ]] && export TERM=xterm-256color
+		'';
+
 		initContent = ''
 			eval "$(/opt/homebrew/bin/brew shellenv)"
 
@@ -132,4 +138,17 @@
       [ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && source "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"
 		'';
 	};
+
+	# Tailscale SSH logins on macOS arrive with TERM=network (the /etc/ttys
+	# default for ptys) instead of the client's TERM. No terminfo entry has that
+	# name, so /etc/zshenv and hm-session-vars.sh print "can't find terminal
+	# definition for network" before any user config runs. Alias it to
+	# xterm-256color in ~/.terminfo, which ncurses searches first (6e = 'n').
+	# pairs is capped at 32767 to keep the legacy 16-bit format: ncurses 6's
+	# pairs#0x10000 forces the 32-bit format, which macOS's ncurses 5.4 (and so
+	# /bin/zsh) can't read.
+	home.file.".terminfo/6e/network".source = "${pkgs.runCommand "terminfo-network" { } ''
+		printf 'network|Tailscale SSH login on macOS,\n\tpairs#0x7fff, use=xterm-256color,\n' > network.src
+		${pkgs.ncurses}/bin/tic -x -o "$out" network.src
+	''}/6e/network";
 }
