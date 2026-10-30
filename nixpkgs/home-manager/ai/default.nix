@@ -20,6 +20,11 @@ let
       default = [ ];
       description = "Command and arguments (stdio).";
     };
+    headersHelper = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Shell command printing a JSON object of request headers (http/sse); Claude Code runs it at connect time.";
+    };
   };
 in
 {
@@ -27,6 +32,7 @@ in
     ./claude.nix
     ./codex.nix
     ./gateway.nix
+    ./auto-browser.nix
   ];
 
   options.dotfiles.ai = with lib; {

@@ -81,8 +81,9 @@ let
     ++ map (s: { scope = "local"; } // s) cfg.mcp.projectServers;
 
   # Adds the MCP servers listed in a JSON file ([{scope, dir, name, transport,
-  # url, command}]) with `claude mcp add`, skipping ones ~/.claude.json
-  # already has. Never rewrites ~/.claude.json itself.
+  # url, command, headersHelper}]) with `claude mcp add` (`add-json` when a
+  # headersHelper is set), skipping ones ~/.claude.json already has. Never
+  # rewrites ~/.claude.json itself.
   mcpAdd = pkgs.writeShellScriptBin "ai-mcp-add" ''
     set -u
     PATH=${lib.makeBinPath [ pkgs.jq ]}:$HOME/.local/bin:/opt/homebrew/bin:$PATH
@@ -100,9 +101,11 @@ let
         "$HOME/.claude.json" >/dev/null 2>&1; then
         echo "mcp $label: exists"; continue
       fi
-      if [ "$transport" = stdio ]; then args=("$name" -- "''${cmd[@]}")
-      else args=(--transport "$transport" "$name" "$url"); fi
-      if ( { [ -z "$dir" ] || cd "$dir"; } && claude mcp add -s "$scope" "''${args[@]}" ); then
+      if [ "$transport" = stdio ]; then args=(add "$name" -- "''${cmd[@]}")
+      elif jq -e '.headersHelper != null' <<<"$s" >/dev/null; then
+        args=(add-json "$name" "$(jq -c '{type: .transport, url, headersHelper}' <<<"$s")")
+      else args=(add --transport "$transport" "$name" "$url"); fi
+      if ( { [ -z "$dir" ] || cd "$dir"; } && claude mcp "''${args[0]}" -s "$scope" "''${args[@]:1}" ); then
         echo "mcp $label: added"
       else
         echo "mcp $label: failed" >&2; rc=1
