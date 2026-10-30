@@ -101,11 +101,11 @@ let
         "$HOME/.claude.json" >/dev/null 2>&1; then
         echo "mcp $label: exists"; continue
       fi
-      if [ "$transport" = stdio ]; then args=(add "$name" -- "''${cmd[@]}")
+      if [ "$transport" = stdio ]; then args=(add -s "$scope" "$name" -- "''${cmd[@]}")
       elif jq -e '.headersHelper != null' <<<"$s" >/dev/null; then
-        args=(add-json "$name" "$(jq -c '{type: .transport, url, headersHelper}' <<<"$s")")
-      else args=(add --transport "$transport" "$name" "$url"); fi
-      if ( { [ -z "$dir" ] || cd "$dir"; } && claude mcp "''${args[0]}" -s "$scope" "''${args[@]:1}" ); then
+        args=(add-json -s "$scope" "$name" "$(jq -c '{type: .transport, url, headersHelper}' <<<"$s")")
+      else args=(add -s "$scope" --transport "$transport" "$name" "$url"); fi
+      if ( { [ -z "$dir" ] || cd "$dir"; } && claude mcp "''${args[@]}" ); then
         echo "mcp $label: added"
       else
         echo "mcp $label: failed" >&2; rc=1

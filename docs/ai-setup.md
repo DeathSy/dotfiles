@@ -211,3 +211,11 @@ Claude Code until step 4.
 7. Authenticate the HTTP MCP servers (figma, monday, and per-project ones)
    from `/mcp` inside Claude Code, and run `/slack` once to log in to the Slack
    plugin.
+8. On garage-server, Auto Browser (`dotfiles.ai.autoBrowser`, enabled in
+   `nixpkgs/hosts/garage-server.nix`): the `auto-browser-tunnel` launchd agent
+   forwards 127.0.0.1:18000 to port 8000 on the `workstation` SSH alias, whose
+   host key must already be in known_hosts. `ai-mcp-add` registers the
+   `auto-browser` user-scope MCP server; its `headersHelper` reads the agent
+   token with `pass show workstation/auto-browser/agent-token` at connect time,
+   so `pass`, `jq` and a non-prompting gpg-agent must work for Claude Code.
+   Tunnel log: `~/Library/Logs/auto-browser-tunnel.log`.

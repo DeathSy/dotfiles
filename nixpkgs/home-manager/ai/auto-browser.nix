@@ -3,8 +3,9 @@
 # Auto Browser: a browser service on the workstation (its own repo and README
 # under ~/studio/workstation/auto-browser) that agents drive over MCP and the
 # user can watch or take over remotely. It listens only on the workstation's
-# loopback; this tunnels it to 127.0.0.1:8000 here and registers it with
-# Claude Code. The agent token comes from pass at connect time.
+# loopback (port 8000); this tunnels it to 127.0.0.1:18000 here, a port dev
+# servers don't default to, and registers it with Claude Code. The agent
+# token comes from pass at connect time.
 let
   cfg = config.dotfiles.ai.autoBrowser;
   home = config.home.homeDirectory;
@@ -42,7 +43,7 @@ in
           "-o" "ServerAliveCountMax=3"
           "-o" "ControlMaster=no"
           "-o" "ControlPath=none"
-          "-L" "127.0.0.1:8000:127.0.0.1:8000"
+          "-L" "127.0.0.1:18000:127.0.0.1:8000"
           cfg.tunnel.host
         ];
         RunAtLoad = true;
@@ -53,8 +54,8 @@ in
     };
 
     dotfiles.ai.mcp.userServers.auto-browser = {
-      url = "http://127.0.0.1:8000/mcp";
-      headersHelper = "pass show ${cfg.tokenPassEntry} | head -n1 | jq -Rc '{Authorization: (\"Bearer \" + .), \"X-Operator-Name\": \"claude-code\"}'";
+      url = "http://127.0.0.1:18000/mcp";
+      headersHelper = "pass show ${lib.escapeShellArg cfg.tokenPassEntry} | head -n1 | jq -Rc '{Authorization: (\"Bearer \" + .), \"X-Operator-Name\": \"claude-code\"}'";
     };
   };
 }
