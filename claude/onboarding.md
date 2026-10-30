@@ -19,7 +19,9 @@ Your ~/.claude/CLAUDE.md is already loaded; this covers what it doesn't make obv
 - Codex is used only through the codex-computer-use skill (pinned `-m gpt-6.1-sol`, its own `codex login`).
 
 ## Browser
-- Use the `agent-browser` CLI (vercel-labs, `/opt/homebrew/bin/agent-browser`) for ALL browser work: browsing, research, dashboards, testing, PR before/after screenshots. Run it through Bash. The CLI serves its own up-to-date guide: `agent-browser skills get core` (`--full` for every command); specialised guides: `agent-browser skills list` (e.g. `dogfood` for QA).
+- On garage-server, Auto Browser (MCP server `auto-browser`) is the default browser for agents; CLAUDE.md's Browser section has its rules. It runs on the workstation behind an SSH tunnel to 127.0.0.1:8000, and the user can watch or take over sessions from their Mac, iPhone and iPad. A session started before 2026-10-30 needs a restart to get its tools. Handoff doc: ~/studio/workstation/auto-browser/README.md.
+- Auto Browser can't reach private networks (localhost, LAN, tailnet). Use agent-browser, below, for local dev servers, internal URLs and PR evidence of local builds, and anywhere Auto Browser isn't available.
+- Use the `agent-browser` CLI (vercel-labs, `/opt/homebrew/bin/agent-browser`) for that browser work: dashboards, testing, PR before/after screenshots. Run it through Bash. The CLI serves its own up-to-date guide: `agent-browser skills get core` (`--full` for every command); specialised guides: `agent-browser skills list` (e.g. `dogfood` for QA).
 - Always start with your own named session, before the first command: `export AGENT_BROWSER_SESSION="$(agent-browser session id --scope worktree --prefix <task>)"`. Each named session is a separate browser (own cookies, tabs, refs), so parallel agents never collide. Never use the unnamed default session: every agent on the machine shares it. Use a different `--prefix` per agent if several share one worktree. Finish with `agent-browser close`.
 - Workflow: `open <url>` → `snapshot -i -c` (accessibility tree with `@eN` refs) → `click @e3`, `fill @e1 "x"`, `press Enter`, `wait --text "..."` → `set viewport 1440 900` → `screenshot` → `close`.
 - Screenshots: `agent-browser screenshot [selector] [path]` may save to `~/.agent-browser/tmp/screenshots/` instead of your path; always read the path it prints and copy the file to where you need it (or set `AGENT_BROWSER_SCREENSHOT_DIR`).
@@ -28,7 +30,7 @@ Your ~/.claude/CLAUDE.md is already loaded; this covers what it doesn't make obv
 - For sensitive sessions, `--allowed-domains` limits where the browser can go (not combinable with `--profile`, `--auto-connect` or `--cdp`).
 - Ask before anything sensitive: email, banking, admin consoles, anything that sends, buys, deletes or changes DNS/certs.
 - PR evidence: one named session per build, viewport 1440 px, mask personal data in the DOM before capturing, as CLAUDE.md requires. `--headed` shows a window if the user wants to watch.
-- Always name `agent-browser` and the named-session rule in subagent briefs (GPT agents especially won't infer it).
+- Always name the browser to use in subagent briefs: Auto Browser with CLAUDE.md's rules, or `agent-browser` with the named-session rule (GPT agents especially won't infer it).
 
 ## Subagents
 - They can't write report files; ask for findings as text.
