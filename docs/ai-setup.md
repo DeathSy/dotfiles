@@ -219,3 +219,9 @@ Claude Code until step 4.
    token with `pass show workstation/auto-browser/agent-token` at connect time,
    so `pass`, `jq` and a non-prompting gpg-agent must work for Claude Code.
    Tunnel log: `~/Library/Logs/auto-browser-tunnel.log`.
+9. On garage-server, Open Design (`dotfiles.ai.openDesign`): `ai-mcp-add`
+   registers the `open-design` stdio MCP server, which runs
+   `open-design/mcp.sh` on the `workstation` alias over SSH (no token on this
+   Mac). The `open-design-tunnel` launchd agent forwards 127.0.0.1:7456 to the
+   workstation's hardening proxy on 7457 for the web UI; the local port must
+   stay 7456. Tunnel log: `~/Library/Logs/open-design-tunnel.log`.

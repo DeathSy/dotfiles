@@ -33,6 +33,7 @@ in
     ./codex.nix
     ./gateway.nix
     ./auto-browser.nix
+    ./open-design.nix
   ];
 
   options.dotfiles.ai = with lib; {
