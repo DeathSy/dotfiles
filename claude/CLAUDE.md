@@ -17,6 +17,7 @@
 - Use the remote Podman on the Linux workstation (connection `workstation`), not the local Podman VM. Don't silently fall back to the local VM or reset the default connection; if a workflow can't run remotely, report it
 - Remote bind mounts resolve on the workstation's filesystem, and images build as amd64
 - Publish dev ports on the workstation's loopback (`127.0.0.1:<port>:<port>`) and reach them through an SSH forward; exposing a port to the network needs the user's explicit go
+- The workstation is shared by every session and by services such as Auto Browser and Open Design. Package installs or upgrades, changes to its container runtime or config, systemd user units and experiments with Podman's internals there need the user's go first, and an announcement to claude-config before you run them. Its pitfalls are in ~/.claude/onboarding.md ("The workstation (shared)")
 
 ## Package Manager
 
