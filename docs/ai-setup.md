@@ -233,5 +233,8 @@ Claude Code until step 4.
    `~/Library/Logs/open-design-tunnel.log`. A second agent,
    `open-design-gateway-tunnel`, forwards the other way so Open Design's model
    calls reach this Mac's gateway: workstation 127.0.0.1:18317 to
-   127.0.0.1:8317 here (gateway key still required). Log:
+   127.0.0.1:8317 here (gateway key still required); only the gateway server
+   runs it. If the connection dies uncleanly, the workstation keeps the stale
+   listener until its sshd notices (hours without `ClientAliveInterval`), and
+   the agent retries every 30 s until then. Log:
    `~/Library/Logs/open-design-gateway-tunnel.log`.
