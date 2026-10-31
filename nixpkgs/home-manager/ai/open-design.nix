@@ -51,6 +51,7 @@ in
       transport = "stdio";
       command = [ "/usr/bin/ssh" "-T" ] ++ ssh ++ [
         "-o" "ServerAliveInterval=30"
+        "-o" "ServerAliveCountMax=3"
         cfg.host
         "open-design/mcp.sh"
       ];
