@@ -1,14 +1,35 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 # Auto Browser: a browser service on the workstation (its own repo and README
 # under ~/studio/workstation/auto-browser) that agents drive over MCP and the
 # user can watch or take over remotely. It listens only on the workstation's
 # loopback (port 8000); this tunnels it to 127.0.0.1:18000 here, a port dev
-# servers don't default to, and registers it with Claude Code. The agent
-# token comes from pass at connect time.
+# servers don't default to, and registers it with Claude Code. At connect time
+# a helper script reads the agent token from pass and names the calling session.
 let
   cfg = config.dotfiles.ai.autoBrowser;
   home = config.home.homeDirectory;
+  pass = "${config.programs.password-store.package}/bin/pass";
+  passDir = config.programs.password-store.settings.PASSWORD_STORE_DIR or "";
+
+  # Prints the request headers as JSON for Claude Code's headersHelper. The
+  # token goes through a pipe, never argv. X-Operator-Name tells the user
+  # which session drives a browser: claude:<project dir>:p<tmux pane>, or the
+  # first 8 characters of the session id outside tmux.
+  headersScript = ''
+    #!/bin/sh
+    set -u
+    ${lib.optionalString (passDir != "") "export PASSWORD_STORE_DIR=${lib.escapeShellArg passDir}"}
+    project=$(basename "''${PWD:-unknown}")
+    if [ -n "''${TMUX_PANE:-}" ]; then
+      where="p''${TMUX_PANE#%}"
+    else
+      where=$(printf '%s' "''${CLAUDE_CODE_SESSION_ID:-unknown}" | cut -c1-8)
+    fi
+    name=$(printf 'claude:%s:%s' "$project" "$where" | LC_ALL=C tr -c 'A-Za-z0-9._:-' '-' | cut -c1-64)
+    ${pass} show ${lib.escapeShellArg cfg.tokenPassEntry} | head -n1 |
+      ${pkgs.jq}/bin/jq -Rc --arg n "$name" '{Authorization: ("Bearer " + .), "X-Operator-Name": $n}'
+  '';
 in
 {
   options.dotfiles.ai.autoBrowser = with lib; {
@@ -53,9 +74,16 @@ in
       };
     };
 
+    # A fixed path rather than a store path: ~/.claude.json keeps the command
+    # across rebuilds and garbage collection.
+    home.file.".local/bin/auto-browser-headers" = {
+      executable = true;
+      text = headersScript;
+    };
+
     dotfiles.ai.mcp.userServers.auto-browser = {
       url = "http://127.0.0.1:18000/mcp";
-      headersHelper = "pass show ${lib.escapeShellArg cfg.tokenPassEntry} | head -n1 | jq -Rc '{Authorization: (\"Bearer \" + .), \"X-Operator-Name\": \"claude-code\"}'";
+      headersHelper = "${home}/.local/bin/auto-browser-headers";
     };
   };
 }
