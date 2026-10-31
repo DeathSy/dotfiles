@@ -19,9 +19,9 @@ let
   # cut first so the session part always survives the 64-character limit.
   headersScript = ''
     #!/bin/sh
-    set -u
+    set -u +x
     ${lib.optionalString (passDir != "") "export PASSWORD_STORE_DIR=${lib.escapeShellArg passDir}"}
-    project=$(basename "''${PWD:-unknown}" | cut -c1-40)
+    project=$(printf '%s' "$(basename "''${PWD:-unknown}")" | LC_ALL=C tr -c 'A-Za-z0-9._-' '-' | cut -c1-40)
     if [ -n "''${TMUX_PANE:-}" ]; then
       where="p''${TMUX_PANE#%}"
     else
