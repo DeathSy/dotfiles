@@ -14,20 +14,22 @@ let
 
   # Prints the request headers as JSON for Claude Code's headersHelper. The
   # token goes through a pipe, never argv. X-Operator-Name tells the user
-  # which session drives a browser: claude:<project dir>:p<tmux pane>, or the
-  # first 8 characters of the session id outside tmux.
+  # which session drives a browser: claude:<project dir>:p<tmux pane id>, or
+  # the first 8 characters of the session id outside tmux. The project part is
+  # cut first so the session part always survives the 64-character limit.
   headersScript = ''
     #!/bin/sh
     set -u
     ${lib.optionalString (passDir != "") "export PASSWORD_STORE_DIR=${lib.escapeShellArg passDir}"}
-    project=$(basename "''${PWD:-unknown}")
+    project=$(basename "''${PWD:-unknown}" | cut -c1-40)
     if [ -n "''${TMUX_PANE:-}" ]; then
       where="p''${TMUX_PANE#%}"
     else
       where=$(printf '%s' "''${CLAUDE_CODE_SESSION_ID:-unknown}" | cut -c1-8)
     fi
     name=$(printf 'claude:%s:%s' "$project" "$where" | LC_ALL=C tr -c 'A-Za-z0-9._:-' '-' | cut -c1-64)
-    ${pass} show ${lib.escapeShellArg cfg.tokenPassEntry} | head -n1 |
+    token=$(${pass} show ${lib.escapeShellArg cfg.tokenPassEntry}) || exit 1
+    printf '%s\n' "$token" | head -n1 |
       ${pkgs.jq}/bin/jq -Rc --arg n "$name" '{Authorization: ("Bearer " + .), "X-Operator-Name": $n}'
   '';
 in

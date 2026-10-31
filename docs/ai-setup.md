@@ -215,9 +215,12 @@ Claude Code until step 4.
    `nixpkgs/hosts/garage-server.nix`): the `auto-browser-tunnel` launchd agent
    forwards 127.0.0.1:18000 to port 8000 on the `workstation` SSH alias, whose
    host key must already be in known_hosts. `ai-mcp-add` registers the
-   `auto-browser` user-scope MCP server; its `headersHelper` reads the agent
-   token with `pass show workstation/auto-browser/agent-token` at connect time,
-   so `pass`, `jq` and a non-prompting gpg-agent must work for Claude Code.
+   `auto-browser` user-scope MCP server; its `headersHelper`,
+   `~/.local/bin/auto-browser-headers`, reads the agent token from `pass` at
+   connect time (a non-prompting gpg-agent must work for Claude Code) and
+   names the calling session in `X-Operator-Name`. `ai-mcp-add` never rewrites
+   an existing entry, so after changing the server definition run
+   `claude mcp remove -s user auto-browser` and `ai-mcp-add` again.
    Tunnel log: `~/Library/Logs/auto-browser-tunnel.log`.
 9. On garage-server, Open Design (`dotfiles.ai.openDesign`, enabled in
    `nixpkgs/hosts/garage-server.nix`): `ai-mcp-add` registers the
