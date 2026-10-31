@@ -230,4 +230,8 @@ Claude Code until step 4.
    workstation's hardening proxy on 7457 for the web UI, which asks for the API
    token (`pass show workstation/open-design/api-token`). The local port must
    stay 7456: the app's preview URLs and origin check use it. Tunnel log:
-   `~/Library/Logs/open-design-tunnel.log`.
+   `~/Library/Logs/open-design-tunnel.log`. A second agent,
+   `open-design-gateway-tunnel`, forwards the other way so Open Design's model
+   calls reach this Mac's gateway: workstation 127.0.0.1:18317 to
+   127.0.0.1:8317 here (gateway key still required). Log:
+   `~/Library/Logs/open-design-gateway-tunnel.log`.

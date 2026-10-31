@@ -47,6 +47,28 @@ in
       };
     };
 
+    # The reverse direction: Open Design's model calls reach this Mac's
+    # CLIProxyAPI gateway at 127.0.0.1:18317 on the workstation (loopback
+    # there; the container sees only that port). The gateway key is still
+    # required. Needs the gateway running here, so pair it with
+    # dotfiles.ai.gateway.server.enable.
+    launchd.agents.open-design-gateway-tunnel = {
+      enable = true;
+      config = {
+        ProgramArguments = [ "/usr/bin/ssh" "-N" "-T" ] ++ ssh ++ [
+          "-o" "ExitOnForwardFailure=yes"
+          "-o" "ServerAliveInterval=15"
+          "-o" "ServerAliveCountMax=3"
+          "-R" "127.0.0.1:18317:127.0.0.1:8317"
+          cfg.host
+        ];
+        RunAtLoad = true;
+        KeepAlive = true;
+        ThrottleInterval = 30;
+        StandardErrorPath = "${home}/Library/Logs/open-design-gateway-tunnel.log";
+      };
+    };
+
     dotfiles.ai.mcp.userServers.open-design = {
       transport = "stdio";
       command = [ "/usr/bin/ssh" "-T" ] ++ ssh ++ [
