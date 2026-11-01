@@ -39,7 +39,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/nix-darwin/hotkeys.nix` - System keyboard shortcuts, captured from the live machine, plus ⌃1…⌃9 and ⌃⌥⌘1…7 to switch to Desktop 1–16
 - `nixpkgs/nix-darwin/jankyborders.nix` - JankyBorders, a border around the focused window (imported by `garage.nix` only)
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
-- `nixpkgs/home-manager/desktop.nix` - Login items and default browser/PDF handlers
+- `nixpkgs/home-manager/desktop.nix` - Login items (`dotfiles.desktop.loginApps`: the shared ones here, host-only ones in `nixpkgs/hosts/<host>.nix`) and default browser/PDF handlers
 - `nixpkgs/home-manager/raycast.nix` - Raycast's login item and one-shot settings import (imported by `garage.nix` only)
 - `nixpkgs/home-manager/hammerspoon.nix` - Hammerspoon config link and the `space` CLI
 - `nixpkgs/home-manager/node-globals.nix` - Global npm tools installed into nvm's default Node

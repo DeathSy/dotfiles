@@ -16,7 +16,7 @@ fi
 
 # Homebrew packages the dotfiles declare: nixpkgs/nix-darwin/configuration.nix
 # (every machine) plus nixpkgs/hosts/<host>.nix. Keep in sync with those files.
-BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-notifier tailscale agent-browser googleworkspace-cli actionlint git-filter-repo semgrep sevenzip openjdk@17 pandoc poppler verapdf"
+BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-notifier tailscale agent-browser googleworkspace-cli actionlint git-filter-repo semgrep sevenzip openjdk@17 act argocd claude-squad codeburn xcodegen pandoc poppler verapdf"
 CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp google-chrome obsidian vorssaint"
 # nixpkgs/hosts/garage.nix
 GARAGE_CASKS="anydesk bruno chatgpt claude discord drawio figma raspberry-pi-imager raycast slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"

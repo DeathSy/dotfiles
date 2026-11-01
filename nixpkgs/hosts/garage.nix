@@ -25,5 +25,11 @@
     "openvpn-connect"
   ];
 
-  home-manager.users.ksotis.imports = [ ../home-manager/raycast.nix ];
+  home-manager.users.ksotis = {
+    imports = [ ../home-manager/raycast.nix ];
+    dotfiles.desktop.loginApps = {
+      claude = "Claude";
+      openvpn-connect = "OpenVPN Connect";
+    };
+  };
 }

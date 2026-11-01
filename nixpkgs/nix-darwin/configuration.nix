@@ -101,6 +101,11 @@
       "semgrep"
       "sevenzip"
       "openjdk@17"
+      "act"
+      "argocd"
+      "claude-squad"
+      "codeburn"
+      "xcodegen"
 
       # Documents and PDF
       "pandoc"
