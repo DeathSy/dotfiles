@@ -74,7 +74,8 @@ in
     ares-cli # LG webOS TV CLI (ares-*)
 
     # Python related
-    python3
+    # PyYAML for scripts that read YAML (e.g. deploy tooling).
+    (python3.withPackages (ps: [ ps.pyyaml ]))
     pipx
     uv
 
