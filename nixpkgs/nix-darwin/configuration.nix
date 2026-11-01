@@ -94,6 +94,8 @@
       # AI tooling (see docs/ai-setup.md)
       "agent-browser"
       "googleworkspace-cli"
+      "claude-squad"
+      "codeburn"
 
       # Dev tooling
       "actionlint"
@@ -103,8 +105,6 @@
       "openjdk@17"
       "act"
       "argocd"
-      "claude-squad"
-      "codeburn"
       "xcodegen"
 
       # Documents and PDF
