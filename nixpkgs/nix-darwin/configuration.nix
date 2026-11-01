@@ -130,7 +130,6 @@
       # existing apps automatically; .pkg casks (cloudflare-warp) reinstall
       # over the existing apps instead.
       "cloudflare-warp"
-      "google-chrome"
       "obsidian"
       "vorssaint"
     ];

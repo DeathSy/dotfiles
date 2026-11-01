@@ -7,6 +7,18 @@
     description = "Apps started at login (launchd agent name -> app). Every Mac gets the ones below; a host module (nixpkgs/hosts/<host>.nix) adds its own, like its casks.";
   };
 
+  options.dotfiles.desktop.browser = lib.mkOption {
+    type = lib.types.str;
+    default = "com.apple.Safari";
+    description = "Bundle id of the default handler for web links and HTML files. A host that installs another browser sets it.";
+  };
+
+  options.dotfiles.desktop.mailClient = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = null;
+    description = "Bundle id of the default mailto: handler, or null to leave it alone.";
+  };
+
   config = {
     dotfiles.desktop.loginApps = {
       cloudflare-warp = "Cloudflare WARP";
@@ -25,8 +37,9 @@
       };
     }) config.dotfiles.desktop.loginApps;
 
-    # Chrome for web and mail, Preview for PDFs. Only touches a handler that
-    # differs; macOS asks once to confirm a browser change.
+    # The host's browser for web links and HTML, its mail client for mailto:,
+    # Preview for PDFs. Only touches a handler that differs; macOS asks once to
+    # confirm a browser change.
     home.activation.default-apps = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       # duti: `-s app scheme` sets a URL scheme; `-s app uti role` a file type.
       set_handler() {
@@ -34,10 +47,10 @@
           run ${pkgs.duti}/bin/duti -s "$@" || true
         fi
       }
-      set_handler com.google.Chrome http
-      set_handler com.google.Chrome https
-      set_handler com.google.Chrome mailto
-      set_handler com.google.Chrome public.html all
+      set_handler ${config.dotfiles.desktop.browser} http
+      set_handler ${config.dotfiles.desktop.browser} https
+      ${lib.optionalString (config.dotfiles.desktop.mailClient != null) "set_handler ${config.dotfiles.desktop.mailClient} mailto"}
+      set_handler ${config.dotfiles.desktop.browser} public.html all
       set_handler com.apple.Preview com.adobe.pdf all
     '';
   };

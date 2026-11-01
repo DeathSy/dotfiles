@@ -9,6 +9,7 @@
     "anydesk"
     "bruno"
     "chatgpt"
+    "google-chrome"
     "claude"
     "discord"
     "drawio"
@@ -27,6 +28,9 @@
 
   home-manager.users.ksotis = {
     imports = [ ../home-manager/raycast.nix ];
+    # Chrome is the browser and mail client here; garage-server uses Safari.
+    dotfiles.desktop.browser = "com.google.Chrome";
+    dotfiles.desktop.mailClient = "com.google.Chrome";
     dotfiles.desktop.loginApps = {
       claude = "Claude";
       openvpn-connect = "OpenVPN Connect";
