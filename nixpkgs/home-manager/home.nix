@@ -5,6 +5,9 @@ let
     hash = "sha256-2nLkitQK54ePm4PrYZ7YmySd4qmju+pzjTpZD6vL7RA=";
   };
 
+  # python3 with PyYAML, for scripts that read YAML (e.g. deploy tooling).
+  python = pkgs.python3.withPackages (ps: [ ps.pyyaml ]);
+
 in
 {
   home.username = "ksotis";
@@ -15,6 +18,9 @@ in
   programs.home-manager.path = "$HOME/.config/nix-darwin/nixpkgs/";
 
 	home.file = {
+		# Homebrew's python3 (pulled in by semgrep) comes earlier on PATH than the
+		# Nix profile; ~/.local/bin comes before both, so this one wins.
+		".local/bin/python3".source = "${python}/bin/python3";
 		".config/ascii_arts" = {
 			source = ../../ascii_arts;
 			recursive = true;
@@ -74,8 +80,7 @@ in
     ares-cli # LG webOS TV CLI (ares-*)
 
     # Python related
-    # PyYAML for scripts that read YAML (e.g. deploy tooling).
-    (python3.withPackages (ps: [ ps.pyyaml ]))
+    python
     pipx
     uv
 
