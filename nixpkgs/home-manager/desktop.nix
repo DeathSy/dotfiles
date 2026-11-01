@@ -1,4 +1,4 @@
-# Desktop session: apps started at login and default browser/PDF handlers.
+# Desktop session: apps started at login and default browser/mail/PDF handlers.
 { config, lib, pkgs, ... }: {
   options.dotfiles.desktop.loginApps = lib.mkOption {
     type = lib.types.attrsOf lib.types.str;
