@@ -185,7 +185,7 @@ Claude Code until step 4.
      `ANTHROPIC_AUTH_TOKEN`)
    - `ai/cliproxyapi-management-secret`: the CLIProxyAPI management key
      (plain text; CLIProxyAPI hashes it on load). Read on garage-server only
-   - `github/personal`: GitHub token (shadcn-ui MCP server, registry token)
+   - `github/personal`: GitHub token (registry token)
 3. Clone the private repo to `~/studio/personal/dotfiles-private`, open a new shell
    and run `rebuild`.
 4. Log in:

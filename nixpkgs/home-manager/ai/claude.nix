@@ -193,10 +193,6 @@ in
   dotfiles.ai.mcp.userServers = {
     figma.url = "https://mcp.figma.com/mcp";
     monday.url = "https://mcp.monday.com/mcp";
-    shadcn-ui = {
-      transport = "stdio";
-      command = [ "sh" "-c" ''exec npx @jpisnice/shadcn-ui-mcp-server --github-api-key "$(pass show github/personal)"'' ];
-    };
   };
 
   # Read-only preflight. If the checkout is missing (e.g. rebuilding before
