@@ -15,6 +15,9 @@
     "ENABLE_CLAUDEAI_MCP_SERVERS": "false"
   },
   "permissions": {
+    "allow": [
+      "mcp__auto-browser__browser_execute_action"
+    ],
     "deny": []
   },
   "skillOverrides": {
