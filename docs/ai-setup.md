@@ -210,6 +210,18 @@ Claude Code until step 4.
 7. Authenticate the HTTP MCP servers (figma, monday, and per-project ones)
    from `/mcp` inside Claude Code, and run `/slack` once to log in to the Slack
    plugin.
+
+   Folder trust: when `dotfiles.ai.claude.trustedRepoOwners` is set (in the
+   private overlay), `claude` is a zsh function that first runs
+   `claude-trust-repo`, which marks the current git repo trusted in
+   `~/.claude.json` if its `origin` is a github.com repo (ssh or https) of one
+   of those owners. Other repos, other hosts, and repos without an origin still
+   get Claude Code's trust question; it's skipped inside Claude Code's own
+   shells. Trust lets a repo's own `.claude` settings, hooks and MCP servers
+   run, and the origin owner is only a hint: a fork of someone else's code
+   under your account, a work org's repo, or an unpacked archive that carries
+   a `.git/config` all pass. Run `claude-trust-repo <dir>` to trust an existing
+   checkout by hand.
 8. On garage-server, Auto Browser (`dotfiles.ai.autoBrowser`, enabled in
    `nixpkgs/hosts/garage-server.nix`): the `auto-browser-tunnel` launchd agent
    forwards 127.0.0.1:18000 to port 8000 on the `workstation` SSH alias, whose

@@ -114,6 +114,36 @@ let
     exit $rc
   '';
 
+  # Marks the git repo holding DIR (default .) trusted in ~/.claude.json when
+  # its origin is a github.com repo of one of claude.trustedRepoOwners, so
+  # Claude Code skips its folder-trust question. Leaves every other repo
+  # alone. Writes a temp copy and renames it, as Claude Code does, so a
+  # running session never reads a half-written file.
+  trustRepo = pkgs.writeShellScriptBin "claude-trust-repo" ''
+    set -u
+    PATH=${lib.makeBinPath [ pkgs.jq pkgs.git pkgs.coreutils ]}:$PATH
+    root=$(git -C "''${1:-.}" rev-parse --show-toplevel 2>/dev/null) || exit 0
+    url=$(git -C "$root" remote get-url origin 2>/dev/null) || exit 0
+    case "$url" in
+      git@github.com:*) path=''${url#git@github.com:} ;;
+      ssh://git@github.com/*) path=''${url#ssh://git@github.com/} ;;
+      https://github.com/*) path=''${url#https://github.com/} ;;
+      *) exit 0 ;;
+    esac
+    owner=$(printf '%s' "''${path%%/*}" | tr '[:upper:]' '[:lower:]')
+    [ -n "$owner" ] || exit 0
+    case " ${lib.toLower (lib.concatStringsSep " " cfg.claude.trustedRepoOwners)} " in
+      *" $owner "*) ;;
+      *) exit 0 ;;
+    esac
+    f=$(realpath "$HOME/.claude.json" 2>/dev/null) || exit 0
+    [ -s "$f" ] || exit 0
+    jq -e --arg r "$root" '.projects[$r].hasTrustDialogAccepted == true' "$f" >/dev/null 2>&1 && exit 0
+    tmp=$(mktemp "$f.trust.XXXXXX") || exit 0
+    if jq --arg r "$root" '.projects[$r] = ((.projects[$r] // {}) + {hasTrustDialogAccepted: true})' "$f" > "$tmp" 2>/dev/null \
+      && [ -s "$tmp" ] && chmod 600 "$tmp" && mv -f "$tmp" "$f"; then :; else rm -f "$tmp"; fi
+  '';
+
   # One-off, idempotent setup that needs logins or network: run by hand
   # after a rebuild (see docs/ai-setup.md). Safe to re-run.
   bootstrap = pkgs.writeShellScriptBin "ai-bootstrap" ''
@@ -188,7 +218,13 @@ in
     ".claude/skills/agent-browser/SKILL.md".source = mkOutOfStoreSymlink agentBrowserSkill;
   };
 
-  home.packages = [ settingsMerge mcpAdd bootstrap ];
+  home.packages = [ settingsMerge mcpAdd bootstrap trustRepo ];
+
+  # Trust your own repos before Claude Code's folder-trust question appears.
+  # Skipped inside Claude Code's own shells (CLAUDECODE set).
+  programs.zsh.initContent = lib.mkIf (cfg.claude.trustedRepoOwners != [ ]) ''
+    claude() { [ -n "''${CLAUDECODE:-}" ] || claude-trust-repo "$PWD" 2>/dev/null; command claude "$@"; }
+  '';
 
   dotfiles.ai.mcp.userServers = {
     figma.url = "https://mcp.figma.com/mcp";
