@@ -115,25 +115,32 @@ let
   '';
 
   # Marks the git repo holding DIR (default .) trusted in ~/.claude.json when
-  # its GitHub origin belongs to one of claude.trustedRepoOwners, so Claude
-  # Code skips its folder-trust question. Leaves every other repo alone.
+  # its origin is a github.com repo of one of claude.trustedRepoOwners, so
+  # Claude Code skips its folder-trust question. Leaves every other repo
+  # alone. Writes a temp copy and renames it, as Claude Code does, so a
+  # running session never reads a half-written file.
   trustRepo = pkgs.writeShellScriptBin "claude-trust-repo" ''
     set -u
     PATH=${lib.makeBinPath [ pkgs.jq pkgs.git pkgs.coreutils ]}:$PATH
     root=$(git -C "''${1:-.}" rev-parse --show-toplevel 2>/dev/null) || exit 0
     url=$(git -C "$root" remote get-url origin 2>/dev/null) || exit 0
-    case "$url" in *github.com[:/]*) ;; *) exit 0 ;; esac
-    owner=''${url#*github.com[:/]}
-    owner=$(printf '%s' "''${owner%%/*}" | tr '[:upper:]' '[:lower:]')
+    case "$url" in
+      git@github.com:*) path=''${url#git@github.com:} ;;
+      ssh://git@github.com/*) path=''${url#ssh://git@github.com/} ;;
+      https://github.com/*) path=''${url#https://github.com/} ;;
+      *) exit 0 ;;
+    esac
+    owner=$(printf '%s' "''${path%%/*}" | tr '[:upper:]' '[:lower:]')
     case " ${lib.toLower (lib.concatStringsSep " " cfg.claude.trustedRepoOwners)} " in
       *" $owner "*) ;;
       *) exit 0 ;;
     esac
-    f=$HOME/.claude.json
-    [ -f "$f" ] || exit 0
+    f=$(realpath "$HOME/.claude.json" 2>/dev/null) || exit 0
+    [ -s "$f" ] || exit 0
     jq -e --arg r "$root" '.projects[$r].hasTrustDialogAccepted == true' "$f" >/dev/null 2>&1 && exit 0
-    new=$(jq --arg r "$root" '.projects[$r] = ((.projects[$r] // {}) + {hasTrustDialogAccepted: true})' "$f") || exit 0
-    [ -n "$new" ] && printf '%s\n' "$new" > "$f"
+    tmp=$(mktemp "$f.trust.XXXXXX") || exit 0
+    if jq --arg r "$root" '.projects[$r] = ((.projects[$r] // {}) + {hasTrustDialogAccepted: true})' "$f" > "$tmp" 2>/dev/null \
+      && [ -s "$tmp" ] && chmod 600 "$tmp" && mv -f "$tmp" "$f"; then :; else rm -f "$tmp"; fi
   '';
 
   # One-off, idempotent setup that needs logins or network: run by hand
@@ -213,8 +220,9 @@ in
   home.packages = [ settingsMerge mcpAdd bootstrap trustRepo ];
 
   # Trust your own repos before Claude Code's folder-trust question appears.
+  # Skipped inside Claude Code's own shells (CLAUDECODE set).
   programs.zsh.initContent = lib.mkIf (cfg.claude.trustedRepoOwners != [ ]) ''
-    claude() { claude-trust-repo "$PWD" 2>/dev/null; command claude "$@"; }
+    claude() { [ -n "''${CLAUDECODE:-}" ] || claude-trust-repo "$PWD" 2>/dev/null; command claude "$@"; }
   '';
 
   dotfiles.ai.mcp.userServers = {

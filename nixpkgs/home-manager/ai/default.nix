@@ -69,7 +69,7 @@ in
     };
 
     claude.trustedRepoOwners = mkOption {
-      type = types.listOf types.str;
+      type = types.listOf (types.strMatching "[A-Za-z0-9][A-Za-z0-9-]*");
       default = [ ];
       example = [ "octocat" ];
       description = "GitHub owners whose repos `claude` marks trusted before it starts (claude-trust-repo), so Claude Code doesn't ask about folder trust. Empty turns it off.";
