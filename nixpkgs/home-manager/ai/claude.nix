@@ -131,6 +131,7 @@ let
       *) exit 0 ;;
     esac
     owner=$(printf '%s' "''${path%%/*}" | tr '[:upper:]' '[:lower:]')
+    [ -n "$owner" ] || exit 0
     case " ${lib.toLower (lib.concatStringsSep " " cfg.claude.trustedRepoOwners)} " in
       *" $owner "*) ;;
       *) exit 0 ;;
