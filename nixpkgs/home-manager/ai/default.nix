@@ -68,6 +68,13 @@ in
       description = "Plugins ai-bootstrap installs in local scope for one project.";
     };
 
+    claude.trustedRepoOwners = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = [ "octocat" ];
+      description = "GitHub owners whose repos `claude` marks trusted before it starts (claude-trust-repo), so Claude Code doesn't ask about folder trust. Empty turns it off.";
+    };
+
     mcp.userServers = mkOption {
       type = types.attrsOf (types.submodule { options = mcpServer; });
       default = { };

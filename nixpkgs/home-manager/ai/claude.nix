@@ -114,6 +114,28 @@ let
     exit $rc
   '';
 
+  # Marks the git repo holding DIR (default .) trusted in ~/.claude.json when
+  # its GitHub origin belongs to one of claude.trustedRepoOwners, so Claude
+  # Code skips its folder-trust question. Leaves every other repo alone.
+  trustRepo = pkgs.writeShellScriptBin "claude-trust-repo" ''
+    set -u
+    PATH=${lib.makeBinPath [ pkgs.jq pkgs.git pkgs.coreutils ]}:$PATH
+    root=$(git -C "''${1:-.}" rev-parse --show-toplevel 2>/dev/null) || exit 0
+    url=$(git -C "$root" remote get-url origin 2>/dev/null) || exit 0
+    case "$url" in *github.com[:/]*) ;; *) exit 0 ;; esac
+    owner=''${url#*github.com[:/]}
+    owner=$(printf '%s' "''${owner%%/*}" | tr '[:upper:]' '[:lower:]')
+    case " ${lib.toLower (lib.concatStringsSep " " cfg.claude.trustedRepoOwners)} " in
+      *" $owner "*) ;;
+      *) exit 0 ;;
+    esac
+    f=$HOME/.claude.json
+    [ -f "$f" ] || exit 0
+    jq -e --arg r "$root" '.projects[$r].hasTrustDialogAccepted == true' "$f" >/dev/null 2>&1 && exit 0
+    new=$(jq --arg r "$root" '.projects[$r] = ((.projects[$r] // {}) + {hasTrustDialogAccepted: true})' "$f") || exit 0
+    [ -n "$new" ] && printf '%s\n' "$new" > "$f"
+  '';
+
   # One-off, idempotent setup that needs logins or network: run by hand
   # after a rebuild (see docs/ai-setup.md). Safe to re-run.
   bootstrap = pkgs.writeShellScriptBin "ai-bootstrap" ''
@@ -188,7 +210,12 @@ in
     ".claude/skills/agent-browser/SKILL.md".source = mkOutOfStoreSymlink agentBrowserSkill;
   };
 
-  home.packages = [ settingsMerge mcpAdd bootstrap ];
+  home.packages = [ settingsMerge mcpAdd bootstrap trustRepo ];
+
+  # Trust your own repos before Claude Code's folder-trust question appears.
+  programs.zsh.initContent = lib.mkIf (cfg.claude.trustedRepoOwners != [ ]) ''
+    claude() { claude-trust-repo "$PWD" 2>/dev/null; command claude "$@"; }
+  '';
 
   dotfiles.ai.mcp.userServers = {
     figma.url = "https://mcp.figma.com/mcp";
