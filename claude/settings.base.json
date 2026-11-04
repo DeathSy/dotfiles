@@ -74,7 +74,8 @@
     "swift-lsp@claude-plugins-official": true,
     "slack@claude-plugins-official": true,
     "codex@openai-codex": false,
-    "typesafe@typesafe-ai": true
+    "typesafe@typesafe-ai": true,
+    "drawio@drawio": true
   },
   "extraKnownMarketplaces": {
     "ui-ux-pro-max-skill": {
@@ -93,6 +94,12 @@
       "source": {
         "source": "github",
         "repo": "typesafe-ai/skills"
+      }
+    },
+    "drawio": {
+      "source": {
+        "source": "github",
+        "repo": "jgraph/drawio-mcp"
       }
     }
   },
