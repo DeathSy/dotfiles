@@ -74,8 +74,7 @@ off, claude.ai MCP servers off), `permissions.deny`, `skillOverrides`,
 
 With the gateway enabled (every host) it also manages `env.ANTHROPIC_BASE_URL`,
 `env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` and
-`env.ANTHROPIC_AUTH_TOKEN`; the private overlay adds `model` and
-`pluginConfigs`.
+`env.ANTHROPIC_AUTH_TOKEN`; the private overlay adds `model`.
 
 The `sol`, `luna` and `astra` agents use model ids that only resolve through
 the CLIProxyAPI gateway.
