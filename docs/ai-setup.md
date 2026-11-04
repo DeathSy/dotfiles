@@ -16,7 +16,7 @@ new Mac.
   only.** One home-manager module that sets the `dotfiles.ai.*` options
   (`nixpkgs/home-manager/ai/default.nix`, `gateway.nix`):
   `gateway.enable`, `gateway.tunnel.host` (the gateway server's SSH alias),
-  `claude.settingsOverlay` (gateway model id, internal plugin config),
+  `claude.settingsOverlay` (gateway model id, internal settings),
   `claude.projectPlugins`, `mcp.projectServers`, `codex.trustedProjects`. All
   options default to empty, so the public repo works without it.
 - **Secrets** stay in `pass` and are read at activation.
