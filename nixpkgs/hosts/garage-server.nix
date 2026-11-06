@@ -1,7 +1,7 @@
 # garage-server: the server Mac. Added on top of the shared config in flake.nix.
 # It runs the CLIProxyAPI gateway and Headroom for every Mac; the others reach
 # the gateway through an SSH tunnel (docs/ai-setup.md). Its agents also get
-# Auto Browser and Open Design from the workstation.
+# Auto Browser, Open Design and the local LLM server from the workstation.
 { ... }: {
   networking.computerName = "ksotis-server";
 
@@ -14,5 +14,6 @@
     dotfiles.ai.gateway.server.enable = true;
     dotfiles.ai.autoBrowser.enable = true;
     dotfiles.ai.openDesign.enable = true;
+    dotfiles.ai.localLlm.enable = true;
   };
 }

@@ -34,6 +34,7 @@ in
     ./gateway.nix
     ./auto-browser.nix
     ./open-design.nix
+    ./local-llm.nix
   ];
 
   options.dotfiles.ai = with lib; {
