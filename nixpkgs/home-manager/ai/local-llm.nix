@@ -1,14 +1,13 @@
 { config, lib, ... }:
 
-# Local LLM: a llama.cpp server (llama-server, OpenAI-compatible API) that a
-# research session runs by hand on the workstation, bound to its loopback with
-# no API key. This tunnels it to the same port here, on this Mac's loopback
-# only. When the server isn't running, the tunnel stays up and requests fail
-# until it starts again.
+# Local LLM: a llama.cpp server (llama-server, OpenAI-compatible API) on the
+# workstation's loopback, port 18083, with no API key. This tunnels it to the
+# same port on this Mac's loopback only. While the server is down the tunnel
+# stays up: ssh accepts each connection and then closes it, so clients see a
+# reset or an empty reply rather than "connection refused".
 let
   cfg = config.dotfiles.ai.localLlm;
   home = config.home.homeDirectory;
-  port = toString cfg.port;
 in
 {
   options.dotfiles.ai.localLlm = with lib; {
@@ -18,12 +17,6 @@ in
       type = types.str;
       default = "workstation";
       description = "SSH alias of the machine running llama-server (from ~/.ssh/config).";
-    };
-
-    port = mkOption {
-      type = types.port;
-      default = 18083;
-      description = "llama-server's loopback port on the workstation, and the local port here.";
     };
   };
 
@@ -42,7 +35,7 @@ in
           "-o" "ServerAliveCountMax=3"
           "-o" "ControlMaster=no"
           "-o" "ControlPath=none"
-          "-L" "127.0.0.1:${port}:127.0.0.1:${port}"
+          "-L" "127.0.0.1:18083:127.0.0.1:18083"
           cfg.host
         ];
         RunAtLoad = true;

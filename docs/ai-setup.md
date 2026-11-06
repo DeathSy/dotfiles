@@ -249,3 +249,9 @@ Claude Code until step 4.
    listener until its sshd notices (hours without `ClientAliveInterval`), and
    the agent retries every 30 s until then. Log:
    `~/Library/Logs/open-design-gateway-tunnel.log`.
+10. On garage-server, the local LLM server (`dotfiles.ai.localLlm`, enabled in
+   `nixpkgs/hosts/garage-server.nix`): the `local-llm-tunnel` launchd agent
+   forwards 127.0.0.1:18083 to a llama.cpp `llama-server` on the same port of
+   the `workstation` alias's loopback (host key in known_hosts). The server has
+   no API key and is started by hand there; while it's down, requests get a
+   reset or empty reply. Tunnel log: `~/Library/Logs/local-llm-tunnel.log`.
