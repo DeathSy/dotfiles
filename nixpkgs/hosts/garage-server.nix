@@ -7,9 +7,9 @@
 
   # Never sleep, lid closed or not: other Macs reach this one over Tailscale.
   # Keep-awake apps (Vorssaint) flip this same switch off when they quit or
-  # are toggled, so a root daemon puts it back as soon as the power settings
-  # file changes (and every minute as a backstop), noting each fix and any
-  # error in /var/log/never-sleep.log.
+  # are toggled, so a root daemon puts it back when the power settings file
+  # changes (best effort: launchd may take a moment) and every minute as a
+  # backstop, noting each fix and any error in /var/log/never-sleep.log.
   system.activationScripts.postActivation.text = ''
     pmset -a disablesleep 1
   '';
@@ -21,6 +21,7 @@
     WatchPaths = [ "/Library/Preferences/com.apple.PowerManagement.plist" ];
     RunAtLoad = true;
     StartInterval = 60;
+    ThrottleInterval = 0;
     StandardErrorPath = "/var/log/never-sleep.log";
   };
 
