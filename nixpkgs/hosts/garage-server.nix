@@ -5,6 +5,22 @@
 { ... }: {
   networking.computerName = "ksotis-server";
 
+  # Never sleep, lid closed or not: other Macs reach this one over Tailscale.
+  # Keep-awake apps (Vorssaint) flip this same switch off when they quit or
+  # are toggled, so a root daemon puts it back every minute and notes each
+  # fix in /var/log/never-sleep.log.
+  system.activationScripts.postActivation.text = ''
+    pmset -a disablesleep 1
+  '';
+  launchd.daemons.never-sleep.serviceConfig = {
+    ProgramArguments = [ "/bin/sh" "-c" ''
+      /usr/bin/pmset -g | /usr/bin/grep -Eq '^ *SleepDisabled[[:space:]]+1' ||
+        { /usr/bin/pmset -a disablesleep 1 && echo "$(/bin/date '+%F %T') disablesleep was off; set it back to 1" >> /var/log/never-sleep.log; }
+    '' ];
+    RunAtLoad = true;
+    StartInterval = 60;
+  };
+
   homebrew.brews = [
     { name = "cliproxyapi"; start_service = true; }
   ];
