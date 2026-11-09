@@ -216,6 +216,20 @@ in
     source = mkOutOfStoreSymlink "${cfg.repoPath}/claude/${p}";
   }) linked) // {
     ".claude/skills/agent-browser/SKILL.md".source = mkOutOfStoreSymlink agentBrowserSkill;
+    # Prints {"Authorization": "Bearer <key>"} for the excalidraw server's
+    # headersHelper; the key goes through a pipe, never argv. Until the pass
+    # entry exists the helper fails and the server just doesn't connect.
+    ".local/bin/excalidraw-headers" = {
+      executable = true;
+      text = ''
+        #!/bin/sh
+        set -u +x
+        ${lib.optionalString (passDir != "") "export PASSWORD_STORE_DIR=${lib.escapeShellArg passDir}"}
+        key=$(${config.programs.password-store.package}/bin/pass show personal/excalidraw | head -n1)
+        [ -n "$key" ] || exit 1
+        printf '%s\n' "$key" | ${pkgs.jq}/bin/jq -Rc '{Authorization: ("Bearer " + .)}'
+      '';
+    };
   };
 
   home.packages = [ settingsMerge mcpAdd bootstrap trustRepo ];
@@ -229,6 +243,11 @@ in
   dotfiles.ai.mcp.userServers = {
     figma.url = "https://mcp.figma.com/mcp";
     monday.url = "https://mcp.monday.com/mcp";
+    # Excalidraw+ (public beta): the API key comes from pass at connect time.
+    excalidraw = {
+      url = "https://api.excalidraw.com/api/v1/mcp";
+      headersHelper = "${config.home.homeDirectory}/.local/bin/excalidraw-headers";
+    };
   };
 
   # Read-only preflight. If the checkout is missing (e.g. rebuilding before
