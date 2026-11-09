@@ -226,7 +226,9 @@ in
         set -u +x
         ${lib.optionalString (passDir != "") "export PASSWORD_STORE_DIR=${lib.escapeShellArg passDir}"}
         key=$(${config.programs.password-store.package}/bin/pass show personal/excalidraw) || exit 1
-        printf '%s\n' "$key" | head -n1 | ${pkgs.jq}/bin/jq -Rc '{Authorization: ("Bearer " + .)}'
+        key=$(printf '%s\n' "$key" | head -n1)
+        [ -n "$key" ] || exit 1
+        printf '%s\n' "$key" | ${pkgs.jq}/bin/jq -Rc '{Authorization: ("Bearer " + .)}'
       '';
     };
   };
