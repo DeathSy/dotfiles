@@ -185,6 +185,8 @@ Claude Code until step 4.
    - `ai/cliproxyapi-management-secret`: the CLIProxyAPI management key
      (plain text; CLIProxyAPI hashes it on load). Read on garage-server only
    - `github/personal`: GitHub token (registry token)
+   - `personal/excalidraw`: Excalidraw+ API key (optional; until it exists
+     the `excalidraw` MCP server just fails to connect)
 3. Clone the private repo to `~/studio/personal/dotfiles-private`, open a new shell
    and run `rebuild`.
 4. Log in:
@@ -209,7 +211,10 @@ Claude Code until step 4.
    `cliproxyapi-headroom-build`, then `brew services restart cliproxyapi`.
 7. Authenticate the HTTP MCP servers (figma, monday, and per-project ones)
    from `/mcp` inside Claude Code, and run `/slack` once to log in to the Slack
-   plugin.
+   plugin. `excalidraw` needs no login: its `headersHelper`,
+   `~/.local/bin/excalidraw-headers`, sends the key from `pass` at connect
+   time. After changing its definition, run
+   `claude mcp remove -s user excalidraw` and `ai-mcp-add` again.
 
    Folder trust: when `dotfiles.ai.claude.trustedRepoOwners` is set (in the
    private overlay), `claude` is a zsh function that first runs
