@@ -209,9 +209,9 @@ Claude Code until step 4.
    re-run.
 6. On garage-server, build the Headroom plugin for CLIProxyAPI:
    `cliproxyapi-headroom-build`, then `brew services restart cliproxyapi`.
-7. Authenticate the HTTP MCP servers (figma, monday, and per-project ones)
-   from `/mcp` inside Claude Code, and run `/slack` once to log in to the Slack
-   plugin. `excalidraw` needs no login: its `headersHelper`,
+7. Authenticate the HTTP MCP servers (figma, monday, wispr-flow, and
+   per-project ones) from `/mcp` inside Claude Code, and run `/slack` once to
+   log in to the Slack plugin. `excalidraw` needs no login: its `headersHelper`,
    `~/.local/bin/excalidraw-headers`, sends the key from `pass` at connect
    time. After changing its definition, run
    `claude mcp remove -s user excalidraw` and `ai-mcp-add` again.

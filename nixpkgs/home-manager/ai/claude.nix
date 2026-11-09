@@ -244,6 +244,7 @@ in
   dotfiles.ai.mcp.userServers = {
     figma.url = "https://mcp.figma.com/mcp";
     monday.url = "https://mcp.monday.com/mcp";
+    wispr-flow.url = "https://api.wisprflow.ai/connect/mcp";
     # Excalidraw+ (public beta): the API key comes from pass at connect time.
     excalidraw = {
       url = "https://api.excalidraw.com/api/v1/mcp";
