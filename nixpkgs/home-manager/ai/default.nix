@@ -70,7 +70,7 @@ in
     };
 
     claude.extraSkillDirs = mkOption {
-      type = types.attrsOf types.str;
+      type = types.attrsOf (types.strMatching "/.*");
       default = { };
       example = { my-skill = "/path/to/private-repo/claude/skills/my-skill"; };
       description = "Skill folders kept outside this repo (skill name -> absolute path), each linked as ~/.claude/skills/<name> so edits show up in their own repo.";

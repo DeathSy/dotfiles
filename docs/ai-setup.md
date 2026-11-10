@@ -46,6 +46,11 @@ sudo darwin-rebuild switch --flake ~/studio/personal/dotfiles \
   next rebuild stop).
 - Links `~/.claude/skills/agent-browser/SKILL.md` to the skill that ships with
   the Homebrew `agent-browser` CLI.
+- Links each `dotfiles.ai.claude.extraSkillDirs` entry (set in a private
+  overlay) as the whole folder `~/.claude/skills/<name>`, for skills that
+  can't live in this repo. Activation stops if a folder has no `SKILL.md`
+  yet (merge and pull that repo first); a real folder in the way is renamed
+  to `<name>.backup` like the files above.
 - Merges `~/.claude/settings.json`: live file ← `claude/settings.base.json` ←
   `dotfiles.ai.claude.settingsOverlay` ← secrets from `pass`. Keys from the repo win; anything else
   Claude Code wrote stays. The file is kept at mode 600 (it holds the token);

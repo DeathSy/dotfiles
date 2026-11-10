@@ -235,6 +235,13 @@ in
     };
   };
 
+  # An extra skill dir must not shadow a skill this repo or agent-browser links.
+  assertions = lib.mapAttrsToList (name: _: {
+    assertion = builtins.match "[A-Za-z0-9][A-Za-z0-9._-]*" name != null
+      && !(lib.elem name (entries "directory" "skills" ++ [ "agent-browser" ]));
+    message = "dotfiles.ai.claude.extraSkillDirs.${name}: needs a plain name that isn't already a repo or agent-browser skill.";
+  }) cfg.claude.extraSkillDirs;
+
   home.packages = [ settingsMerge mcpAdd bootstrap trustRepo ];
 
   # Trust your own repos before Claude Code's folder-trust question appears.
@@ -264,10 +271,16 @@ in
       errorEcho "${cfg.repoPath}/claude/CLAUDE.md not found: merge and pull ai-setup into that checkout first. ~/.claude left untouched; home-manager activation aborted."
       exit 1
     fi
-    for f in ${lib.escapeShellArgs (linked ++ [ "skills/agent-browser/SKILL.md" ])}; do
+    for d in ${lib.escapeShellArgs (lib.attrValues cfg.claude.extraSkillDirs)}; do
+      if [ ! -e "$d/SKILL.md" ]; then
+        errorEcho "$d/SKILL.md not found (dotfiles.ai.claude.extraSkillDirs): merge and pull that repo first. ~/.claude left untouched; home-manager activation aborted."
+        exit 1
+      fi
+    done
+    for f in ${lib.escapeShellArgs (linked ++ [ "skills/agent-browser/SKILL.md" ] ++ map (n: "skills/${n}") (lib.attrNames cfg.claude.extraSkillDirs))}; do
       p="$HOME/.claude/$f"
       if [ -e "$p" ] && [ ! -L "$p" ]; then
-        warnEcho "~/.claude/$f is a real file, not a link; home-manager will rename it to $f.backup (diff it against the repo copy)"
+        warnEcho "~/.claude/$f is a real file or folder, not a link; home-manager will rename it to $f.backup (diff it against the repo copy, then delete it)"
       fi
     done
   '';

@@ -27,7 +27,7 @@
 
   homebrew.brews = [
     { name = "cliproxyapi"; start_service = true; }
-    "cliclick" # used by the LINE desktop skill
+    "cliclick" # UI automation for a private skill
   ];
 
   home-manager.users.ksotis = {
