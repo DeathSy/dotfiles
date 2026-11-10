@@ -214,7 +214,9 @@ in
 {
   home.file = lib.listToAttrs (map (p: lib.nameValuePair ".claude/${p}" {
     source = mkOutOfStoreSymlink "${cfg.repoPath}/claude/${p}";
-  }) linked) // {
+  }) linked) // lib.mapAttrs' (name: dir: lib.nameValuePair ".claude/skills/${name}" {
+    source = mkOutOfStoreSymlink dir;
+  }) cfg.claude.extraSkillDirs // {
     ".claude/skills/agent-browser/SKILL.md".source = mkOutOfStoreSymlink agentBrowserSkill;
     # Prints {"Authorization": "Bearer <key>"} for the excalidraw server's
     # headersHelper; the key goes through a pipe, never argv. Until the pass

@@ -69,6 +69,13 @@ in
       description = "Plugins ai-bootstrap installs in local scope for one project.";
     };
 
+    claude.extraSkillDirs = mkOption {
+      type = types.attrsOf types.str;
+      default = { };
+      example = { my-skill = "/path/to/private-repo/claude/skills/my-skill"; };
+      description = "Skill folders kept outside this repo (skill name -> absolute path), each linked as ~/.claude/skills/<name> so edits show up in their own repo.";
+    };
+
     claude.trustedRepoOwners = mkOption {
       type = types.listOf (types.strMatching "[A-Za-z0-9][A-Za-z0-9-]*");
       default = [ ];
