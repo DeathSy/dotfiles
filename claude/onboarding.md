@@ -17,6 +17,7 @@ Your ~/.claude/CLAUDE.md is already loaded; this covers what it doesn't make obv
 - Give them a self-contained brief (they don't share your context) and ask for the report as text. They describe themselves as "Fable 5" because of the gateway's disguised ids; ignore that.
 - Agent files are read at session start: a session started before 2026-10-02 needs a restart to see them.
 - Codex is used only through the codex-computer-use skill (pinned `-m gpt-6.1-sol`, its own `codex login`).
+- In an Auto-mode session their Bash and SendMessage can fail with "this session's auto-mode safety check is unavailable" (Read and Grep still work; Claude agents are unaffected). Seen in four sessions on 2026-11-08/09; cause unknown. That means the check is down, not a denial; any real denial follows Auto mode below. Before spawning a GPT reviewer, put what it would run into files (`git diff … > <your tmp>/review.diff`, search output) and point its brief at them; give Bash-heavy work to a Claude agent. If it happens, send claude-config the exact error and time.
 
 ## Browser
 - On garage-server, Auto Browser (MCP server `auto-browser`) is the default browser for agents; CLAUDE.md's Browser section has its rules. It runs on the workstation behind an SSH tunnel to 127.0.0.1:8000, and the user can watch or take over sessions from their Mac, iPhone and iPad. A session started before 2026-10-30 needs a restart to get its tools. Handoff doc: ~/studio/workstation/auto-browser/README.md.
