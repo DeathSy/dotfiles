@@ -230,7 +230,18 @@ garage-hq the reverse tunnel and set `tunnel.host = "garage-hq"`.
    retries every 30 s, see step 9 of [New machine](#new-machine)), then garage.
    On garage-server and garage, `lsof -nP -iTCP:8317 -sTCP:LISTEN` shows
    `ssh`; repeat the model list against 8317 and run one `claude -p` prompt.
-6. Once it has worked for a while, clean up garage-server as in steps 5 and 6
+6. Hand the session coordination over; it is per Mac. The SessionStart hook
+   (`claude/hooks/global-manager-intro.sh`) points each session at the
+   `claude-config` session on its own Mac, SendMessage only reaches sessions
+   on the same Mac, and `~/.claude/session-roster.md` is a local file. Ask
+   the old `claude-config` on garage-server to write its open items into the
+   roster, copy it over (`scp -p ~/.claude/session-roster.md
+   garage-hq:.claude/`), then start a `claude-config` session on garage-hq
+   that takes the roster over, keeping only the sessions that moved. Once the
+   sessions left on garage-server have wound down, close the old one. Skills
+   that drive local apps (the LINE skill, the iMessage channel) need those
+   apps signed in and granted access on garage-hq first.
+7. Once it has worked for a while, clean up garage-server as in steps 5 and 6
    of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel) (`brew uninstall cliproxyapi`, `uv tool uninstall headroom-ai`, then
    archive or delete the old config, logins, Headroom logs and cache), and
    drop the MCP servers it no longer reaches:
