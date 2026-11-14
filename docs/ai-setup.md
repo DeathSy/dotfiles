@@ -91,7 +91,7 @@ hub, **garage-server**, which **garage-hq** is taking over (see
 [Moving the gateway server to garage-hq](#moving-the-gateway-server-to-garage-hq)).
 Both host files import `nixpkgs/nix-darwin/ai-hub.nix`, which declares the
 `cliproxyapi` brew service, sets `dotfiles.ai.gateway.server.enable` and turns
-on the workstation services (steps 8 to 10 of [New machine](#new-machine)),
+on the workstation services (steps 10 to 12 of [New machine](#new-machine)),
 and both import `ai/headroom.nix`. Until the cutover garage-hq's gateway has
 no clients and doesn't open Open Design's reverse tunnel. On a hub a rebuild
 also:
@@ -123,16 +123,15 @@ The private overlay enables the gateway for every host, so it must also set
 `dotfiles.ai.gateway.tunnel.host` to an SSH alias for the server (for example
 `garage-server`); without it the personal Mac's configuration fails to
 evaluate with an assertion naming the option. The server ignores it. The
-alias is only a name: map it to the real host, user and key in
-`~/.ssh/config` (never in this repo), for example:
+Macs log in to each other with Tailscale SSH, so a host's tailnet (MagicDNS)
+name works as the alias when the user name is the same on both Macs. Otherwise
+map the alias to the real host and user in `~/.ssh/config` (never in this
+repo), for example:
 
 ```
 Host garage-server
   HostName <server's tailnet name or address>
   User <user>
-  IdentityFile ~/.ssh/<key>
-  UseKeychain yes
-  AddKeysToAgent yes
 ```
 
 ### Moving the personal Mac to the tunnel
@@ -140,19 +139,20 @@ Host garage-server
 Do these in order; the old local gateway on the personal Mac keeps serving
 Claude Code until step 4.
 
-1. On garage-server, enable Remote Login (System Settings → General → Sharing)
-   with key authentication, ideally reachable only over the tailnet, and add
-   the personal Mac's public key to `~/.ssh/authorized_keys`. Check that the
+1. On garage-server, turn on Tailscale SSH (`tailscale up --ssh`, see step 2
+   of [New machine](#new-machine)); Remote Login and `authorized_keys` aren't
+   needed. The tailnet policy's SSH rule must let the personal Mac log in as
+   the server's user with action `accept`: `check` asks for a browser login
+   from time to time, which the launchd tunnel can't do. Check that the
    server has every OAuth account the personal Mac used
    (`ls ~/.cli-proxy-api/*.json` there; log in with `cliproxyapi --claude-login`
    etc. if one is missing).
-2. On the personal Mac, add the alias, then run `ssh garage-server true` once
-   and accept the host key only if its fingerprint matches the server's
-   (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server). Then
+2. On the personal Mac, add the alias if needed, then run
+   `ssh garage-server true` once to record the host key in `known_hosts`
+   (the tunnel's `/usr/bin/ssh` checks it strictly; the connection runs over
+   the tailnet, which has already authenticated the server). Then
    `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-server true` must
-   succeed without any prompt; the key has to be unencrypted or have its
-   passphrase in the Keychain, since launchd can't ask for it (a key that only
-   lives in gpg-agent also needs an `IdentityAgent` line for the alias).
+   succeed without any prompt.
 3. Test the whole path on a spare port, without touching the old gateway:
    `ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18317:127.0.0.1:8317 garage-server`
    in one terminal, and in another
@@ -193,17 +193,19 @@ the private one), which turn garage-server into a client like garage, give
 garage-hq the reverse tunnel and set `tunnel.host = "garage-hq"`.
 
 1. Set up garage-hq as in [New machine](#new-machine) with
-   `./init.sh garage-hq`, skipping the CLIProxyAPI logins in step 4: its
+   `./init.sh garage-hq`, skipping the CLIProxyAPI logins in step 6: its
    `cliproxyapi` starts with the template config and no accounts. Build the
-   Headroom plugin there with `cliproxyapi-headroom-build` (step 6); don't
-   copy the dylib. Give garage-hq's key access to the `workstation` alias
-   (host key in known_hosts); the `auto-browser-tunnel`, `open-design-tunnel`
+   Headroom plugin there with `cliproxyapi-headroom-build` (step 8); don't
+   copy the dylib. Give garage-hq the `workstation` alias (copy its
+   `~/.ssh/config` block) and a key the workstation accepts, with the host key
+   in known_hosts; the `auto-browser-tunnel`, `open-design-tunnel`
    and `local-llm-tunnel` logs must stay quiet.
-2. Do steps 1 and 2 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel) with garage-hq
-   as the server and both garage and garage-server as clients: Remote Login
-   and their public keys on garage-hq, a `Host garage-hq` alias on each, and
-   `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true` must
-   succeed on each.
+2. Do steps 1 and 2 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
+   with garage-hq as the server and both garage and garage-server as
+   clients: Tailscale SSH on garage-hq (from New machine step 2), an SSH rule
+   that lets both in with `accept`, and on each client `ssh garage-hq true`
+   once, then `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true`
+   without a prompt.
 3. Move the logins. From here until step 5 every Mac but garage-hq is without
    a gateway. Stop garage-server's gateway first, since OAuth refresh tokens
    can rotate and two live copies can invalidate each other: there
@@ -227,7 +229,7 @@ garage-hq the reverse tunnel and set `tunnel.host = "garage-hq"`.
    garage-server (its reverse tunnel stops, freeing the workstation's port, and
    its `cliproxyapi-tunnel` starts on the free 8317), garage-hq (opens the
    reverse tunnel; while the workstation still holds a stale listener it
-   retries every 30 s, see step 9 of [New machine](#new-machine)), then garage.
+   retries every 30 s, see step 11 of [New machine](#new-machine)), then garage.
    On garage-server and garage, `lsof -nP -iTCP:8317 -sTCP:LISTEN` shows
    `ssh`; repeat the model list against 8317 and run one `claude -p` prompt.
 6. Hand the session coordination over; it is per Mac. The SessionStart hook
@@ -259,8 +261,19 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
 
 ## New machine
 
-1. Run `./init.sh` from this repo (installs Nix, Homebrew, nix-darwin).
-2. Restore GPG and `pass`: import the GPG key named in
+1. Clone this repo over HTTPS (there's no SSH key yet) to
+   `~/studio/personal/dotfiles`, the checkout the `~/.claude` links point at:
+   `git clone https://github.com/DeathSy/dotfiles.git ~/studio/personal/dotfiles`.
+   From there run `./init.sh <host>` (`garage`, `garage-server` or
+   `garage-hq`; installs Nix, Homebrew and nix-darwin). This first switch uses
+   the empty `private-stub/`.
+2. Start Tailscale: `sudo brew services start tailscale`, then
+   `tailscale up --ssh --hostname=<host>`. `--ssh` turns on Tailscale SSH,
+   which the other Macs use to log in instead of Remote Login.
+3. `gh auth login`, choosing SSH as the git protocol and letting it generate
+   and upload a key. Then switch the checkout to SSH:
+   `git -C ~/studio/personal/dotfiles remote set-url origin git@github.com:DeathSy/dotfiles.git`.
+4. Restore GPG and `pass`: import the GPG key named in
    `nixpkgs/home-manager/password-store.nix`, then clone the password store to
    `~/.password-store`. Entries used:
    - `ai/cliproxyapi-key`: the CLIProxyAPI client key (also Claude Code's
@@ -270,9 +283,9 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
    - `github/personal`: GitHub token (registry token)
    - `personal/excalidraw`: Excalidraw+ API key (optional; until it exists
      the `excalidraw` MCP server just fails to connect)
-3. Clone the private repo to `~/studio/personal/dotfiles-private`, open a new shell
-   and run `rebuild`.
-4. Log in:
+5. Clone the private repo to `~/studio/personal/dotfiles-private`, open a new
+   shell and run `rebuild`.
+6. Log in:
    - `claude` (first run), and `codex login`
    - On the hub only, the CLIProxyAPI OAuth accounts (garage-hq gets
      garage-server's instead, see
@@ -285,16 +298,16 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
      formula; if an older npm-global copy exists, remove it
      (`npm uninstall -g @googleworkspace/cli`) so the Homebrew one wins on
      `PATH`.
-5. Run `ai-bootstrap`. It installs what Nix and Homebrew don't cover (the
+7. Run `ai-bootstrap`. It installs what Nix and Homebrew don't cover (the
    `claude` native installer, `graphify`, on the hub the Headroom
    server), skills from
    their sources (find-skills, frontend-design, graphify), Claude Code
    marketplaces and plugins, and MCP servers (`ai-mcp-add`: the user-scope
    ones plus `mcp.projectServers`; it never rewrites `~/.claude.json`). It skips anything already present and can be
    re-run.
-6. On the hub, build the Headroom plugin for CLIProxyAPI:
+8. On the hub, build the Headroom plugin for CLIProxyAPI:
    `cliproxyapi-headroom-build`, then `brew services restart cliproxyapi`.
-7. Authenticate the HTTP MCP servers (figma, monday, wispr-flow, and
+9. Authenticate the HTTP MCP servers (figma, monday, wispr-flow, and
    per-project ones) from `/mcp` inside Claude Code, and run `/slack` once to
    log in to the Slack plugin. `excalidraw` needs no login: its `headersHelper`,
    `~/.local/bin/excalidraw-headers`, sends the key from `pass` at connect
@@ -312,7 +325,7 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
    under your account, a work org's repo, or an unpacked archive that carries
    a `.git/config` all pass. Run `claude-trust-repo <dir>` to trust an existing
    checkout by hand.
-8. On the hub, Auto Browser (`dotfiles.ai.autoBrowser`, enabled in
+10. On the hub, Auto Browser (`dotfiles.ai.autoBrowser`, enabled in
    `nixpkgs/nix-darwin/ai-hub.nix`): the `auto-browser-tunnel` launchd agent
    forwards 127.0.0.1:18000 to port 8000 on the `workstation` SSH alias, whose
    host key must already be in known_hosts. `ai-mcp-add` registers the
@@ -323,7 +336,7 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
    an existing entry, so after changing the server definition run
    `claude mcp remove -s user auto-browser` and `ai-mcp-add` again.
    Tunnel log: `~/Library/Logs/auto-browser-tunnel.log`.
-9. On the hub, Open Design (`dotfiles.ai.openDesign`, enabled in
+11. On the hub, Open Design (`dotfiles.ai.openDesign`, enabled in
    `nixpkgs/nix-darwin/ai-hub.nix`): `ai-mcp-add` registers the
    `open-design` stdio MCP server, which runs `open-design/mcp.sh` on the
    `workstation` alias over SSH, so this Mac holds no token for it. The
@@ -341,7 +354,7 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
    listener until its sshd notices (hours without `ClientAliveInterval`), and
    the agent retries every 30 s until then. Log:
    `~/Library/Logs/open-design-gateway-tunnel.log`.
-10. On the hub, the local LLM server (`dotfiles.ai.localLlm`, enabled in
+12. On the hub, the local LLM server (`dotfiles.ai.localLlm`, enabled in
    `nixpkgs/nix-darwin/ai-hub.nix`): the `local-llm-tunnel` launchd agent
    forwards 127.0.0.1:18083 to a llama.cpp `llama-server` on the same port of
    the `workstation` alias's loopback (host key in known_hosts). The server has
