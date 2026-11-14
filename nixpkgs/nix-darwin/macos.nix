@@ -1,6 +1,6 @@
 # macOS system settings, captured from the live machine so a fresh Mac
 # comes up identical after the first switch.
-{ config, ... }:
+{ config, lib, ... }:
 let
   user = config.system.primaryUser;
   home = "/Users/${user}";
@@ -205,7 +205,7 @@ in {
       };
       # Hammerspoon (brew cask, configuration.nix): its own updater is off.
       # Accessibility is still granted by hand.
-      "org.hammerspoon.Hammerspoon" = {
+      "org.hammerspoon.Hammerspoon" = lib.mkIf config.dotfiles.desktopExtras {
         SUAutomaticallyUpdate = false;
         SUEnableAutomaticChecks = false;
         SUSendProfileInfo = false;

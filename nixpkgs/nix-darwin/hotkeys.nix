@@ -4,7 +4,7 @@
 # to Desktop 10–16 (127–133). macOS numbers Desktops across all displays, so
 # Hammerspoon's throw-window-to-Space sends these to reach a later display's
 # Desktops; ⌃⌥⌘ is only for it, not for pressing by hand.
-{ ... }: {
+{ config, lib, ... }: lib.mkIf config.dotfiles.desktopExtras {
   system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
     "15" = { enabled = false; };
     "16" = { enabled = false; };

@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, osConfig, ... }:
 let
   kubectl-forward = pkgs.fetchurl {
     url = "https://raw.githubusercontent.com/ljakimczuk/kubectl-forward/main/bin/kubectl-forward";
@@ -36,7 +36,7 @@ in
 		".config/tmux/ide-sidebar.sh" = { source = ../../tmux/ide-sidebar.sh; executable = true; };
 		".config/tmux/ide-ensure.sh" = { source = ../../tmux/ide-ensure.sh; executable = true; };
 		".config/tmux/ide-toggle.sh" = { source = ../../tmux/ide-toggle.sh; executable = true; };
-		".config/wezterm/wezterm.lua".source = ../../wezterm.lua;
+		".config/wezterm/wezterm.lua" = lib.mkIf osConfig.dotfiles.desktopExtras { source = ../../wezterm.lua; };
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
     ".sleep" = {
       text = ''
@@ -71,7 +71,7 @@ in
 
     # Data storage applications
     postgresql
-    tableplus
+  ] ++ lib.optional osConfig.dotfiles.desktopExtras tableplus ++ [
     redis
 
     # Utilities applications
@@ -142,7 +142,7 @@ in
     };
   };
 
-  home.activation.startup-application = lib.mkAfter ''
+  home.activation.startup-application = lib.mkIf osConfig.dotfiles.desktopExtras (lib.mkAfter ''
   /usr/local/bin/desktoppr ~/studio/personal/dotfiles/wallpapers/Cloudsnight-landscape.jpg
-  '';
+  '');
 }

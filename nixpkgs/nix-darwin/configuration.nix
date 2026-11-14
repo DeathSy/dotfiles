@@ -114,7 +114,11 @@
     ];
 
     # Every machine gets these; nixpkgs/hosts/<host>.nix adds its own casks.
-    casks = [
+    # Without dotfiles.desktopExtras (desktop-extras.nix) the desktop-only
+    # ones are left out.
+    casks = lib.subtractLists (lib.optionals (!config.dotfiles.desktopExtras) [
+      "sf-symbols" "desktoppr" "wezterm" "hammerspoon" "libreoffice" "upscayl" "obsidian" "vorssaint"
+    ]) [
       "sf-symbols"
       "desktoppr"
       "wezterm"

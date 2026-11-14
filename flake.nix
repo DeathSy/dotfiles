@@ -34,6 +34,7 @@
 
       modules = [
 				{ networking = { inherit hostName; }; }
+				./nixpkgs/nix-darwin/desktop-extras.nix
 				./nixpkgs/nix-darwin/configuration.nix
 				./nixpkgs/nix-darwin/macos.nix
 				./nixpkgs/nix-darwin/vorssaint.nix

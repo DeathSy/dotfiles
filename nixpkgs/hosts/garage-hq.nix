@@ -5,6 +5,9 @@
 
   networking.computerName = "ksotis-hq";
 
+  # A server: no desktop-only apps or settings (nixpkgs/nix-darwin/desktop-extras.nix).
+  dotfiles.desktopExtras = false;
+
   home-manager.users.ksotis = {
     imports = [ ../home-manager/ai/headroom.nix ];
 

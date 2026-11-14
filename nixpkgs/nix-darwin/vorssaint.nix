@@ -2,7 +2,7 @@
 # Machine-specific state (bookmarks, display paths, window sizes, onboarding
 # and migration flags, audio device IDs) is left out so the app still onboards
 # on a new Mac.
-{ ... }: {
+{ config, lib, ... }: lib.mkIf config.dotfiles.desktopExtras {
   system.defaults.CustomUserPreferences."com.vorssaint.utils" = {
     "appVolumes" = { "com.google.Chrome" = 0.5; };
     "autoQuitEnabled" = true;

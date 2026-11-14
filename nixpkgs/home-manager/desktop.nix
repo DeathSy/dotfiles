@@ -1,5 +1,5 @@
 # Desktop session: apps started at login and default browser/mail/PDF handlers.
-{ config, lib, pkgs, ... }: {
+{ config, lib, pkgs, osConfig, ... }: {
   options.dotfiles.desktop.loginApps = lib.mkOption {
     type = lib.types.attrsOf lib.types.str;
     default = { };
@@ -22,8 +22,8 @@
   config = {
     dotfiles.desktop.loginApps = {
       cloudflare-warp = "Cloudflare WARP";
-      vorssaint = "Vorssaint";
-      hammerspoon = "Hammerspoon";
+      vorssaint = lib.mkIf osConfig.dotfiles.desktopExtras "Vorssaint";
+      hammerspoon = lib.mkIf osConfig.dotfiles.desktopExtras "Hammerspoon";
     };
 
     # `open -g` keeps them in the background, and the pgrep guard skips apps
