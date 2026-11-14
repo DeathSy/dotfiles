@@ -205,7 +205,10 @@ through Claude Code there.
 1. Set up garage-hq as in [New machine](#new-machine) with
    `./init.sh garage-hq`, skipping the CLIProxyAPI logins in step 6. Its
    `cliproxyapi` is installed but stays stopped. Build the Headroom plugin
-   there with `cliproxyapi-headroom-build` (step 8); don't copy the dylib.
+   there with `cliproxyapi-headroom-build` (step 8); don't copy the dylib,
+   and skip step 8's `brew services restart cliproxyapi` (and the restarts
+   the build command and the rebuild suggest): garage-hq's gateway starts
+   only in step 3.
    Give garage-hq the `workstation` alias (copy its `~/.ssh/config` block) and
    a key the workstation accepts, with the host key in known_hosts; the
    `auto-browser-tunnel`, `open-design-tunnel` and `local-llm-tunnel` logs
@@ -227,8 +230,8 @@ through Claude Code there.
 
    ```sh
    ssh garage-hq 'umask 077; mkdir -p ~/.cli-proxy-api'
-   scp -p ~/.cli-proxy-api/*.json garage-hq:.cli-proxy-api/
-   scp -p /opt/homebrew/etc/cliproxyapi.conf garage-hq:/opt/homebrew/etc/
+   scp -q -p ~/.cli-proxy-api/*.json garage-hq:.cli-proxy-api/
+   scp -q -p /opt/homebrew/etc/cliproxyapi.conf garage-hq:/opt/homebrew/etc/
    ssh garage-hq 'chmod 600 ~/.cli-proxy-api/*.json /opt/homebrew/etc/cliproxyapi.conf'
    ```
 
@@ -278,7 +281,7 @@ it up as a new hub instead):
 1. On garage-hq, `brew services stop cliproxyapi`.
 2. On garage-server, copy the logins back, since garage-hq may have rotated
    them:
-   `scp -p 'garage-hq:.cli-proxy-api/*.json' ~/.cli-proxy-api/ && chmod 600 ~/.cli-proxy-api/*.json`.
+   `scp -q -p 'garage-hq:.cli-proxy-api/*.json' ~/.cli-proxy-api/ && chmod 600 ~/.cli-proxy-api/*.json`.
 3. On garage-hq, set its copies aside so nothing can start them again:
    `a=~/.cli-proxy-api.archive-$(date +%F); mkdir -m 700 "$a" && mv ~/.cli-proxy-api/*.json "$a"/`.
 4. Before step 5: kill the bridge if it runs, then
