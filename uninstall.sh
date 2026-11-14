@@ -20,12 +20,12 @@ BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-
 CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp obsidian vorssaint"
 # nixpkgs/hosts/garage.nix
 GARAGE_CASKS="anydesk bruno chatgpt google-chrome claude discord drawio figma raspberry-pi-imager raycast slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
-# nixpkgs/hosts/garage-server.nix
-GARAGE_SERVER_BREWS="cliproxyapi"
+# nixpkgs/nix-darwin/ai-hub.nix (garage-server and garage-hq)
+AI_HUB_BREWS="cliproxyapi cliclick"
 HOST="$(scutil --get LocalHostName 2>/dev/null)"
 case "$HOST" in
     garage) CASKS="$CASKS $GARAGE_CASKS" ;;
-    garage-server) BREWS="$BREWS $GARAGE_SERVER_BREWS" ;;
+    garage-server|garage-hq) BREWS="$BREWS $AI_HUB_BREWS" ;;
 esac
 
 # Function to check if file/directory exists and report
@@ -340,7 +340,7 @@ if [ "$REMOVE_HOMEBREW" = true ]; then
         # Remove specific packages from our configuration
         echo "Removing Homebrew packages..."
         # Stop brew services first so their launchd plists don't stay behind
-        if [ "$HOST" = "garage-server" ] && brew list cliproxyapi >/dev/null 2>&1; then
+        if case " $BREWS " in *" cliproxyapi "*) true ;; *) false ;; esac && brew list cliproxyapi >/dev/null 2>&1; then
             echo "  Stopping brew service: cliproxyapi"
             brew services stop cliproxyapi 2>/dev/null || true
         fi

@@ -26,6 +26,17 @@ in
       default = "workstation";
       description = "SSH alias of the machine running Open Design (from ~/.ssh/config).";
     };
+
+    gatewayTunnel = mkOption {
+      type = types.bool;
+      default = config.dotfiles.ai.gateway.server.enable;
+      defaultText = literalExpression "config.dotfiles.ai.gateway.server.enable";
+      description = ''
+        Open the reverse tunnel that lets Open Design reach this Mac's gateway
+        (workstation 127.0.0.1:18317). Only one Mac may own that port, so a
+        second gateway server sets this to false until it takes over.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -50,9 +61,9 @@ in
     # The reverse direction: Open Design's model calls reach this Mac's
     # CLIProxyAPI gateway at 127.0.0.1:18317 on the workstation (loopback
     # there; the container sees only that port). The gateway key is still
-    # required. Only the gateway server owns it, so two Macs never compete
-    # for the workstation's port.
-    launchd.agents.open-design-gateway-tunnel = lib.mkIf config.dotfiles.ai.gateway.server.enable {
+    # required. Only the gateway server that sets `gatewayTunnel` owns it, so
+    # two Macs never compete for the workstation's port.
+    launchd.agents.open-design-gateway-tunnel = lib.mkIf cfg.gatewayTunnel {
       enable = true;
       config = {
         ProgramArguments = [ "/usr/bin/ssh" "-N" "-T" ] ++ ssh ++ [

@@ -3,7 +3,8 @@
 # Exit on any error
 set -e
 
-# Host to set up, as named in flake.nix: garage (default) or garage-server
+# Host to set up, as named in flake.nix: garage (default), garage-server or
+# garage-hq, e.g. ./init.sh garage-hq
 HOST="${1:-garage}"
 
 echo "🚀 Starting macOS device setup with Nix and nix-darwin..."

@@ -2,7 +2,7 @@
 
 # CLIProxyAPI gateway: Claude Code (and the sol/luna/astra agents) talk to a
 # CLIProxyAPI on 127.0.0.1:8317 that holds the OAuth logins. It runs only on the
-# host that sets `server.enable` (nixpkgs/hosts/garage-server.nix, which also
+# host that sets `server.enable` (nixpkgs/nix-darwin/ai-hub.nix, which also
 # declares the Homebrew service); there this writes its config on a fresh
 # machine. Every other host forwards the same local port to it over SSH.
 let

@@ -73,6 +73,7 @@
     darwinConfigurations = nixpkgs.lib.genAttrs [
       "garage"
       "garage-server"
+      "garage-hq"
     ] mkHost;
 
 		darwinPackages = self.darwinConfigurations."garage".pkgs;

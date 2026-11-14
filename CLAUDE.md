@@ -17,7 +17,7 @@ This is a Nix-based dotfiles repository for macOS (Darwin) systems using nix-dar
 # Rebuild the system configuration
 nix run nix-darwin -- switch --flake $(pwd)/nixpkgs
 
-# Or rebuild a specific host: garage (main Mac) or garage-server
+# Or rebuild a specific host: garage (main Mac), garage-server or garage-hq
 darwin-rebuild switch --flake .#garage
 ```
 
@@ -31,12 +31,13 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 
 ### Key Configuration Modules
 
-- `flake.nix` - Main flake configuration: the shared (global) module list in `mkHost`, plus the hosts "garage" and "garage-server"
-- `nixpkgs/hosts/<host>.nix` - Per-device layer, added on top of the global one: the host's computerName and its own Homebrew casks/brews (`garage.nix`: main Mac, also the only one with Raycast and JankyBorders; `garage-server.nix`: server Mac, which also runs the CLIProxyAPI gateway and Headroom for the other Macs, see `docs/ai-setup.md`). Homebrew lists merge, so a host module only lists its extras. To add a device type, add a file here and its name to `darwinConfigurations` in `flake.nix`
+- `flake.nix` - Main flake configuration: the shared (global) module list in `mkHost`, plus the hosts "garage", "garage-server" and "garage-hq"
+- `nixpkgs/hosts/<host>.nix` - Per-device layer, added on top of the global one: the host's computerName and its own Homebrew casks/brews (`garage.nix`: main Mac, also the only one with Raycast and JankyBorders; `garage-server.nix`: server Mac, the current AI hub; `garage-hq.nix`: Mac Studio that takes the AI hub over, see `docs/ai-setup.md`). Homebrew lists merge, so a host module only lists its extras. To add a device type, add a file here and its name to `darwinConfigurations` in `flake.nix`
 - `nixpkgs/nix-darwin/configuration.nix` - System-level packages and the Homebrew brews/casks every machine gets
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, power; the host names come from `flake.nix` and `nixpkgs/hosts/`) and Hammerspoon's updater settings, captured from the live machine
 - `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
 - `nixpkgs/nix-darwin/hotkeys.nix` - System keyboard shortcuts, captured from the live machine, plus ⌃1…⌃9 and ⌃⌥⌘1…7 to switch to Desktop 1–16
+- `nixpkgs/nix-darwin/ai-hub.nix` - The AI hub role, imported by a host file: the CLIProxyAPI gateway for every Mac, the workstation tunnels (Auto Browser, Open Design, local LLM) and `never-sleep.nix` (the Mac never sleeps). Headroom (`nixpkgs/home-manager/ai/headroom.nix`) is a separate import in the host file
 - `nixpkgs/nix-darwin/jankyborders.nix` - JankyBorders, a border around the focused window (imported by `garage.nix` only)
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
 - `nixpkgs/home-manager/desktop.nix` - Login items (`dotfiles.desktop.loginApps`: the shared ones here, host-only ones in `nixpkgs/hosts/<host>.nix`) and default browser/mail/PDF handlers (`dotfiles.desktop.browser` is Safari unless the host sets it; garage uses Chrome)

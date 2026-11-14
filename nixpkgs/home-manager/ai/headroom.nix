@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 # Headroom compression proxy for CLIProxyAPI, on the gateway server only.
-# Self-contained: drop its import line in nixpkgs/hosts/garage-server.nix to
+# Self-contained: drop its import line in nixpkgs/nix-darwin/ai-hub.nix to
 # turn it off. Install the server with
 # `uv tool install headroom-ai` (ai-bootstrap does it) and the CLIProxyAPI
 # plugin with `cliproxyapi-headroom-build`.
