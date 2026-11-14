@@ -15,5 +15,8 @@
     # garage-hq") garage-server owns the workstation's port 18317, so this
     # gateway doesn't open Open Design's reverse tunnel.
     dotfiles.ai.openDesign.gatewayTunnel = false;
+    # Nor does Homebrew start its cliproxyapi: step 3 starts it by hand once
+    # garage-server's is stopped, so a rebuild never runs two live copies.
+    dotfiles.ai.gateway.server.startService = false;
   };
 }

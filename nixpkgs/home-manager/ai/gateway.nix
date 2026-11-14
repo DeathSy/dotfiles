@@ -27,6 +27,17 @@ in
 
     server.enable = mkEnableOption "running CLIProxyAPI on this machine instead of tunnelling to it";
 
+    server.startService = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Let Homebrew start the cliproxyapi service on every rebuild
+        (nixpkgs/nix-darwin/ai-hub.nix reads this). A second hub that will
+        hold copied OAuth logins sets it to false until it takes over, so a
+        rebuild never runs two live copies.
+      '';
+    };
+
     managementSecretPassEntry = mkOption {
       type = types.str;
       default = "ai/cliproxyapi-management-secret";
@@ -58,8 +69,13 @@ in
       # CLIProxyAPI rewrites its own config (management API), so only write it
       # from the template when there is none yet.
       home.activation.cliproxyapiConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        # Homebrew installs the formula's example as the config before this
+        # runs (all interfaces, placeholder keys); replace that one too,
+        # keeping it as cliproxyapi.conf.example.
         cliproxyConf=/opt/homebrew/etc/cliproxyapi.conf
-        if [[ -v DRY_RUN ]] || [ -e "$cliproxyConf" ] || [ ! -d /opt/homebrew/etc ]; then
+        if [[ -v DRY_RUN ]] || [ ! -d /opt/homebrew/etc ]; then
+          :
+        elif [ -e "$cliproxyConf" ] && ! ${pkgs.gnugrep}/bin/grep -qE '^[[:space:]]+- "your-api-key-1"$' "$cliproxyConf"; then
           :
         else
           (
@@ -72,7 +88,9 @@ in
             tmp=$(mktemp "$cliproxyConf.XXXXXX") || exit 1
             API_KEY="$apiKey" MGMT="$mgmt" ${pkgs.perl}/bin/perl -pe \
               's/\@HOME\@/$ENV{HOME}/g; s/\@API_KEY\@/$ENV{API_KEY}/g; s/\@MANAGEMENT_SECRET\@/$ENV{MGMT}/g' \
-              ${../../../cliproxyapi/config.yaml} > "$tmp" && chmod 600 "$tmp" && mv "$tmp" "$cliproxyConf" \
+              ${../../../cliproxyapi/config.yaml} > "$tmp" && chmod 600 "$tmp" \
+              && { [ ! -e "$cliproxyConf" ] || mv "$cliproxyConf" "$cliproxyConf.example"; } \
+              && mv "$tmp" "$cliproxyConf" \
               || { rm -f "$tmp"; exit 1; }
             echo "Wrote $cliproxyConf; run: brew services restart cliproxyapi"
           ) || warnEcho "cliproxyapi config not written (needs pass entries ${cfg.keyPassEntry} and ${cfg.managementSecretPassEntry})"

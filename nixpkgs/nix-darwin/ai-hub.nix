@@ -4,11 +4,14 @@
 # so their agents also get Auto Browser, Open Design and the local LLM server
 # from the workstation. It never sleeps. Headroom stays a separate import in
 # the host file (ai/headroom.nix).
-{ ... }: {
+{ config, ... }: {
   imports = [ ./never-sleep.nix ];
 
   homebrew.brews = [
-    { name = "cliproxyapi"; start_service = true; }
+    {
+      name = "cliproxyapi";
+      start_service = config.home-manager.users.ksotis.dotfiles.ai.gateway.server.startService;
+    }
     "cliclick" # UI automation for a private skill
   ];
 

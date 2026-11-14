@@ -29,8 +29,8 @@ in
 
     gatewayTunnel = mkOption {
       type = types.bool;
-      default = config.dotfiles.ai.gateway.server.enable;
-      defaultText = literalExpression "config.dotfiles.ai.gateway.server.enable";
+      default = config.dotfiles.ai.gateway.enable && config.dotfiles.ai.gateway.server.enable;
+      defaultText = literalExpression "config.dotfiles.ai.gateway.enable && config.dotfiles.ai.gateway.server.enable";
       description = ''
         Open the reverse tunnel that lets Open Design reach this Mac's gateway
         (workstation 127.0.0.1:18317). Only one Mac may own that port, so a

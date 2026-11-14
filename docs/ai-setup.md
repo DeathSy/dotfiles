@@ -90,15 +90,18 @@ The gateway (CLIProxyAPI with the OAuth logins, plus Headroom) runs on the AI
 hub, **garage-server**, which **garage-hq** is taking over (see
 [Moving the gateway server to garage-hq](#moving-the-gateway-server-to-garage-hq)).
 Both host files import `nixpkgs/nix-darwin/ai-hub.nix`, which declares the
-`cliproxyapi` brew service, sets `dotfiles.ai.gateway.server.enable` and turns
-on the workstation services (steps 10 to 12 of [New machine](#new-machine)),
+`cliproxyapi` brew service (started on every rebuild unless
+`dotfiles.ai.gateway.server.startService` is off), sets
+`dotfiles.ai.gateway.server.enable` and turns on the workstation services (steps 10 to 12 of [New machine](#new-machine)),
 and both import `ai/headroom.nix`. Until the cutover garage-hq's gateway has
-no clients and doesn't open Open Design's reverse tunnel. On a hub a rebuild
+no clients, doesn't open Open Design's reverse tunnel and isn't started by
+Homebrew. On a hub a rebuild
 also:
 
 - writes `/opt/homebrew/etc/cliproxyapi.conf` from `cliproxyapi/config.yaml`
-  (client key and management key from `pass`), only if the file doesn't exist
-  yet (CLIProxyAPI rewrites it itself). The template binds the proxy to
+  (client key and management key from `pass`, mode 600), only if the file
+  doesn't exist yet or is still the example Homebrew installs (kept as
+  `cliproxyapi.conf.example`); CLIProxyAPI rewrites it itself. The template binds the proxy to
   `127.0.0.1`; an existing config keeps its own `host`.
 - runs the Headroom proxy as the `ai.headroom.proxy` LaunchAgent, adds
   the Headroom server to `ai-bootstrap` and installs
@@ -139,14 +142,16 @@ Host garage-server
 Do these in order; the old local gateway on the personal Mac keeps serving
 Claude Code until step 4.
 
-1. On garage-server, turn on Tailscale SSH (`tailscale up --ssh`, see step 2
+1. On garage-server, turn on Tailscale SSH (`sudo tailscale up --ssh`, see step 2
    of [New machine](#new-machine)); Remote Login and `authorized_keys` aren't
    needed. The tailnet policy's SSH rule must let the personal Mac log in as
    the server's user with action `accept`: `check` asks for a browser login
    from time to time, which the launchd tunnel can't do. Check that the
    server has every OAuth account the personal Mac used
-   (`ls ~/.cli-proxy-api/*.json` there; log in with `cliproxyapi --claude-login`
-   etc. if one is missing).
+   (the same number of login files as the personal Mac,
+   `ls ~/.cli-proxy-api/*.json | wc -l` on both; the file names hold account
+   emails, so don't list them; log in with `cliproxyapi --claude-login` etc.
+   if one is missing).
 2. On the personal Mac, add the alias if needed, then run
    `ssh garage-server true` once to record the host key in `known_hosts`
    (the tunnel's `/usr/bin/ssh` checks it strictly; the connection runs over
@@ -186,33 +191,39 @@ Claude Code until step 4.
 
 ### Moving the gateway server to garage-hq
 
-garage-hq runs the hub role from its first rebuild, without clients and
-without Open Design's reverse tunnel; garage-server keeps serving every Mac
-until step 5. Step 5 merges the `garage-hq-cutover` branches (this repo and
-the private one), which turn garage-server into a client like garage, give
-garage-hq the reverse tunnel and set `tunnel.host = "garage-hq"`.
+garage-hq runs the hub role from its first rebuild, but without clients,
+without Open Design's reverse tunnel (`openDesign.gatewayTunnel = false`) and
+with its `cliproxyapi` never started by Homebrew
+(`gateway.server.startService = false`), so a rebuild can't run a second live
+copy of the logins. garage-server keeps serving every Mac until step 5. Step 5
+merges the `garage-hq-cutover` branches (this repo and the private one), which
+turn garage-server into a client like garage, drop both garage-hq settings
+and set `tunnel.host = "garage-hq"`. Steps 3 to 5 take the gateway away from
+garage-server and garage, so run them by hand in a plain terminal, not
+through Claude Code there.
 
 1. Set up garage-hq as in [New machine](#new-machine) with
-   `./init.sh garage-hq`, skipping the CLIProxyAPI logins in step 6: its
-   `cliproxyapi` starts with the template config and no accounts. Build the
-   Headroom plugin there with `cliproxyapi-headroom-build` (step 8); don't
-   copy the dylib. Give garage-hq the `workstation` alias (copy its
-   `~/.ssh/config` block) and a key the workstation accepts, with the host key
-   in known_hosts; the `auto-browser-tunnel`, `open-design-tunnel`
-   and `local-llm-tunnel` logs must stay quiet.
+   `./init.sh garage-hq`, skipping the CLIProxyAPI logins in step 6. Its
+   `cliproxyapi` is installed but stays stopped. Build the Headroom plugin
+   there with `cliproxyapi-headroom-build` (step 8); don't copy the dylib.
+   Give garage-hq the `workstation` alias (copy its `~/.ssh/config` block) and
+   a key the workstation accepts, with the host key in known_hosts; the
+   `auto-browser-tunnel`, `open-design-tunnel` and `local-llm-tunnel` logs
+   must stay quiet.
 2. Do steps 1 and 2 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
    with garage-hq as the server and both garage and garage-server as
    clients: Tailscale SSH on garage-hq (from New machine step 2), an SSH rule
    that lets both in with `accept`, and on each client `ssh garage-hq true`
    once, then `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true`
    without a prompt.
-3. Move the logins. From here until step 5 every Mac but garage-hq is without
-   a gateway. Stop garage-server's gateway first, since OAuth refresh tokens
-   can rotate and two live copies can invalidate each other: there
-   `brew services stop cliproxyapi`, and `lsof -nP -iTCP:8317 -sTCP:LISTEN`
-   must show nothing. Don't rebuild garage-server before step 5: Homebrew
-   would start the service again. Run `brew services stop cliproxyapi` on
-   garage-hq too, then on garage-server (never print these files):
+3. Move the logins. From here until step 5 (or the bridge after step 4) every
+   Mac but garage-hq is without a gateway. Stop garage-server's gateway first,
+   since OAuth refresh tokens can rotate and two live copies can invalidate
+   each other: there `brew services stop cliproxyapi`, and
+   `lsof -nP -iTCP:8317 -sTCP:LISTEN` must show nothing. Don't rebuild
+   garage-server before step 5: Homebrew would start the service again. On
+   garage-hq the same `lsof` must show nothing too. Then on garage-server
+   (never print these files):
 
    ```sh
    ssh garage-hq 'umask 077; mkdir -p ~/.cli-proxy-api'
@@ -223,11 +234,21 @@ garage-hq the reverse tunnel and set `tunnel.host = "garage-hq"`.
 
    Then `brew services start cliproxyapi` on garage-hq.
 4. Check garage-hq before moving any client: from garage-server, the
-   spare-port test of step 3 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel) with `garage-hq` as the destination (model
-   list, key from `pass` via stdin), then one `claude -p` prompt on garage-hq.
-5. Merge both `garage-hq-cutover` branches, pull, and `rebuild` in this order:
-   garage-server (its reverse tunnel stops, freeing the workstation's port, and
-   its `cliproxyapi-tunnel` starts on the free 8317), garage-hq (opens the
+   spare-port test of step 3 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
+   with `garage-hq` as the destination (model list, key from `pass` via
+   stdin), then one `claude -p` prompt on garage-hq.
+
+   Optional bridge until step 5: on garage-server run
+   `ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8317:127.0.0.1:8317 garage-hq & echo $! > /tmp/gateway-bridge.pid`.
+   garage-server's Claude Code gets the gateway back, and garage's existing
+   tunnel reaches garage-hq through it.
+5. Merge both `garage-hq-cutover` branches and pull BOTH repos on each Mac.
+   Before each `rebuild`, check that it will point at garage-hq:
+   `nix eval --raw ~/studio/personal/dotfiles#darwinConfigurations.$(scutil --get LocalHostName).config.home-manager.users.ksotis.dotfiles.ai.gateway.tunnel.host --override-input private path:$HOME/studio/personal/dotfiles-private`
+   must print `garage-hq`. Then `rebuild` in this order: garage-server (first
+   `kill "$(cat /tmp/gateway-bridge.pid)"` if you started the bridge; its
+   reverse tunnel stops, freeing the workstation's port, and its
+   `cliproxyapi-tunnel` starts on the free 8317), garage-hq (opens the
    reverse tunnel; while the workstation still holds a stale listener it
    retries every 30 s, see step 11 of [New machine](#new-machine)), then garage.
    On garage-server and garage, `lsof -nP -iTCP:8317 -sTCP:LISTEN` shows
@@ -244,20 +265,28 @@ garage-hq the reverse tunnel and set `tunnel.host = "garage-hq"`.
    that drive local apps (the LINE skill, the iMessage channel) need those
    apps signed in and granted access on garage-hq first.
 7. Once it has worked for a while, clean up garage-server as in steps 5 and 6
-   of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel) (`brew uninstall cliproxyapi`, `uv tool uninstall headroom-ai`, then
+   of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
+   (`brew uninstall cliproxyapi`, `uv tool uninstall headroom-ai`, then
    archive or delete the old config, logins, Headroom logs and cache), and
    drop the MCP servers it no longer reaches:
    `claude mcp remove -s user auto-browser` and
    `claude mcp remove -s user open-design`.
 
-Rollback before step 5: `brew services stop cliproxyapi` on garage-hq, then
-on garage-server copy the logins back, since garage-hq may have rotated them
-(`scp -p 'garage-hq:.cli-proxy-api/*.json' ~/.cli-proxy-api/`), and
-`brew services start cliproxyapi`. After step 5: revert the cutover in both
-repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
-`rebuild` garage-hq, then garage-server, then garage. If garage-server's
-`cliproxyapi` came up while its tunnel still held 8317, run
-`brew services restart cliproxyapi` there.
+Rollback, only until step 7 (after it garage-server has no gateway left; set
+it up as a new hub instead):
+
+1. On garage-hq, `brew services stop cliproxyapi`.
+2. On garage-server, copy the logins back, since garage-hq may have rotated
+   them:
+   `scp -p 'garage-hq:.cli-proxy-api/*.json' ~/.cli-proxy-api/ && chmod 600 ~/.cli-proxy-api/*.json`.
+3. On garage-hq, set its copies aside so nothing can start them again:
+   `a=~/.cli-proxy-api.archive-$(date +%F); mkdir -m 700 "$a" && mv ~/.cli-proxy-api/*.json "$a"/`.
+4. Before step 5: kill the bridge if it runs, then
+   `brew services start cliproxyapi` on garage-server. After step 5: revert
+   the cutover in both repos, pull both on each Mac, and `rebuild` garage-hq,
+   then garage-server, then garage. If garage-server's `cliproxyapi` came up
+   while its tunnel still held 8317, run `brew services restart cliproxyapi`
+   there.
 
 ## New machine
 
@@ -268,7 +297,7 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
    `garage-hq`; installs Nix, Homebrew and nix-darwin). This first switch uses
    the empty `private-stub/`.
 2. Start Tailscale: `sudo brew services start tailscale`, then
-   `tailscale up --ssh --hostname=<host>`. `--ssh` turns on Tailscale SSH,
+   `sudo tailscale up --ssh --hostname=<host>`. `--ssh` turns on Tailscale SSH,
    which the other Macs use to log in instead of Remote Login.
 3. `gh auth login`, choosing SSH as the git protocol and letting it generate
    and upload a key. Then switch the checkout to SSH:
@@ -349,8 +378,8 @@ repos, stop garage-hq's `cliproxyapi`, copy the logins back the same way, and
    calls reach this Mac's gateway: workstation 127.0.0.1:18317 to
    127.0.0.1:8317 here (gateway key still required). Only one Mac may own
    that port, so only a hub with `dotfiles.ai.openDesign.gatewayTunnel` runs
-   it (default: any gateway server; garage-hq sets it to false until the
-   cutover). If the connection dies uncleanly, the workstation keeps the stale
+   it (default: on for a gateway server with the gateway enabled; garage-hq
+   sets it to false until the cutover). If the connection dies uncleanly, the workstation keeps the stale
    listener until its sshd notices (hours without `ClientAliveInterval`), and
    the agent retries every 30 s until then. Log:
    `~/Library/Logs/open-design-gateway-tunnel.log`.

@@ -1,6 +1,7 @@
 # CLIProxyAPI config template (nixpkgs/home-manager/ai/gateway.nix). Activation
-# writes it to /opt/homebrew/etc/cliproxyapi.conf when that file is missing,
-# filling @HOME@, @API_KEY@ and @MANAGEMENT_SECRET@ from pass.
+# writes it to /opt/homebrew/etc/cliproxyapi.conf when that file is missing
+# (or still the formula's example), filling in the home directory, the client
+# key and the management key from pass.
 config-version: 8
 routing:
     strategy: "weighted-round-robin"
