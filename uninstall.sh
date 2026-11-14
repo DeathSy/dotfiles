@@ -20,14 +20,13 @@ BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-
 CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp obsidian vorssaint"
 # nixpkgs/hosts/garage.nix
 GARAGE_CASKS="anydesk bruno chatgpt google-chrome claude discord drawio figma raspberry-pi-imager raycast slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
-# nixpkgs/nix-darwin/ai-hub.nix (garage-server and garage-hq)
+# nixpkgs/nix-darwin/ai-hub.nix (garage-hq)
 AI_HUB_BREWS="cliproxyapi cliclick"
 # nixpkgs/hosts/garage-hq.nix
 GARAGE_HQ_BREWS="herdr"
 HOST="$(scutil --get LocalHostName 2>/dev/null)"
 case "$HOST" in
     garage) CASKS="$CASKS $GARAGE_CASKS" ;;
-    garage-server) BREWS="$BREWS $AI_HUB_BREWS" ;;
     garage-hq) BREWS="$BREWS $AI_HUB_BREWS $GARAGE_HQ_BREWS" ;;
 esac
 

@@ -47,7 +47,7 @@ in
     tunnel.host = mkOption {
       type = types.nullOr types.str;
       default = null;
-      example = "garage-server";
+      example = "garage-hq";
       description = ''
         SSH destination of the gateway server, normally a ~/.ssh/config alias
         (set it in the private overlay). The tunnel forwards 127.0.0.1:8317 to

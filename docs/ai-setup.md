@@ -87,16 +87,13 @@ the CLIProxyAPI gateway.
 ## Gateway hosts
 
 The gateway (CLIProxyAPI with the OAuth logins, plus Headroom) runs on the AI
-hub, **garage-server**, which **garage-hq** is taking over (see
+hub, **garage-hq**, which took it over from garage-server (see
 [Moving the gateway server to garage-hq](#moving-the-gateway-server-to-garage-hq)).
-Both host files import `nixpkgs/nix-darwin/ai-hub.nix`, which declares the
+Its host file imports `nixpkgs/nix-darwin/ai-hub.nix`, which declares the
 `cliproxyapi` brew service (started on every rebuild unless
 `dotfiles.ai.gateway.server.startService` is off), sets
 `dotfiles.ai.gateway.server.enable` and turns on the workstation services (steps 10 to 12 of [New machine](#new-machine)),
-and both import `ai/headroom.nix`. Until the cutover garage-hq's gateway has
-no clients, doesn't open Open Design's reverse tunnel and isn't started by
-Homebrew. On a hub a rebuild
-also:
+and `ai/headroom.nix`. On the hub a rebuild also:
 
 - writes `/opt/homebrew/etc/cliproxyapi.conf` from `cliproxyapi/config.yaml`
   (client key and management key from `pass`, mode 600), only if the file
@@ -109,30 +106,31 @@ also:
   import from the host file (and the `plugins.configs.headroom` block from the
   CLIProxyAPI config).
 
-Every other host (**garage**, the personal Mac) gets no CLIProxyAPI, config,
+Every other host (**garage**, the personal Mac, and **garage-server**, which
+still never sleeps) gets no CLIProxyAPI, config,
 management key, OAuth logins or Headroom; it keeps only the client key from
 `pass`. Instead the `org.nix-community.home.cliproxyapi-tunnel` LaunchAgent
 runs Apple's `/usr/bin/ssh -N -L 127.0.0.1:8317:127.0.0.1:8317 <tunnel.host>`,
 so Claude Code, the sol/luna/astra agents and `settings.json` work the same as
 on the server, the gateway stays bound to the server's `127.0.0.1`, and the
-forward is only reachable from the personal Mac itself. It runs with
+forward is only reachable from that Mac itself. It runs with
 `BatchMode=yes`, `StrictHostKeyChecking=yes`, `ExitOnForwardFailure=yes`, 15 s
 keepalives and no connection sharing; launchd restarts it at most every 30 s.
 Log: `~/Library/Logs/cliproxyapi-tunnel.log`. There is no fallback: while the
-tunnel or the server is down, Claude Code and the GPT agents on the personal
-Mac fail to connect.
+tunnel or the server is down, Claude Code and the GPT agents on that Mac fail
+to connect.
 
 The private overlay enables the gateway for every host, so it must also set
 `dotfiles.ai.gateway.tunnel.host` to an SSH alias for the server (for example
-`garage-server`); without it the personal Mac's configuration fails to
-evaluate with an assertion naming the option. The server ignores it. The
+`garage-hq`); without it a client's configuration fails to evaluate with an
+assertion naming the option. The server ignores it. The
 Macs log in to each other with Tailscale SSH, so a host's tailnet (MagicDNS)
 name works as the alias when the user name is the same on both Macs. Otherwise
 map the alias to the real host and user in `~/.ssh/config` (never in this
 repo), for example:
 
 ```
-Host garage-server
+Host garage-hq
   HostName <server's tailnet name or address>
   User <user>
 ```
@@ -142,7 +140,7 @@ Host garage-server
 Do these in order; the old local gateway on the personal Mac keeps serving
 Claude Code until step 4.
 
-1. On garage-server, turn on Tailscale SSH (`sudo tailscale up --ssh`, see step 2
+1. On garage-hq, turn on Tailscale SSH (`sudo tailscale up --ssh`, see step 2
    of [New machine](#new-machine)); Remote Login and `authorized_keys` aren't
    needed. The tailnet policy's SSH rule must let the personal Mac log in as
    the server's user with action `accept`: `check` asks for a browser login
@@ -153,13 +151,13 @@ Claude Code until step 4.
    emails, so don't list them; log in with `cliproxyapi --claude-login` etc.
    if one is missing).
 2. On the personal Mac, add the alias if needed, then run
-   `ssh garage-server true` once to record the host key in `known_hosts`
+   `ssh garage-hq true` once to record the host key in `known_hosts`
    (the tunnel's `/usr/bin/ssh` checks it strictly; the connection runs over
    the tailnet, which has already authenticated the server). Then
-   `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-server true` must
+   `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true` must
    succeed without any prompt.
 3. Test the whole path on a spare port, without touching the old gateway:
-   `ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18317:127.0.0.1:8317 garage-server`
+   `ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18317:127.0.0.1:8317 garage-hq`
    in one terminal, and in another
    `pass show ai/cliproxyapi-key | sed -n '1s/^/Authorization: Bearer /p' | curl -fsS -H @- http://127.0.0.1:18317/v1/models | jq -r '.data[].id'`
    (the key goes through stdin, not the command line). It must list the
@@ -187,20 +185,21 @@ Claude Code until step 4.
    `~/.cli-proxy-api/` (OAuth logins and the Headroom plugin),
    `~/Library/Logs/headroom/` and `~/.cache/cliproxyapi-headroom/`. Nothing
    removes them automatically, and `uninstall.sh` only removes `cliproxyapi`
-   on garage-server and garage-hq.
+   on garage-hq.
 
 ### Moving the gateway server to garage-hq
 
-garage-hq runs the hub role from its first rebuild, but without clients,
-without Open Design's reverse tunnel (`openDesign.gatewayTunnel = false`) and
-with its `cliproxyapi` never started by Homebrew
-(`gateway.server.startService = false`), so a rebuild can't run a second live
-copy of the logins. garage-server keeps serving every Mac until step 5. Step 5
-merges the `garage-hq-cutover` branches (this repo and the private one), which
-turn garage-server into a client like garage, drop both garage-hq settings
-and set `tunnel.host = "garage-hq"`. Steps 3 to 5 take the gateway away from
-garage-server and garage, so run them by hand in a plain terminal, not
-through Claude Code there.
+garage-hq took the hub over from garage-server in two changes. The first gave
+it the hub role without clients, without Open Design's reverse tunnel
+(`openDesign.gatewayTunnel = false`) and with its `cliproxyapi` never started
+by Homebrew (`gateway.server.startService = false`), so a rebuild couldn't run
+a second live copy of the logins, while garage-server kept serving every Mac.
+The second, merged in step 5 (the `garage-hq-cutover` branches of this repo
+and the private one), turned garage-server into a client like garage, dropped
+both garage-hq settings and set `tunnel.host = "garage-hq"`. Steps 3 to 5
+take the gateway away from garage-server and garage, so they ran by hand in a
+plain terminal, not through Claude Code there. The steps, kept for a
+rollback:
 
 1. Set up garage-hq as in [New machine](#new-machine) with
    `./init.sh garage-hq`, skipping the CLIProxyAPI logins in step 6. Its
@@ -319,8 +318,8 @@ it up as a new hub instead):
    shell and run `rebuild`.
 6. Log in:
    - `claude` (first run), and `codex login`
-   - On the hub only, the CLIProxyAPI OAuth accounts (garage-hq gets
-     garage-server's instead, see
+   - On the hub only, the CLIProxyAPI OAuth accounts (a new hub can take the
+     old one's instead, see
      [Moving the gateway server to garage-hq](#moving-the-gateway-server-to-garage-hq)):
      `cliproxyapi --claude-login`, `cliproxyapi --codex-login` (and any other
      providers you use). The login files land in `~/.cli-proxy-api/*.json`;
@@ -382,8 +381,8 @@ it up as a new hub instead):
    calls reach this Mac's gateway: workstation 127.0.0.1:18317 to
    127.0.0.1:8317 here (gateway key still required). Only one Mac may own
    that port, so only a hub with `dotfiles.ai.openDesign.gatewayTunnel` runs
-   it (default: on for a gateway server with the gateway enabled; garage-hq
-   sets it to false until the cutover). If the connection dies uncleanly, the workstation keeps the stale
+   it (default: on for a gateway server with the gateway enabled; a second
+   one sets it to false). If the connection dies uncleanly, the workstation keeps the stale
    listener until its sshd notices (hours without `ClientAliveInterval`), and
    the agent retries every 30 s until then. Log:
    `~/Library/Logs/open-design-gateway-tunnel.log`.
