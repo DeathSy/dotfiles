@@ -3,8 +3,8 @@
 # Headroom compression proxy for CLIProxyAPI, on the gateway server only.
 # Self-contained: drop its import line in nixpkgs/hosts/<host>.nix to
 # turn it off. Install the server with
-# `uv tool install headroom-ai` (ai-bootstrap does it) and the CLIProxyAPI
-# plugin with `cliproxyapi-headroom-build`.
+# `uv tool install --python 3.13 'headroom-ai[all]'` (ai-bootstrap does it)
+# and the CLIProxyAPI plugin with `cliproxyapi-headroom-build`.
 let
   home = config.home.homeDirectory;
 in
@@ -36,7 +36,10 @@ in
 
   dotfiles.ai.bootstrap = ''
     echo "== Headroom"
-    command -v headroom >/dev/null || try uv tool install headroom-ai
+    # The proxy needs the extras (fastapi and more); a plain headroom-ai
+    # install lacks them, so check the tool's own Python can import them.
+    "$(uv tool dir 2>/dev/null)/headroom-ai/bin/python" -c 'import fastapi' 2>/dev/null \
+      || try uv tool install --reinstall --python 3.13 'headroom-ai[all]'
   '';
 
   # Builds the Headroom plugin for CLIProxyAPI from source and installs it

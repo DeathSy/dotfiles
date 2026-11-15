@@ -331,15 +331,16 @@ it up as a new hub instead):
      (`npm uninstall -g @googleworkspace/cli`) so the Homebrew one wins on
      `PATH`.
 7. Run `ai-bootstrap`. It installs what Nix and Homebrew don't cover (the
-   `claude` native installer, `graphify`, on the hub the Headroom
-   server), skills from
-   their sources (find-skills, frontend-design, graphify), Claude Code
+   `claude` native installer, `graphify`, on the hub the Headroom server
+   with its proxy extras: `uv tool install --python 3.13 'headroom-ai[all]'`,
+   redone when the proxy can't import them), skills from their sources
+   (find-skills, frontend-design, graphify), Claude Code
    marketplaces and plugins, and MCP servers (`ai-mcp-add`: the user-scope
    ones plus `mcp.projectServers`; it never rewrites `~/.claude.json`). It skips anything already present and can be
    re-run.
 8. On the hub, build the Headroom plugin for CLIProxyAPI:
    `cliproxyapi-headroom-build`, then `brew services restart cliproxyapi`.
-9. Authenticate the HTTP MCP servers (figma, monday, wispr-flow, and
+9. Authenticate the HTTP MCP servers (figma, monday, wispr-flow, ticktick, and
    per-project ones) from `/mcp` inside Claude Code, and run `/slack` once to
    log in to the Slack plugin. `excalidraw` needs no login: its `headersHelper`,
    `~/.local/bin/excalidraw-headers`, sends the key from `pass` at connect
