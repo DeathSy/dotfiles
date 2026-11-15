@@ -264,8 +264,8 @@ rollback:
    garage-hq:.claude/`), then start a `claude-config` session on garage-hq
    that takes the roster over, keeping only the sessions that moved. Once the
    sessions left on garage-server have wound down, close the old one. Skills
-   that drive local apps (the LINE skill, the iMessage channel) need those
-   apps signed in and granted access on garage-hq first.
+   that drive local apps (the iMessage channel) need those apps signed in and
+   granted access on garage-hq first.
 7. Once it has worked for a while, clean up garage-server as in steps 5 and 6
    of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
    (`brew uninstall cliproxyapi`, `uv tool uninstall headroom-ai`, then
