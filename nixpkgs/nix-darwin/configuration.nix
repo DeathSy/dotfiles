@@ -81,7 +81,6 @@
       "pinentry"
       "ghostscript"
       "nvm"
-      "sleepwatcher"
       "helm"
       "k6"
       "doctl"

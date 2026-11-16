@@ -16,7 +16,7 @@ fi
 
 # Homebrew packages the dotfiles declare: nixpkgs/nix-darwin/configuration.nix
 # (every machine) plus nixpkgs/hosts/<host>.nix. Keep in sync with those files.
-BREWS="trivy pinentry ghostscript nvm sleepwatcher helm k6 doctl caddy terminal-notifier tailscale agent-browser googleworkspace-cli actionlint git-filter-repo semgrep sevenzip openjdk@17 act argocd codeburn xcodegen pandoc poppler verapdf"
+BREWS="trivy pinentry ghostscript nvm helm k6 doctl caddy terminal-notifier tailscale agent-browser googleworkspace-cli actionlint git-filter-repo semgrep sevenzip openjdk@17 act argocd codeburn xcodegen pandoc poppler verapdf"
 CASKS="sf-symbols desktoppr wezterm codex gcloud-cli android-platform-tools hammerspoon libreoffice upscayl android-commandlinetools cloudflare-warp obsidian vorssaint"
 # nixpkgs/hosts/garage.nix
 GARAGE_CASKS="anydesk bruno chatgpt google-chrome claude discord drawio figma raspberry-pi-imager raycast slack the-unarchiver webex wispr-flow microsoft-teams openvpn-connect"
@@ -246,6 +246,7 @@ if [ "$REMOVE_SYMLINKS" = true ]; then
     user_remove "$HOME/.config/ascii_arts"
     user_remove "$HOME/.config/neofetch"
     user_remove "$HOME/.claude"
+    # sleepwatcher scripts: no longer declared, removed if left over
     user_remove "$HOME/.sleep"
     user_remove "$HOME/.wakeup"
     # garage-hq: herdr config links (nixpkgs/home-manager/herdr.nix) and
@@ -256,7 +257,8 @@ if [ "$REMOVE_SYMLINKS" = true ]; then
     user_remove "$HOME/.local/bin/herdr-core"
     user_remove "$HOME/.local/share/herdr-core"
     
-    # Stop and remove launchd services
+    # Stop and remove launchd services (sleepwatcher: no longer declared,
+    # stopped and removed if left over)
     echo "Checking for sleepwatcher service..."
     if launchctl list | grep -q "sleepwatcher" 2>/dev/null; then
         echo "  Stopping sleepwatcher service..."

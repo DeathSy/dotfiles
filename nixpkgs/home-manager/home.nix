@@ -1,4 +1,4 @@
-{ config, pkgs, lib, osConfig, ... }:
+{ pkgs, lib, osConfig, ... }:
 let
   kubectl-forward = pkgs.fetchurl {
     url = "https://raw.githubusercontent.com/ljakimczuk/kubectl-forward/main/bin/kubectl-forward";
@@ -38,20 +38,6 @@ in
 		".config/tmux/ide-toggle.sh" = { source = ../../tmux/ide-toggle.sh; executable = true; };
 		".config/wezterm/wezterm.lua" = lib.mkIf osConfig.dotfiles.desktopExtras { source = ../../wezterm.lua; };
 		".config/sesh/sesh.toml".source = ../../sesh.toml;
-    ".sleep" = {
-      text = ''
-        #!/bin/bash
-        ${pkgs.podman}/bin/podman machine stop
-      '';
-      executable = true;
-    };
-    ".wakeup" = {
-      text = ''
-        #!/bin/bash
-        ${pkgs.podman}/bin/podman machine start
-      '';
-      executable = true;
-    };
 	};
 
   home.packages = with pkgs; [
@@ -127,20 +113,6 @@ in
       enable = true;
     };
 	};
-
-  launchd.agents.sleepwatcher = {
-    enable = true;
-    config = {
-      ProgramArguments = [
-        "/opt/homebrew/sbin/sleepwatcher"
-        "-V"
-        "-s" "${config.home.homeDirectory}/.sleep"
-        "-w" "${config.home.homeDirectory}/.wakeup"
-      ];
-      RunAtLoad = true;
-      KeepAlive = true;
-    };
-  };
 
   home.activation.startup-application = lib.mkIf osConfig.dotfiles.desktopExtras (lib.mkAfter ''
   /usr/local/bin/desktoppr ~/studio/personal/dotfiles/wallpapers/Cloudsnight-landscape.jpg

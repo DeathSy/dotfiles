@@ -75,7 +75,7 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - **File Manager**: lf (terminal), Finder (GUI)
 
 ### Container & Kubernetes Tools
-- Podman with automatic start/stop on sleep/wake
+- Podman CLI (and `docker` wrapping it), the client for the remote `workstation` connection
 - kubectl, kubectx, k9s, minikube
 - Custom kubectl-forward script from GitHub
 
@@ -86,10 +86,6 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - **Ruby**: cocoapods and bundler
 
 ## System Services
-
-### Automatic Sleep/Wake Management
-- Sleepwatcher daemon stops/starts Podman machine on sleep/wake
-- Scripts: `~/.sleep` and `~/.wakeup`
 
 ### Window Focus (no tiling)
 Hammerspoon (`hammerspoon/init.lua`) moves focus and windows; JankyBorders marks the focused window on garage:
@@ -117,10 +113,3 @@ Some GUI applications may need manual permission grants after installation.
 
 ### Homebrew vs Nix Conflicts  
 System uses both Nix packages and Homebrew casks. Check `configuration.nix` and `nixpkgs/hosts/` for the current split.
-
-### Service Restart
-```bash
-# Restart specific services after config changes
-launchctl unload ~/Library/LaunchAgents/sleepwatcher.plist
-launchctl load ~/Library/LaunchAgents/sleepwatcher.plist
-```
