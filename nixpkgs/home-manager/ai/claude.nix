@@ -21,7 +21,11 @@ let
   overlay = pkgs.writeText "claude-settings-overlay.json" (builtins.toJSON cfg.claude.settingsOverlay);
 
   # Deep-merge live settings.json <- settings.base.json <- settingsOverlay <- secrets from pass.
-  # Keys the repo manages win; everything else Claude Code wrote stays.
+  # Keys the repo manages win; everything else Claude Code wrote stays. jq's
+  # `*` replaces arrays, so `hooks` is merged per event instead: the repo's
+  # entries, then the live ones other tools added (e.g. Moshi). A state file
+  # remembers the repo's entries from the last merge, so one removed from the
+  # repo (or changed) is dropped from the live file instead of kept forever.
   settingsMerge = pkgs.writeShellScriptBin "claude-settings-merge" ''
     set -uo pipefail
     PATH=${lib.makeBinPath [ pkgs.jq pkgs.coreutils config.programs.password-store.package ]}:$PATH
@@ -42,11 +46,23 @@ let
         || fail "jq failed"
     '') cfg.claude.secretEnv)}
 
+    hookState="$HOME/.local/state/claude-settings-merge/managed-hooks.json"
+    managed=$(jq -cs 'reduce .[] as $x ({}; . * $x) | .hooks // {}' \
+      ${src + "/settings.base.json"} ${overlay}) || fail "reading the repo's hooks failed"
+    prev=$(jq -ce 'objects' "$hookState" 2>/dev/null) || prev=$managed
+
     merged=$({
       printf '%s\n' "$live"
       cat ${src + "/settings.base.json"} ${overlay}
       printf '%s' "$secrets"
-    } | jq -s 'reduce .[] as $x ({}; . * $x)') || fail "merge failed"
+    } | jq -s --argjson managed "$managed" --argjson prev "$prev" '
+      (.[0].hooks // {}) as $live
+      | reduce .[] as $x ({}; . * $x)
+      | .hooks = (reduce ($live | keys_unsorted[]) as $e ($managed;
+          ((($prev[$e] // []) + ($managed[$e] // []))) as $ours
+          | .[$e] = (.[$e] // []) + [$live[$e][] | select(. as $h | $ours | any(.[]; . == $h) | not)])
+        | with_entries(select(.value != [])))
+      | if .hooks == {} then del(.hooks) else . end') || fail "merge failed"
 
     # The file can hold secrets: keep it and its backups private.
     umask 077
@@ -59,9 +75,17 @@ let
       return 0
     }
 
+    save_hook_state() { # the repo's hooks of this merge, for the next one
+      local t
+      mkdir -p "''${hookState%/*}" && t=$(mktemp "$hookState.XXXXXX") \
+        && printf '%s\n' "$managed" > "$t" && mv -f "$t" "$hookState" \
+        || { rm -f "''${t:-}"; echo "claude-settings-merge: could not save $hookState" >&2; }
+    }
+
     if [ -e "$target" ] && printf '%s\n' "$merged" | cmp -s - <(jq . "$target"); then
       chmod 600 "$target"
       tidy_backups
+      save_hook_state
       exit 0
     fi
 
@@ -73,6 +97,7 @@ let
     tmp=$(mktemp "$target.XXXXXX") || fail "mktemp failed"
     printf '%s\n' "$merged" > "$tmp" && chmod 600 "$tmp" && mv "$tmp" "$target" || { rm -f "$tmp"; fail "write failed"; }
     tidy_backups
+    save_hook_state
     echo "claude-settings-merge: updated $target"
   '';
 

@@ -59,7 +59,14 @@ sudo darwin-rebuild switch --flake ~/studio/personal/dotfiles \
   changes; backups are mode 600 and only the latest 5 are kept. If
   `jq` or `pass` fails, the file is left alone with a warning. Run
   `claude-settings-merge` to redo it by hand. Removing a key from the base
-  JSON does not remove it from the live file.
+  JSON does not remove it from the live file. `hooks` is merged per event:
+  the repo's entries first, then the live entries other tools added (Moshi
+  adds its own to most events), so a rebuild no longer drops those. The
+  repo's entries of the last merge are kept in
+  `~/.local/state/claude-settings-merge/managed-hooks.json`; an entry that
+  was in there but is no longer in the repo (removed or changed) is dropped
+  from the live file. Repo entries removed before that file first existed
+  aren't recognised and stay; delete them from the live file by hand.
 - Merges `~/.codex/config.toml` the same way (`codex/config.base.toml` ←
   `codex.settings` and `codex.trustedProjects`), backing up to `~/.codex/backups/`. `codex-config-sync`
   redoes it by hand.
