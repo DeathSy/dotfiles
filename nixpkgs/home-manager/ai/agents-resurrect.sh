@@ -18,8 +18,11 @@ prints the plan.
               without --yes)
   -h, --help  show this help
 
-Skipped: terminals that are gone or run anything but a shell, and records
-older than 30 days, whose folder is gone or whose transcript is missing.
+Skipped: terminals that are gone (the line shows the command to resume by
+hand) or run anything but a shell, a conversation recorded in two terminals
+(the newest wins), and records older than 30 days, whose folder is gone or
+whose transcript is missing. Warns about claude terminals with keep off,
+which herdr won't bring back after a reboot (hc keep <t>).
 EOF
 }
 
@@ -47,39 +50,48 @@ shopt -s nullglob
 files=("$dir"/*.json)
 [ ${#files[@]} -gt 0 ] || { echo "agents-resurrect: no recorded agents in $dir"; exit 0; }
 
+line() { printf '%-6s %-8s %s\n' "$1" "$2" "$3"; }
+
 # One row per record, newest first: file, terminal, session id, folder,
-# transcript, updated (epoch), and the terminal's current agent and state.
+# transcript, updated (epoch), created_ms, and the terminal's current agent
+# and state. A field with a control character makes the record unreadable
+# (an empty row), so a row can never split.
 rows=$(for f in "${files[@]}"; do
+  if [[ $f == *[[:cntrl:]]* ]]; then line "?" skip "a record in $dir has an unprintable name" >&2; continue; fi
   jq -r --arg f "$f" --argjson ls "$terminals" '
-    (.terminal // "" | tostring) as $t
+    def clean: tostring | if test("[[:cntrl:]]") then error("control character") else . end;
+    (.terminal // "" | clean) as $t
     | ([$ls.terminals[] | select(.address == $t)][0] // {}) as $term
-    | [$f, $t, (.session_id // "" | tostring),
-       (.cwd // "" | tostring | if test("[[:cntrl:]]") then "" else . end),
-       (.transcript_path // "" | tostring),
+    | [$f, $t, (.session_id // "" | clean), (.cwd // "" | clean),
+       (.transcript_path // "" | clean),
        (.updated // "" | try fromdateiso8601 catch 0 | tostring),
-       ($term.agent // ""), ($term.state // "")]
-    | join("\u001f")' "$f" 2>/dev/null || printf '%s\x1f\x1f\x1f\x1f\x1f0\x1f\x1f\n' "$f"
+       (.created_ms // "" | clean), ($term.agent // "" | clean), ($term.state // "" | clean)]
+    | join("\u001f")' "$f" 2>/dev/null || printf '%s\x1f\x1f\x1f\x1f\x1f0\x1f\x1f\x1f\n' "$f"
 done | sort -t $'\x1f' -k6,6nr)
 
 now=$(date +%s)
-declare -A seen
+declare -A seen owner
 planned=0 failed=0
-line() { printf '%-6s %-8s %s\n' "$1" "$2" "$3"; }
 drop() { # <file> <terminal> <reason>: report a skipped record, delete it with --prune
   if [ "$prune" = 1 ]; then rm -f "$1"; line "$2" pruned "$3"; else line "$2" skip "$3"; fi
 }
 
-while IFS=$'\x1f' read -r f t sid cwd transcript updated agent state; do
-  if [ -z "$t" ] || [[ ! $sid =~ ^[A-Za-z0-9-]+$ ]] || [ -z "$cwd" ]; then
+while IFS=$'\x1f' read -r f t sid cwd transcript updated created agent state; do
+  [ -n "$f" ] || continue
+  if [[ ! $t =~ ^[A-Za-z0-9_-]+$ ]] || [[ ! $sid =~ ^[A-Za-z0-9-]+$ ]] || [ -z "$cwd" ]; then
     drop "$f" "${t:-?}" "unreadable record $f"; continue
   fi
   # An older record of a terminal already handled (the hook normally deletes those).
   if [ -n "${seen[$t]:-}" ]; then [ "$prune" = 1 ] && rm -f "$f"; continue; fi
   seen[$t]=1
+  # The same conversation recorded in two terminals: the newest record wins.
+  if [ -n "${owner[$sid]:-}" ]; then drop "$f" "$t" "duplicate: $sid is also in ${owner[$sid]}"; continue; fi
+  owner[$sid]=$t
   where=${cwd/#$HOME/\~}
+  cmd="cd $(printf '%q' "$cwd") && claude -r $sid"
 
-  if [ -z "$state" ]; then drop "$f" "$t" "terminal gone (was $where)"; continue; fi
-  if [ "$state" != live ]; then line "$t" skip "terminal $state"; continue; fi
+  if [ -z "$state" ]; then drop "$f" "$t" "terminal gone; to resume by hand: $cmd"; continue; fi
+  if [ "$state" != live ]; then line "$t" skip "terminal $state; to resume by hand: $cmd"; continue; fi
   case ${agent#-} in
     zsh | bash | sh | fish) ;;
     *) line "$t" skip "busy: running ${agent:-an unknown program}"; continue ;;
@@ -91,16 +103,34 @@ while IFS=$'\x1f' read -r f t sid cwd transcript updated agent state; do
     found=("$projects"/*/"$sid".jsonl)
     [ ${#found[@]} -gt 0 ] || { drop "$f" "$t" "stale: transcript of $sid missing"; continue; }
   fi
+  # herdr keeps created_ms when it restores a terminal, so a different one
+  # hints at a new terminal under a reused address. Unverified across a full
+  # core restart, so it's only a note.
+  note=
+  now_created=$(hc get "$t" --json 2>/dev/null | jq -r '.created_ms // empty' 2>/dev/null)
+  if [ -n "$created" ] && [ -n "$now_created" ] && [ "$created" != "$now_created" ]; then
+    note=" (note: $t's created_ms differs from the record; check it's the same terminal)"
+  fi
 
-  cmd="cd $(printf '%q' "$cwd") && claude -r $sid"
   planned=$((planned + 1))
-  if [ "$yes" = 0 ]; then line "$t" resume "$where: claude -r $sid"; continue; fi
+  if [ "$yes" = 0 ]; then line "$t" resume "$where: claude -r $sid$note"; continue; fi
   if err=$(hc send "$t" "$cmd" 2>&1 >/dev/null); then
-    line "$t" resumed "$where: claude -r $sid"
+    line "$t" resumed "$where: claude -r $sid$note"
   else
     failed=$((failed + 1)); line "$t" failed "hc send: $err"
   fi
 done <<<"$rows"
+
+# Terminals with keep off don't come back after a reboot, so neither do
+# their agents.
+nokeep=()
+for t in $(jq -r '.terminals[] | select(.agent == "claude-code") | .address' <<<"$terminals"); do
+  [[ $t =~ ^[A-Za-z0-9_-]+$ ]] || continue
+  [ "$(hc get "$t" --json 2>/dev/null | jq -r '.keep' 2>/dev/null)" = false ] && nokeep+=("$t")
+done
+if [ ${#nokeep[@]} -gt 0 ]; then
+  echo "Warning: keep is off for ${nokeep[*]}: those agents won't come back after a reboot. Run hc keep <t> for each."
+fi
 
 if [ "$yes" = 0 ] && [ "$planned" -gt 0 ]; then
   echo "Dry run: nothing typed. Run agents-resurrect --yes to resume $planned agent(s)."
