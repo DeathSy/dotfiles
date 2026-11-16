@@ -7,6 +7,8 @@ in {
     (
       # HM enables nounset; nvm is not safe under it. Keep this local.
       set +u
+      # nvm needs curl, tar and awk from macOS.
+      export PATH="$PATH:/usr/bin:/bin:/usr/sbin:/sbin"
       export NVM_DIR="$HOME/.nvm"
       if [ ! -s /opt/homebrew/opt/nvm/nvm.sh ]; then
         echo "node-globals: nvm.sh missing; skipping" >&2
