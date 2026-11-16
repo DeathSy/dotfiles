@@ -16,6 +16,7 @@
   },
   "permissions": {
     "allow": [
+      "Bash(gh pr ready:*)",
       "mcp__auto-browser__browser_execute_action"
     ],
     "deny": []
