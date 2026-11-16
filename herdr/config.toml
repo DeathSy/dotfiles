@@ -1,0 +1,62 @@
+onboarding = false
+
+[ui]
+status_indicators = "dots"
+
+[theme]
+name = "catppuccin"
+auto_switch = false
+
+# Ported from ~/.config/tmux/tmux.conf (sesh and session management left out).
+[keys]
+prefix = "ctrl+a"
+reload_config = "prefix+r"
+resize_mode = "prefix+shift+r"
+split_vertical = ["prefix+|", "prefix+v", "prefix+percent"]
+split_horizontal = ["prefix+minus", "prefix+double_quote"]
+zoom = "prefix+m"
+previous_tab = ["prefix+p", "prefix+ctrl+p"]
+next_tab = ["prefix+n", "prefix+ctrl+n"]
+rename_tab = ["prefix+shift+t", "prefix+comma"]
+close_tab = ["prefix+shift+x", "prefix+ampersand"]
+detach = ["prefix+q", "prefix+d"]
+goto = "prefix+shift+a"
+open_notification_target = "prefix+shift+o"
+new_tab = []
+last_pane = ["prefix+a", "prefix+semicolon"]
+
+[[keys.command]]
+key = "prefix+c"
+type = "shell"
+command = "\"${HERDR_BIN_PATH:-herdr}\" tab create --workspace \"$HERDR_ACTIVE_WORKSPACE_ID\" --cwd \"$HOME/workspace\" --focus"
+description = "new tab in ~/workspace"
+
+[[keys.command]]
+key = "prefix+g"
+type = "popup"
+command = "lazygit"
+description = "lazygit"
+width = "80%"
+height = "80%"
+
+[[keys.command]]
+key = "prefix+t"
+type = "popup"
+command = "exec \"${SHELL:-sh}\""
+description = "floating terminal"
+width = "80%"
+height = "80%"
+
+[[keys.command]]
+key = "prefix+o"
+type = "popup"
+command = "lf"
+description = "lf file manager"
+
+[[keys.command]]
+key = "prefix+shift+c"
+type = "popup"
+command = "\"$HOME/.config/herdr/scripts/agent.sh\""
+description = "jump to or spawn claude agent"
+width = "40%"
+height = "40%"

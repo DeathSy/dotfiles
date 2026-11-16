@@ -248,6 +248,13 @@ if [ "$REMOVE_SYMLINKS" = true ]; then
     user_remove "$HOME/.claude"
     user_remove "$HOME/.sleep"
     user_remove "$HOME/.wakeup"
+    # garage-hq: herdr config links (nixpkgs/home-manager/herdr.nix) and
+    # herdr-core, which its own installer put in ~/.local
+    user_remove "$HOME/.config/herdr/config.toml"
+    user_remove "$HOME/.config/herdr/scripts/agent.sh"
+    user_remove "$HOME/.local/bin/hc"
+    user_remove "$HOME/.local/bin/herdr-core"
+    user_remove "$HOME/.local/share/herdr-core"
     
     # Stop and remove launchd services
     echo "Checking for sleepwatcher service..."

@@ -44,6 +44,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/home-manager/desktop.nix` - Login items (`dotfiles.desktop.loginApps`: the shared ones here, host-only ones in `nixpkgs/hosts/<host>.nix`) and default browser/mail/PDF handlers (`dotfiles.desktop.browser` is Safari unless the host sets it; garage uses Chrome)
 - `nixpkgs/home-manager/raycast.nix` - Raycast's login item and one-shot settings import (imported by `garage.nix` only)
 - `nixpkgs/home-manager/hammerspoon.nix` - Hammerspoon config link and the `space` CLI
+- `nixpkgs/home-manager/herdr.nix` - herdr config and agent-popup script links (imported by `garage-hq.nix` only)
 - `nixpkgs/home-manager/node-globals.nix` - Global npm tools installed into nvm's default Node
 - Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
 
@@ -54,6 +55,7 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 - `wezterm.lua` → `~/.config/wezterm/wezterm.lua`
 - `sesh.toml` → `~/.config/sesh/sesh.toml`
 - `hammerspoon/init.lua` → `~/.hammerspoon/init.lua`, linked to the checkout at `~/studio/personal/dotfiles`; Hammerspoon reloads it on save
+- `herdr/config.toml` and `herdr/agent.sh` → `~/.config/herdr/config.toml` and `~/.config/herdr/scripts/agent.sh` (garage-hq only, `nixpkgs/home-manager/herdr.nix`), linked to the checkout so herdr's settings screen can write the config; `prefix+r` reloads it. The keybindings are ported from `tmux.nix`, without sesh and session management
 - `raycast/settings.rayconfig` → imported once on garage on the first rebuild after Raycast has been opened (see `raycast/README.md`)
 
 AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):

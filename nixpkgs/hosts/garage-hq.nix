@@ -9,8 +9,14 @@
   dotfiles.desktopExtras = false;
 
   # Trial of herdr (https://herdr.dev), an agent-native terminal multiplexer,
-  # alongside tmux, which stays the default. No config or skill yet.
+  # alongside tmux, which stays the default. Keybindings: ../home-manager/herdr.nix.
+  # herdr-core (`hc`, the runtime the Herdr phone/desktop app connects to over
+  # SSH) has no formula: it comes from https://releases.herdr.dev/core/install.sh
+  # into ~/.local and updates itself with `hc update`.
   homebrew.brews = [ "herdr" ];
 
-  home-manager.users.ksotis.imports = [ ../home-manager/ai/headroom.nix ];
+  home-manager.users.ksotis.imports = [
+    ../home-manager/ai/headroom.nix
+    ../home-manager/herdr.nix
+  ];
 }
