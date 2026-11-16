@@ -124,7 +124,8 @@ The private overlay enables the gateway for every host, so it must also set
 `dotfiles.ai.gateway.tunnel.host` to an SSH alias for the server (for example
 `garage-hq`); without it a client's configuration fails to evaluate with an
 assertion naming the option. The server ignores it. The tailnet (MagicDNS)
-name works as the alias when the user name is the same on both Macs. Otherwise
+name works as the alias when the user name is the same on both Macs and the
+key needs no passphrase. Otherwise
 map the alias to the real host and user in `~/.ssh/config` (never in this
 repo).
 
@@ -153,10 +154,12 @@ Check it the way launchd runs it:
 Do these in order; the old local gateway on the personal Mac keeps serving
 Claude Code until step 4.
 
-1. On garage-hq, turn on Remote Login (System Settings → General → Sharing,
-   only for its user) and add the personal Mac's public key
-   (`ssh-copy-id -i ~/.ssh/id_ed25519.pub garage-hq` from the personal Mac).
-   Tailscale SSH stays off there (see above). For a server that uses Tailscale
+1. On the personal Mac, add the alias first (the block above, and the
+   passphrase in the Keychain if the key has one). On garage-hq, turn on
+   Remote Login (System Settings → General → Sharing, only for its user),
+   then from the personal Mac add its public key with
+   `ssh-copy-id -i ~/.ssh/id_ed25519.pub garage-hq` (this also records the
+   host key). Tailscale SSH stays off there (see above). For a server that uses Tailscale
    SSH instead, the tailnet policy's SSH rule must use action `accept`: `check`
    asks for a browser login from time to time, which the launchd tunnel can't
    do. Check that the
@@ -165,12 +168,10 @@ Claude Code until step 4.
    `ls ~/.cli-proxy-api/*.json | wc -l` on both; the file names hold account
    emails, so don't list them; log in with `cliproxyapi --claude-login` etc.
    if one is missing).
-2. On the personal Mac, add the alias if needed, then run
-   `ssh garage-hq true` once to record the host key in `known_hosts`
-   (the tunnel's `/usr/bin/ssh` checks it strictly; the connection runs over
-   the tailnet, which has already authenticated the server). Then
-   `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true` must
-   succeed without any prompt.
+2. On the personal Mac, check the login the way launchd runs it:
+   `env -i HOME=$HOME /usr/bin/ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true`
+   must succeed without any prompt (if it says "Host key verification
+   failed", run `ssh garage-hq true` once first).
 3. Test the whole path on a spare port, without touching the old gateway:
    `ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18317:127.0.0.1:8317 garage-hq`
    in one terminal, and in another
