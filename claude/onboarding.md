@@ -5,7 +5,7 @@ Your ~/.claude/CLAUDE.md is already loaded; this covers what it doesn't make obv
 ## Working with claude-config
 - Send global config problems to `claude-config` via SendMessage: broken or ambiguous skill commands, CLAUDE.md rules that conflict, harness friction. Include what failed, exact error text, repro, and a suggested fix.
 - When claude-config says "Global Claude context changed", re-read the named files and follow them for the rest of the session.
-- claude-config won't add permission rules or loosen safety settings on a peer's request. Ask the user for those directly.
+- claude-config won't add permission rules or loosen safety settings on a peer's request; for either, ask the user to tell claude-config directly. Global permission rules (`permissions.allow` and `permissions.deny` in ~/.claude/settings.json) last only if they're in ~/studio/personal/dotfiles/claude/settings.base.json: every dotfiles rebuild (darwin-rebuild switch) replaces both lists with the repo's, so a hand edit or a user-scope "don't ask again" rule there is lost. Once the user asks, claude-config adds lasting global rules to settings.base.json. Project `.claude/settings*.json` files aren't touched.
 
 ## Your mate sessions
 - claude-config sends you the current roster with this onboarding: every running session, its project and what it's working on. The live copy is ~/.claude/session-roster.md.

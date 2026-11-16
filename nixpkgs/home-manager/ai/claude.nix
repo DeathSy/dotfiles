@@ -26,6 +26,8 @@ let
   # entries, then the live ones other tools added (e.g. Moshi). A state file
   # remembers the repo's entries from the last merge, so one removed from the
   # repo (or changed) is dropped from the live file instead of kept forever.
+  # permissions.allow and deny are deliberately repo-owned: replaced, not merged.
+  # Overlays must not set them (user decision 2026-11-16): every lasting rule goes in settings.base.json.
   settingsMerge = pkgs.writeShellScriptBin "claude-settings-merge" ''
     set -uo pipefail
     PATH=${lib.makeBinPath [ pkgs.jq pkgs.coreutils config.programs.password-store.package ]}:$PATH
