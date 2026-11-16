@@ -58,6 +58,7 @@ Configuration files are symlinked from this repo to `~/.config/` via home-manage
 
 AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - `claude/` → `~/.claude/` (CLAUDE.md, onboarding.md, agents, hooks, own skills), linked to the checkout at `~/studio/personal/dotfiles` so edits land in the repo
+- `claude/hooks/`: `global-manager-intro.sh` (SessionStart: points sessions at the claude-config manager), `block-pattern-kill.py` (PreToolUse: refuses pattern kills), `herdr-agent-record.sh` (SessionStart/SessionEnd: records the conversation in each herdr terminal for `agents-resurrect`, see `docs/ai-setup.md`)
 - `claude/settings.base.json` and `codex/config.base.toml` are merged into the live `~/.claude/settings.json` / `~/.codex/config.toml` at activation (those stay real files)
 - All install and merge logic lives here; the private repo `~/studio/personal/dotfiles-private` only sets `dotfiles.ai.*` options (project paths, internal URLs) through the `private` flake input. Secrets come from `pass`. Rebuild with `rebuild`
 

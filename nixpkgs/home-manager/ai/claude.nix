@@ -144,6 +144,13 @@ let
       && [ -s "$tmp" ] && chmod 600 "$tmp" && mv -f "$tmp" "$f"; then :; else rm -f "$tmp"; fi
   '';
 
+  # Resumes the Claude Code conversations herdr terminals ran before a reboot
+  # (records from claude/hooks/herdr-agent-record.sh; see docs/ai-setup.md).
+  agentsResurrect = pkgs.writeShellScriptBin "agents-resurrect" ''
+    PATH=${lib.makeBinPath [ pkgs.jq pkgs.coreutils ]}:$HOME/.local/bin:$PATH
+    ${builtins.readFile ./agents-resurrect.sh}
+  '';
+
   # One-off, idempotent setup that needs logins or network: run by hand
   # after a rebuild (see docs/ai-setup.md). Safe to re-run.
   bootstrap = pkgs.writeShellScriptBin "ai-bootstrap" ''
@@ -242,7 +249,7 @@ in
     message = "dotfiles.ai.claude.extraSkillDirs.${name}: needs a plain name that isn't already a repo or agent-browser skill.";
   }) cfg.claude.extraSkillDirs;
 
-  home.packages = [ settingsMerge mcpAdd bootstrap trustRepo ];
+  home.packages = [ settingsMerge mcpAdd bootstrap trustRepo agentsResurrect ];
 
   # Trust your own repos before Claude Code's folder-trust question appears.
   # Skipped inside Claude Code's own shells (CLAUDECODE set).

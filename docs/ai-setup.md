@@ -307,6 +307,38 @@ it up as a new hub instead):
    while its tunnel still held 8317, run `brew services restart cliproxyapi`
    there.
 
+## Resuming agents in herdr after a reboot
+
+After a reboot or a herdr-core crash, herdr brings each kept terminal back
+under the same address (`t3`) as a plain shell in its last folder; it never
+re-runs the program. To get the Claude Code agents back:
+
+- The `claude/hooks/herdr-agent-record.sh` hook (SessionStart and
+  SessionEnd) records, for each herdr terminal, the conversation its
+  foreground `claude` has open: `~/.claude/herdr-agents/<terminal>.<session
+  id>.json` (folder mode 700, files 600) with the session id, folder and
+  transcript path. A new id after `/clear`, compaction or a fork replaces the
+  terminal's record; quitting `claude` removes it. A reboot fires no
+  SessionEnd, so the record stays exactly then. Outside herdr, for
+  `claude -p`/SDK runs (an agent's `claude -p` inherits its terminal's
+  `HC_TERMINAL_ID`), subagents and anything herdr doesn't report as the
+  terminal's foreground program, it does nothing.
+- `agents-resurrect` reads `hc ls --json` and prints one line per recorded
+  terminal: `resume` for terminals that are back as a shell (zsh, bash, sh,
+  fish), `skip` with the reason otherwise (terminal gone, busy running
+  another program such as `claude-code`, record older than 30 days, folder
+  or transcript gone). `agents-resurrect --yes` types
+  `cd <folder> && claude -r <session id>` into each `resume` terminal with
+  `hc send`. `--prune` deletes the records of gone terminals and stale ones.
+  It fails with a message when `hc` is missing or herdr-core isn't running.
+- `claude -r <id>` from a terminal restores the permission mode the
+  conversation was in, so no mode is recorded or passed.
+- Limits: it resumes the conversation, not a command or turn that was running
+  when the Mac went down (ask the agent to carry on). Only terminals inside
+  herdr on this Mac are covered, and only those herdr keeps across a restart.
+  It doesn't run at login: herdr-core may not be up yet, and typing into
+  shells unprompted would surprise. Run it by hand after a reboot.
+
 ## New machine
 
 1. Clone this repo over HTTPS (there's no SSH key yet) to
