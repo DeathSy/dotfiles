@@ -123,28 +123,43 @@ to connect.
 The private overlay enables the gateway for every host, so it must also set
 `dotfiles.ai.gateway.tunnel.host` to an SSH alias for the server (for example
 `garage-hq`); without it a client's configuration fails to evaluate with an
-assertion naming the option. The server ignores it. The
-Macs log in to each other with Tailscale SSH, so a host's tailnet (MagicDNS)
+assertion naming the option. The server ignores it. The tailnet (MagicDNS)
 name works as the alias when the user name is the same on both Macs. Otherwise
 map the alias to the real host and user in `~/.ssh/config` (never in this
-repo), for example:
+repo).
+
+garage-hq keeps Tailscale SSH **off** (Moshi needs macOS's own SSH server), so
+clients log in with Remote Login and a key in garage-hq's
+`~/.ssh/authorized_keys`. The launchd tunnel can't reach gpg-agent or prompt,
+so a key with a passphrase must have it in the Keychain
+(`ssh-add --apple-use-keychain ~/.ssh/id_ed25519`), and the alias reads it
+from there:
 
 ```
 Host garage-hq
   HostName <server's tailnet name or address>
   User <user>
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+  UseKeychain yes
+  AddKeysToAgent yes
 ```
+
+Check it the way launchd runs it:
+`env -i HOME=$HOME /usr/bin/ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true`.
 
 ### Moving the personal Mac to the tunnel
 
 Do these in order; the old local gateway on the personal Mac keeps serving
 Claude Code until step 4.
 
-1. On garage-hq, turn on Tailscale SSH (`sudo tailscale up --ssh`, see step 2
-   of [New machine](#new-machine)); Remote Login and `authorized_keys` aren't
-   needed. The tailnet policy's SSH rule must let the personal Mac log in as
-   the server's user with action `accept`: `check` asks for a browser login
-   from time to time, which the launchd tunnel can't do. Check that the
+1. On garage-hq, turn on Remote Login (System Settings → General → Sharing,
+   only for its user) and add the personal Mac's public key
+   (`ssh-copy-id -i ~/.ssh/id_ed25519.pub garage-hq` from the personal Mac).
+   Tailscale SSH stays off there (see above). For a server that uses Tailscale
+   SSH instead, the tailnet policy's SSH rule must use action `accept`: `check`
+   asks for a browser login from time to time, which the launchd tunnel can't
+   do. Check that the
    server has every OAuth account the personal Mac used
    (the same number of login files as the personal Mac,
    `ls ~/.cli-proxy-api/*.json | wc -l` on both; the file names hold account
@@ -214,8 +229,9 @@ rollback:
    must stay quiet.
 2. Do steps 1 and 2 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
    with garage-hq as the server and both garage and garage-server as
-   clients: Tailscale SSH on garage-hq (from New machine step 2), an SSH rule
-   that lets both in with `accept`, and on each client `ssh garage-hq true`
+   clients: Remote Login on garage-hq with each client's key in its
+   `authorized_keys` (the move itself ran over Tailscale SSH; garage-hq turned
+   it off afterwards for Moshi), and on each client `ssh garage-hq true`
    once, then `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes garage-hq true`
    without a prompt.
 3. Move the logins. From here until step 5 (or the bridge after step 4) every
@@ -299,8 +315,10 @@ it up as a new hub instead):
    `garage-hq`; installs Nix, Homebrew and nix-darwin). This first switch uses
    the empty `private-stub/`.
 2. Start Tailscale: `sudo brew services start tailscale`, then
-   `sudo tailscale up --ssh --hostname=<host>`. `--ssh` turns on Tailscale SSH,
-   which the other Macs use to log in instead of Remote Login.
+   `sudo tailscale up --ssh --hostname=<host>`. `--ssh` turns on Tailscale SSH
+   for logging in to this Mac over the tailnet. Leave it out (or turn it off
+   later with `sudo tailscale set --ssh=false`) where you want Remote Login
+   on the tailnet instead, as garage-hq does for Moshi.
 3. `gh auth login`, choosing SSH as the git protocol and letting it generate
    and upload a key. Then switch the checkout to SSH:
    `git -C ~/studio/personal/dotfiles remote set-url origin git@github.com:DeathSy/dotfiles.git`.
