@@ -353,8 +353,10 @@ agents back:
   when the Mac went down (ask the agent to carry on). Only terminals inside
   herdr on this Mac are covered, and only those with keep on. herdr keeps
   `created_ms` when it restores a kept terminal in place; if it differs from
-  the record, the plan adds a note (unverified across a full core restart, so
-  it's not a skip). It doesn't run at login: herdr-core may not be up yet, and
+  the record, the address was reused by a new terminal and it's skipped with
+  the command to run by hand (a record without `created_ms` resumes as
+  before). Whether `created_ms` also survives a full core restart is
+  unverified; if it doesn't, every terminal is skipped this way. It doesn't run at login: herdr-core may not be up yet, and
   typing into shells unprompted would surprise. Run it by hand after a reboot.
 
 ## New machine

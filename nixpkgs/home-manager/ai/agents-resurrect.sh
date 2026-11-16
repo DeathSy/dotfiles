@@ -20,9 +20,10 @@ prints the plan.
 
 Skipped: terminals that are gone (the line shows the command to resume by
 hand) or run anything but a shell, a conversation recorded in two terminals
-(the newest wins), and records older than 30 days, whose folder is gone or
-whose transcript is missing. Warns about claude terminals with keep off,
-which herdr won't bring back after a reboot (hc keep <t>).
+(the newest wins), a terminal recreated under the same address (created_ms
+differs; the line shows the command), and records older than 30 days, whose
+folder is gone or whose transcript is missing. Warns about claude terminals
+with keep off, which herdr won't bring back after a reboot (hc keep <t>).
 EOF
 }
 
@@ -103,19 +104,18 @@ while IFS=$'\x1f' read -r f t sid cwd transcript updated created agent state; do
     found=("$projects"/*/"$sid".jsonl)
     [ ${#found[@]} -gt 0 ] || { drop "$f" "$t" "stale: transcript of $sid missing"; continue; }
   fi
-  # herdr keeps created_ms when it restores a terminal, so a different one
-  # hints at a new terminal under a reused address. Unverified across a full
-  # core restart, so it's only a note.
-  note=
+  # herdr keeps created_ms when it restores a terminal in place, so a
+  # different one means a new terminal under a reused address. Only compared
+  # when both are known (older records have none).
   now_created=$(hc get "$t" --json 2>/dev/null | jq -r '.created_ms // empty' 2>/dev/null)
   if [ -n "$created" ] && [ -n "$now_created" ] && [ "$created" != "$now_created" ]; then
-    note=" (note: $t's created_ms differs from the record; check it's the same terminal)"
+    line "$t" skip "terminal $t was recreated (created_ms differs); to resume by hand: $cmd"; continue
   fi
 
   planned=$((planned + 1))
-  if [ "$yes" = 0 ]; then line "$t" resume "$where: claude -r $sid$note"; continue; fi
+  if [ "$yes" = 0 ]; then line "$t" resume "$where: claude -r $sid"; continue; fi
   if err=$(hc send "$t" "$cmd" 2>&1 >/dev/null); then
-    line "$t" resumed "$where: claude -r $sid$note"
+    line "$t" resumed "$where: claude -r $sid"
   else
     failed=$((failed + 1)); line "$t" failed "hc send: $err"
   fi
