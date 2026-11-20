@@ -11,7 +11,6 @@ ap.add_argument("--hermes-home", required=True)
 ap.add_argument("--state-dir", required=True)
 ap.add_argument("--prune-script", required=True)
 ap.add_argument("--model", required=True)
-ap.add_argument("--no-monitor", action="store_true")
 a = ap.parse_args()
 
 env = dict(os.environ, HERMES_HOME=a.hermes_home)
@@ -23,9 +22,11 @@ hermes_py = os.path.join(m.group(1), "python3")
 
 
 def api(code):
-    out = subprocess.run([hermes_py, "-c", "import json\nfrom cron.jobs import list_jobs, update_job\n" + code],
-                         env=env, capture_output=True, text=True, check=True).stdout
-    return json.loads(out)
+    p = subprocess.run([hermes_py, "-c", "import json\nfrom cron.jobs import list_jobs, update_job\n" + code],
+                       env=env, capture_output=True, text=True)
+    if p.returncode != 0:
+        sys.exit("hermes-inbox-jobs: Hermes cron API failed:\n" + p.stderr.strip()[-2000:])
+    return json.loads(p.stdout)
 
 
 def jobs():
@@ -50,25 +51,28 @@ if "hermes-prune" not in have:
     hermes("cron", "create", "0 4 * * *", "--name", "hermes-prune", "--no-agent",
            "--script", "hermes-prune.sh", "--deliver", "local", "--failure-deliver", "local")
 
-if not a.no_monitor:
-    owner = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "hermes-agent",
-                            "-a", "slack-owner-id", "-w"], capture_output=True, text=True).stdout.strip()
-    deliver = f"slack:{owner}" if re.fullmatch(r"U[A-Z0-9]{6,}", owner) else "local"
-    if "inbox-monitor" not in have:
-        hermes("cron", "create", "every 5m", "Run one inbox-monitor cycle.", "--name", "inbox-monitor",
-               "--skill", "inbox-monitor", "--workdir", a.state_dir,
-               "--provider", "cliproxy", "--model", a.model,
-               "--deliver", deliver, "--failure-deliver", "local", "--no-wrap-response", "--catch-up", "off",
-               "--paused", "--paused-reason", "enable with: hermes cron resume inbox-monitor")
-    job = jobs()["inbox-monitor"]
-    if job.get("enabled_toolsets") != ["mcp-inbox"]:
-        api(f"print(json.dumps(update_job({job['id']!r}, {{'enabled_toolsets': ['mcp-inbox']}})))")
-    job = jobs()["inbox-monitor"]
-    want = {"enabled_toolsets": ["mcp-inbox"], "skills": ["inbox-monitor"], "model": a.model,
-            "provider": "cliproxy", "failure_deliver": "local"}
-    bad = {k: job.get(k) for k, v in want.items() if job.get(k) != v}
-    if bad:
-        sys.exit(f"hermes-inbox-jobs: inbox-monitor job is not as expected: {bad}")
-    print(f"inbox-monitor: {job['state']}, delivers to {job.get('deliver')}, toolsets {job['enabled_toolsets']}")
+owner = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "hermes-agent",
+                        "-a", "slack-owner-id", "-w"], capture_output=True, text=True).stdout.strip()
+if not re.fullmatch(r"U[A-Z0-9]{6,}", owner):
+    sys.exit("hermes-inbox-jobs: no owner Slack id in the Keychain (hermes-agent/slack-owner-id). "
+             "`pass insert hermes/slack-owner-id`, rebuild, then run this again.")
+deliver = f"slack:{owner}"
+if "inbox-monitor" not in have:
+    hermes("cron", "create", "every 5m", "Run one inbox-monitor cycle.", "--name", "inbox-monitor",
+           "--skill", "inbox-monitor", "--workdir", a.state_dir,
+           "--provider", "cliproxy", "--model", a.model,
+           "--deliver", deliver, "--failure-deliver", "local", "--no-wrap-response", "--catch-up", "off",
+           "--paused", "--paused-reason", "enable with: hermes cron resume inbox-monitor")
+job = jobs()["inbox-monitor"]
+fix = {k: v for k, v in {"enabled_toolsets": ["mcp-inbox"], "deliver": deliver}.items() if job.get(k) != v}
+if fix:
+    api(f"print(json.dumps(update_job({job['id']!r}, {fix!r})))")
+job = jobs()["inbox-monitor"]
+want = {"enabled_toolsets": ["mcp-inbox"], "skills": ["inbox-monitor"], "model": a.model,
+        "provider": "cliproxy", "failure_deliver": "local", "deliver": deliver}
+bad = {k: job.get(k) for k, v in want.items() if job.get(k) != v}
+if bad:
+    sys.exit(f"hermes-inbox-jobs: inbox-monitor job is not as expected: {bad}")
+print(f"inbox-monitor: {job['state']}, delivers to {job.get('deliver')}, toolsets {job['enabled_toolsets']}")
 
 hermes("cron", "list", "--all")

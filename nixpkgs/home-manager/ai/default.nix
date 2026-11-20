@@ -109,16 +109,6 @@ in
       description = "Project paths Codex trusts.";
     };
 
-    hermes.inboxSkill = mkOption {
-      type = types.nullOr types.path;
-      default = null;
-      description = ''
-        SKILL.md of the inbox monitor (ai/hermes.nix, garage-hq only). Set by the
-        private overlay because it names colleagues and the owner's ids. Null: no
-        monitor job.
-      '';
-    };
-
     bootstrap = mkOption {
       type = types.lines;
       default = "";

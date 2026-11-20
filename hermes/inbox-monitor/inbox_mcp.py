@@ -129,9 +129,9 @@ def user_name(uid):
     if uid not in _users:
         try:
             u = slack("users.info", user=uid)["user"]
-            _users[uid] = u.get("real_name") or u.get("name") or uid
         except ToolError:
-            _users[uid] = uid
+            return uid  # not cached: a transient failure shouldn't stick for the server's lifetime
+        _users[uid] = u.get("real_name") or u.get("name") or uid
     return _users[uid]
 
 
@@ -140,14 +140,15 @@ def thread_ts_from(permalink):
     return (q.get("thread_ts") or [None])[0]
 
 
-def msg_row(channel, m, permalink=None):
+def msg_row(channel, m, permalink=None, register=True):
     row = {"key": f"{channel}:{m['ts']}", "channel": channel, "ts": m["ts"],
            "thread_ts": m.get("thread_ts") or thread_ts_from(permalink),
            "user": m.get("user"), "user_name": user_name(m.get("user")) or m.get("username"),
            "bot": bool(m.get("bot_id")), "reply_count": m.get("reply_count"),
            "text": mask((m.get("text") or "")[:MAX_TEXT])}
-    known["slack"].add(row["key"])
-    known["threads"].add(f"{channel}:{row['thread_ts'] or m['ts']}")
+    if register:  # search and thread rows only; history rows can't be used to walk a channel
+        known["slack"].add(row["key"])
+        known["threads"].add(f"{channel}:{row['thread_ts'] or m['ts']}")
     return row
 
 
@@ -171,6 +172,8 @@ def t_window():
     if r.get("skip"):
         return r
     cycle.update(start=r["window_start"], end=r["window_end"])
+    # The owner's profile (names, aliases, lists, known not-tasks) lives in config.json, not in the skill.
+    r["profile"] = CONFIG.get("profile", "")
     return r
 
 
@@ -238,7 +241,8 @@ def t_slack_history(key, hours_before, hours_after):
     t = float(ts)
     r = slack("conversations.history", channel=channel, oldest=str(t - hb * 3600), latest=str(t + ha * 3600),
               limit=100, inclusive="true")
-    return {"channel": channel, "messages": [msg_row(channel, m) for m in reversed(r.get("messages", []))],
+    return {"channel": channel,
+            "messages": [msg_row(channel, m, register=False) for m in reversed(r.get("messages", []))],
             "has_more": r.get("has_more", False)}
 
 
@@ -367,7 +371,14 @@ def create(key, lst, quadrant, title, ask, sender, close_when, due, due_from, th
 
 
 def masked(v):
-    return json.loads(mask(json.dumps(v, ensure_ascii=False)))
+    """Mask every decoded string (never the serialized JSON, where escapes would hide matches)."""
+    if isinstance(v, str):
+        return mask(v)
+    if isinstance(v, list):
+        return [masked(x) for x in v]
+    if isinstance(v, dict):
+        return {k: masked(x) for k, x in v.items()}
+    return v
 
 
 def handle(req):
@@ -409,6 +420,8 @@ def main():
         try:
             req = json.loads(line)
         except ValueError:
+            continue
+        if not isinstance(req, dict):
             continue
         try:
             result = handle(req)

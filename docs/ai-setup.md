@@ -468,15 +468,23 @@ rebuild.
   (`approvals.mode: manual`) are a heuristic for dangerous commands, not a
   boundary. The guards that remain: only `SLACK_ALLOWED_USERS` (the owner) is
   answered and other DMs are ignored; cron jobs never auto-approve; chat gets
-  no MCP servers (`no_mcp`), so it can't drive the monitor's Reminders and
-  Slack tools; the monitor's code and skill are read-only in the Nix store.
-- **Inbox monitor:** `hermes/inbox-monitor/` (code, README) and the skill
-  from the private overlay (`dotfiles.ai.hermes.inboxSkill`). State and
-  `config.json` live in `~/.local/state/inbox-monitor`. Run
-  `hermes-inbox-jobs` once after the first switch: it creates the monitor job
-  paused (every 5 min, Sonnet, toolset `mcp-inbox` only, failure notices kept
-  local) and the daily prune job, then checks them. `hermes cron resume
-  inbox-monitor` starts it.
+  no MCP servers (`no_mcp`), so the monitor's Reminders and Slack tools are
+  not offered to it (its terminal could still run that code directly, which
+  is part of the accepted risk); the monitor's code and skill are read-only in
+  the Nix store, so they can't be rewritten by accident.
+- **Inbox monitor:** `hermes/inbox-monitor/` (code, generic skill, README).
+  Everything personal (the owner's names, ids, lists, query templates, known
+  not-tasks) is in `~/.local/state/inbox-monitor/config.json` (0600) and
+  reaches the model through the `window` tool, so nothing personal is in the
+  repo or the world-readable store. Run `hermes-inbox-jobs` after the first
+  switch: it creates the monitor job paused (every 5 min, Sonnet, toolset
+  `mcp-inbox` only, DM to the owner, failure notices kept local) and the daily
+  prune job, and checks them; rerun it any time to correct them. `hermes cron
+  resume inbox-monitor` starts it.
+- **Slack app:** `hermes/slack-manifest.json` (bot "Hermes", DM only: bot
+  scopes for DMs, user scopes for the monitor's search, history and
+  reactions). Paste it into the app's App Manifest, reinstall, then store the
+  tokens and the owner's member id in `pass` (table above) before rebuilding.
 - **Dead-man check:** the `com.ksotis.inbox-monitor-deadman` LaunchAgent
   (every 30 min) DMs the owner once when the enabled monitor has had no
   successful cycle for an hour, and once when it recovers.
@@ -485,7 +493,8 @@ rebuild.
   kept) before Hermes sees it. Hermes stores it in `~/.hermes/state.db`
   (sessions, full-text index), `~/.hermes/cron/output/` and
   `~/.hermes/cache/spillover/`; the prune job deletes monitor sessions and
-  run documents after 1 day. Chat sessions are kept for good
+  run documents after 1 day, and all spilled tool output (chat's too) after
+  1 day. Chat sessions are kept for good
   (`sessions.auto_prune: false`); `security.redact_secrets` masks key-shaped
   values in chat, logs and tool output. Expected size: about 288 monitor runs
   a day at roughly 50-150 KB each, so 15-45 MB of monitor sessions at any

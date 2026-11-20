@@ -10,6 +10,8 @@ new inbox emails for the owner into Apple Reminders. Installed read-only into th
 | `inbox_mcp.py` | stdio MCP server (stdlib only, `/usr/bin/python3`). Structured tools, ids by reference, masking. Calls Slack's Web API with the owner's user token from the Keychain item `inbox-monitor/slack-user-token`. |
 | `im` | State bookkeeping (`state.json`) and the Reminders wrapper: window chunks, processed keys, run lease, create/complete/update with dedupe, the clipboard-reaction check. |
 | `reminders.js` | JXA for Reminders.app (create, complete, update, open lists). |
+| `deadman.py` | Run by launchd every 30 min: DMs the owner once when the enabled job has had no successful cycle for an hour, and once on recovery. |
+| `SKILL.md` | The cycle's instructions (generic; the owner's profile comes from `config.json`). |
 | `fetch_gmail.py` | Gmail through `gws`: unseen inbox mail of the window, one body, one thread; adds `me_in`, `from_me`, `from_domain` before anything is masked. |
 
 ## State directory
@@ -28,7 +30,8 @@ new inbox emails for the owner into Apple Reminders. Installed read-only into th
   "owner_slack_id": "U…",
   "queries": {"mentions": "<@U…>", "dms": "to:me", "alert_x": "in:#alert_x"},
   "exclude_channels": ["D… (the Hermes bot's DM with the owner)"],
-  "gh_owners": ["<GitHub owners whose PRs may be checked>"]
+  "gh_owners": ["<GitHub owners whose PRs may be checked>"],
+  "profile": "<the owner: names and aliases, Slack id, role, the CC'd-email rule, list routing (which list is the work list), known not-tasks>"
 }
 ```
 

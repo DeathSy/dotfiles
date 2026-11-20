@@ -93,7 +93,7 @@ def save(s):
 
 def rem(*args):
     try:
-        p = subprocess.run(["osascript", "-l", "JavaScript", os.path.join(HERE, "reminders.js"), *args],
+        p = subprocess.run(["/usr/bin/osascript", "-l", "JavaScript", os.path.join(HERE, "reminders.js"), *args],
                            capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired:
         die("Reminders did not answer within 120 s (app busy or a dialog open on garage-hq's screen)")
@@ -107,7 +107,7 @@ def rem(*args):
 
 def gmail_thread_id(msg_id):
     try:
-        p = subprocess.run(["gws", "gmail", "users", "messages", "get", "--params",
+        p = subprocess.run([os.environ.get("INBOX_GWS", "/opt/homebrew/bin/gws"), "gmail", "users", "messages", "get", "--params",
                             json.dumps({"userId": "me", "id": msg_id, "format": "minimal"})],
                            capture_output=True, text=True, timeout=60)
         return json.loads(p.stdout[p.stdout.index("{"):])["threadId"]
@@ -270,6 +270,9 @@ def main(argv):
     lock = open(STATE + ".lock", "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     s = load()
+    if cmd != "window" and s.get("lease") and not DRY:
+        s["lease"] = int(time.time())  # a cycle that is still calling tools keeps its lease
+        save(s)
 
     if cmd == "window":
         # Catch up in chunks of at most 24 h: [last_check - 600 s overlap, min(now, last_check + 24 h)].
@@ -323,8 +326,9 @@ def main(argv):
             s.pop("pending_slack", None)
         s["log"] = (s.get("log", []) + [{"at": int(time.time()), "window_end": end, "slack": a[0], "email": a[1],
                                          "summary": mask(a[2])[:300]}])[-LOG_CAP:]
-        s.pop("run_end", None)
-        s.pop("lease", None)
+        if not unfinished:  # the cycle is over (advanced or failed); keep both while it retries
+            s.pop("run_end", None)
+            s.pop("lease", None)
         save(s)
         out({"dry_run": DRY, "advanced": advance and not DRY,
              "unfinished": unfinished or None})

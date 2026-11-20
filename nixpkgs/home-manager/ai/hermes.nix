@@ -19,7 +19,6 @@ let
   hermesHome = "${home}/.hermes";
   stateDir = "${home}/.local/state/inbox-monitor";
   hermesBin = "${config.programs.hermes-agent.package}/bin/hermes";
-  cfg = config.dotfiles.ai.hermes;
   timeout = "${pkgs.coreutils}/bin/timeout";
   sonnet = "claude-sonnet-5-5";
   haiku = "claude-haiku-5-5";
@@ -53,14 +52,16 @@ let
   # ~/.local/state/inbox-monitor (see hermes/inbox-monitor/README.md).
   inboxMonitor = pkgs.runCommand "inbox-monitor" { } ''
     mkdir -p $out
-    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,im,reminders.js,fetch_gmail.py} $out/
-    chmod 0555 $out/inbox_mcp.py $out/im $out/fetch_gmail.py
+    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,im,reminders.js,fetch_gmail.py,deadman.py} $out/
+    chmod 0555 $out/inbox_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py
     chmod 0444 $out/reminders.js
   '';
-  skillsDir = pkgs.linkFarm "hermes-inbox-skill" (lib.optional (cfg.inboxSkill != null) {
+  # The skill is generic; the owner's names, ids, lists and known not-tasks come
+  # from config.json (0600, outside the store) through the `window` tool.
+  skillsDir = pkgs.linkFarm "hermes-inbox-skill" [{
     name = "inbox-monitor/SKILL.md";
-    path = cfg.inboxSkill;
-  });
+    path = ../../../hermes/inbox-monitor/SKILL.md;
+  }];
 
   # launchd runs /bin/zsh, which stays the job's root process: macOS TCC then
   # attributes the monitor's Reminders automation to "zsh" (allowed once)
@@ -69,6 +70,8 @@ let
   # readable yet (just after a reboot) exit non-zero so launchd retries.
   # TERM/INT/HUP are forwarded to the recorded gateway pid, and zsh waits for it.
   gatewayWrapper = pkgs.writeText "hermes-gateway.zsh" ''
+    child=
+    trap 'if [[ -n $child ]]; then kill -TERM $child 2>/dev/null; else exit 143; fi' TERM INT HUP
     for i in {1..12}; do
       ${timeout} 10 /usr/bin/security find-generic-password -s hermes-agent -a cliproxy-api-key -w >/dev/null 2>&1 && break
       (( i == 12 )) && { print -u2 "hermes-gateway: Keychain item hermes-agent/cliproxy-api-key not readable; retrying via launchd"; exit 75; }
@@ -76,59 +79,24 @@ let
     done
     ${hermesBin} gateway ${lib.escapeShellArgs config.services.hermes-agent.extraArgs} "$@" &
     child=$!
-    trap 'kill -TERM $child 2>/dev/null' TERM INT HUP
     wait $child; rc=$?
     while kill -0 $child 2>/dev/null; do wait $child; rc=$?; done
     exit $rc
   '';
 
-  # Daily housekeeping (a no-agent Hermes cron job): monitor sessions and run
-  # documents 1 day; chat sessions are kept (sessions.auto_prune off).
+  # Daily housekeeping (a no-agent Hermes cron job): monitor sessions, run
+  # documents and spilled tool output 1 day; chat sessions are kept
+  # (sessions.auto_prune off), but their spilled tool output goes too.
   pruneScript = pkgs.writeShellScript "hermes-prune" ''
     set -u
     ${hermesBin} sessions prune --source cron --older-than 1 --yes >/dev/null 2>&1 || echo "hermes-prune: session prune failed"
-    find ${hermesHome}/cron/output -type f -mmin +1440 -delete 2>/dev/null
+    find ${hermesHome}/cron/output ${hermesHome}/cache/spillover -type f -mmin +1440 -delete 2>/dev/null
     for f in ${home}/Library/Logs/hermes-agent.log ${home}/Library/Logs/hermes-agent.err.log; do
       [ -f "$f" ] && [ "$(stat -f %z "$f")" -gt 5000000 ] && : > "$f"
     done
     echo "[SILENT]"
   '';
 
-  # Dead-man check, outside Hermes: if the enabled monitor job has had no
-  # successful cycle for an hour, DM the owner once; say so again once it recovers.
-  deadman = pkgs.writeShellScript "inbox-monitor-deadman" ''
-    set -u
-    marker=${stateDir}/.deadman-alerted
-    msg=$(/usr/bin/python3 -I - <<'PY'
-    import json, os, time
-    st = json.load(open("${stateDir}/state.json"))
-    try:
-        jobs = json.load(open("${hermesHome}/cron/jobs.json"))
-        jobs = jobs.get("jobs", jobs) if isinstance(jobs, dict) else jobs
-        job = next((j for j in jobs if j.get("name") == "inbox-monitor"), None)
-    except (OSError, ValueError):
-        job = None
-    enabled = bool(job) and job.get("enabled", True) and not job.get("paused") and job.get("state") != "paused"
-    last = st.get("last_ok_at") or 0
-    # Before the first success, wait for an hour of attempts (12 logged cycles).
-    late = time.time() - last > 3600 if last else len(st.get("log", [])) >= 12
-    alerted = os.path.exists("${stateDir}/.deadman-alerted")
-    if enabled and late and not alerted:
-        print("ALERT Inbox monitor: no successful cycle since " + (time.strftime("%d %b %H:%M", time.localtime(last)) if last else "it started") + ". Check `hermes cron status` on garage-hq.")
-    elif alerted and not late:
-        print("OK Inbox monitor recovered.")
-    PY
-    ) || exit 0
-    [ -z "$msg" ] && exit 0
-    token=$(${timeout} 10 /usr/bin/security find-generic-password -s hermes-agent -a slack-bot-token -w 2>/dev/null) || exit 0
-    owner=$(${timeout} 10 /usr/bin/security find-generic-password -s hermes-agent -a slack-owner-id -w 2>/dev/null) || exit 0
-    body=$(/usr/bin/python3 -I -c 'import json,sys; print(json.dumps({"channel": sys.argv[1], "text": sys.argv[2]}))' "$owner" "''${msg#* }")
-    # The token goes to curl on stdin (-K -), never on its command line.
-    printf 'header = "Authorization: Bearer %s"\n' "$token" \
-      | /usr/bin/curl -sS -K - -H 'Content-Type: application/json; charset=utf-8' --data "$body" \
-          https://slack.com/api/chat.postMessage -o /dev/null --max-time 20 || exit 0
-    case "$msg" in ALERT*) : > "$marker" ;; OK*) rm -f "$marker" ;; esac
-  '';
 in
 {
   config = {
@@ -184,7 +152,7 @@ in
           cron = [ "mcp-inbox" ];
         };
 
-        skills.external_dirs = lib.optional (cfg.inboxSkill != null) "${skillsDir}";
+        skills.external_dirs = [ "${skillsDir}" ];
 
         unauthorized_dm_behavior = "ignore";
         slack = {
@@ -209,7 +177,7 @@ in
     };
 
     launchd.agents.hermes-agent.config = {
-      ProgramArguments = lib.mkForce [ "/bin/zsh" "${gatewayWrapper}" ];
+      ProgramArguments = lib.mkForce [ "/bin/zsh" "-f" "${gatewayWrapper}" ];
       ExitTimeOut = 60;
       ThrottleInterval = lib.mkForce 30;
     };
@@ -218,7 +186,7 @@ in
       enable = true;
       config = {
         Label = "com.ksotis.inbox-monitor-deadman";
-        ProgramArguments = [ "/bin/sh" "${deadman}" ];
+        ProgramArguments = [ "/usr/bin/python3" "-I" "${inboxMonitor}/deadman.py" ];
         StartInterval = 1800;
         StandardOutPath = "${home}/Library/Logs/inbox-monitor-deadman.log";
         StandardErrorPath = "${home}/Library/Logs/inbox-monitor-deadman.log";
@@ -230,7 +198,7 @@ in
     # missing pass entry never overwrites an existing item.
     home.activation.hermesKeychain = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       (
-        set -u +x
+        set +e -u +x
         ${lib.optionalString ((config.programs.password-store.settings.PASSWORD_STORE_DIR or "") != "")
           "export PASSWORD_STORE_DIR=${lib.escapeShellArg config.programs.password-store.settings.PASSWORD_STORE_DIR}"}
         pass=${config.programs.password-store.package}/bin/pass
@@ -244,9 +212,11 @@ in
               *)
                 if [ -z "''${DRY_RUN_CMD:-}" ]; then
                   printf 'add-generic-password -U -s ${svc} -a ${acct} -T /usr/bin/security -w "%s"\n' "$v" \
-                    | /usr/bin/security -i >/dev/null 2>&1
-                  [ "$(/usr/bin/security find-generic-password -s ${svc} -a ${acct} -w 2>/dev/null)" = "$v" ] \
-                    || errorEcho "hermes: could not store ${item} in the login Keychain (locked, or an SSH session without access?). Rebuild from the console session."
+                    | /usr/bin/security -i >/dev/null 2>&1 \
+                    || warnEcho "hermes: security -i failed for ${item}"
+                  if [ "$(/usr/bin/security find-generic-password -s ${svc} -a ${acct} -w 2>/dev/null)" != "$v" ]; then
+                    errorEcho "hermes: could not store ${item} in the login Keychain (locked, or an SSH session without access?). Rebuild from the console session."
+                  fi
                 fi ;;
             esac
           else
@@ -264,8 +234,7 @@ in
         set -eu
         exec /usr/bin/python3 -I ${./hermes-inbox-jobs.py} \
           --hermes ${hermesBin} --hermes-home ${hermesHome} --state-dir ${stateDir} \
-          --prune-script ${pruneScript} --model ${sonnet} \
-          ${lib.optionalString (cfg.inboxSkill == null) "--no-monitor"}
+          --prune-script ${pruneScript} --model ${sonnet}
       '')
     ];
   };
