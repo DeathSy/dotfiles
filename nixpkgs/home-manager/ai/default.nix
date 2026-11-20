@@ -32,7 +32,6 @@ in
     ./claude.nix
     ./codex.nix
     ./gateway.nix
-    ./auto-browser.nix
   ];
 
   options.dotfiles.ai = with lib; {

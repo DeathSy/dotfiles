@@ -76,10 +76,10 @@ sudo darwin-rebuild switch --flake ~/studio/personal/dotfiles \
   the host (see [Gateway hosts](#gateway-hosts)).
 - Installs `agent-browser` and `googleworkspace-cli` (`gws`) with Homebrew.
 
-Open Design and the local LLM tunnel (workstation services) were retired on
-2026-11-20; drop Open Design's leftover MCP entry with
-`claude mcp remove -s user open-design`. Auto Browser stays until another
-session is done with it, then moves to `agent-browser`.
+Open Design, the local LLM tunnel and Auto Browser (workstation services)
+were retired on 2026-11-20 in favour of `agent-browser`; drop their leftover
+MCP entries with `claude mcp remove -s user auto-browser` and
+`claude mcp remove -s user open-design`.
 
 `settings.json` keys the public layer manages: `$schema`, `env.*` (agent
 teams, function hooks, timeouts, context and autocompact limits, telemetry
@@ -103,9 +103,9 @@ hub, **garage-hq**, which took it over from garage-server (see
 [Moving the gateway server to garage-hq](#moving-the-gateway-server-to-garage-hq)).
 Its host file imports `nixpkgs/nix-darwin/ai-hub.nix`, which declares the
 `cliproxyapi` brew service (started on every rebuild unless
-`dotfiles.ai.gateway.server.startService` is off), sets
-`dotfiles.ai.gateway.server.enable` and turns on Auto Browser (step 10 of
-[New machine](#new-machine)), and `ai/headroom.nix`. On the hub a rebuild also:
+`dotfiles.ai.gateway.server.startService` is off) and sets
+`dotfiles.ai.gateway.server.enable`, and `ai/headroom.nix`. On the hub a
+rebuild also:
 
 - writes `/opt/homebrew/etc/cliproxyapi.conf` from `cliproxyapi/config.yaml`
   (client key and management key from `pass`, mode 600), only if the file
@@ -235,9 +235,6 @@ rollback:
    and skip step 8's `brew services restart cliproxyapi` (and the restarts
    the build command and the rebuild suggest): garage-hq's gateway starts
    only in step 3.
-   Give garage-hq the `workstation` alias (copy its `~/.ssh/config` block) and
-   a key the workstation accepts, with the host key in known_hosts; the
-   `auto-browser-tunnel` log must stay quiet.
 2. Do steps 1 and 2 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
    with garage-hq as the server and both garage and garage-server as
    clients: Remote Login on garage-hq with each client's key in its
@@ -293,10 +290,7 @@ rollback:
 7. Once it has worked for a while, clean up garage-server as in steps 5 and 6
    of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
    (`brew uninstall cliproxyapi`, `uv tool uninstall headroom-ai`, then
-   archive or delete the old config, logins, Headroom logs and cache), and
-   drop the MCP servers it no longer reaches:
-   `claude mcp remove -s user auto-browser` and
-   `claude mcp remove -s user open-design`.
+   archive or delete the old config, logins, Headroom logs and cache).
 
 Rollback, only until step 7 (after it garage-server has no gateway left; set
 it up as a new hub instead):
@@ -428,14 +422,3 @@ agents back:
    under your account, a work org's repo, or an unpacked archive that carries
    a `.git/config` all pass. Run `claude-trust-repo <dir>` to trust an existing
    checkout by hand.
-10. On the hub, Auto Browser (`dotfiles.ai.autoBrowser`, enabled in
-   `nixpkgs/nix-darwin/ai-hub.nix`): the `auto-browser-tunnel` launchd agent
-   forwards 127.0.0.1:18000 to port 8000 on the `workstation` SSH alias, whose
-   host key must already be in known_hosts. `ai-mcp-add` registers the
-   `auto-browser` user-scope MCP server; its `headersHelper`,
-   `~/.local/bin/auto-browser-headers`, reads the agent token from `pass` at
-   connect time (a non-prompting gpg-agent must work for Claude Code) and
-   names the calling session in `X-Operator-Name`. `ai-mcp-add` never rewrites
-   an existing entry, so after changing the server definition run
-   `claude mcp remove -s user auto-browser` and `ai-mcp-add` again.
-   Tunnel log: `~/Library/Logs/auto-browser-tunnel.log`.
