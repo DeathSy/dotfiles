@@ -20,5 +20,6 @@
     ../home-manager/ai/hermes.nix
     ../home-manager/ai/headroom.nix
     ../home-manager/herdr.nix
+    ../home-manager/rpa-tunnel.nix
   ];
 }

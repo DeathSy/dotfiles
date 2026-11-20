@@ -45,6 +45,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/home-manager/raycast.nix` - Raycast's login item and one-shot settings import (imported by `garage.nix` only)
 - `nixpkgs/home-manager/hammerspoon.nix` - Hammerspoon config link and the `space` CLI
 - `nixpkgs/home-manager/herdr.nix` - herdr config and agent-popup script links (imported by `garage-hq.nix` only)
+- `nixpkgs/home-manager/rpa-tunnel.nix` - SSH forward `127.0.0.1:18080` → garage-server's RPA/Steel app (`127.0.0.1:8080`) through the `garage-server` alias, Thunderbolt bridge only, never the network (imported by `garage-hq.nix` only); agents on garage-hq use `http://localhost:18080`, humans the tailnet URL
 - `nixpkgs/home-manager/node-globals.nix` - Global npm tools installed into nvm's default Node
 - Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
 
