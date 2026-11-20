@@ -153,12 +153,36 @@ def thread_ts_from(permalink):
     return (q.get("thread_ts") or [None])[0]
 
 
+def message_text(m):
+    """Text plus what bots put in attachments and blocks (alert messages often have an empty `text`)."""
+    parts = [m.get("text") or ""]
+    for a in m.get("attachments") or []:
+        parts += [a.get(k) or "" for k in ("pretext", "title", "text")]
+        parts += [f"{f.get('title', '')}: {f.get('value', '')}" for f in a.get("fields") or []]
+        if not any(a.get(k) for k in ("pretext", "title", "text")):
+            parts.append(a.get("fallback") or "")
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") in ("plain_text", "mrkdwn", "text") and isinstance(node.get("text"), str):
+                parts.append(node["text"])
+            for v in node.values():
+                if isinstance(v, (dict, list)):
+                    walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    if not (m.get("text") or "").strip():
+        walk(m.get("blocks") or [])
+    return "\n".join(p for p in dict.fromkeys(x.strip() for x in parts) if p)
+
+
 def msg_row(channel, m, permalink=None, register=True):
     row = {"key": f"{channel}:{m['ts']}", "channel": channel, "ts": m["ts"],
            "thread_ts": m.get("thread_ts") or thread_ts_from(permalink),
            "user": m.get("user"), "user_name": user_name(m.get("user")) or m.get("username"),
            "bot": bool(m.get("bot_id")), "reply_count": m.get("reply_count"),
-           "text": mask((m.get("text") or "")[:MAX_TEXT])}
+           "text": mask(message_text(m)[:MAX_TEXT])}
     if register:  # search and thread rows only; history rows can't be used to walk a channel
         known["slack"].add(row["key"])
         known["threads"].add(f"{channel}:{row['thread_ts'] or m['ts']}")

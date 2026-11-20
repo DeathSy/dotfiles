@@ -57,7 +57,17 @@ owner = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "her
 if not re.fullmatch(r"U[A-Z0-9]{6,}", owner):
     sys.exit("hermes-inbox-jobs: no owner Slack id in the Keychain (hermes-agent/slack-owner-id). "
              "`pass insert hermes/slack-owner-id`, rebuild, then run this again.")
-dm = f"slack:{owner}"
+# Deliver to the bot's DM channel with the owner (a bare user id gets channel_not_found from Hermes).
+import urllib.parse, urllib.request
+bot = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "hermes-agent", "-a", "slack-bot-token",
+                      "-w"], capture_output=True, text=True).stdout.strip()
+req = urllib.request.Request("https://slack.com/api/conversations.open",
+                             data=urllib.parse.urlencode({"users": owner}).encode(),
+                             headers={"Authorization": f"Bearer {bot}"})
+opened = json.load(urllib.request.urlopen(req, timeout=20)) if bot else {"ok": False, "error": "no bot token"}
+if not opened.get("ok"):
+    sys.exit(f"hermes-inbox-jobs: can't open the bot's DM with the owner: {opened.get('error')}")
+dm = f"slack:{opened['channel']['id']}"
 
 # The monitor's own (model-written) response stays local; the owner's DM comes from inbox-digest.
 if "inbox-digest" not in have:
