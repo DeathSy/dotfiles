@@ -486,9 +486,10 @@ rebuild.
   sends, so a Slack outage at that moment loses that DM, while Reminders stay
   the source of truth) and the daily prune job, and checks them; rerun it any time to correct them. `hermes cron
   resume inbox-monitor` starts it.
-- **Slack app:** `hermes/slack-manifest.json` (bot "Hermes", DM only: bot
-  scopes for DMs, user scopes for the monitor's search, history and
-  reactions). Paste it into the app's App Manifest, reinstall, then store the
+- **Slack app:** `hermes/slack-manifest.json` (the existing app "July",
+  DM only: bot scopes for DMs, user scopes for the monitor's search, history
+  and reactions; Socket Mode; no slash commands or agent view, kept minimal so
+  Slack accepts it on the existing app). Paste it into the app's App Manifest, reinstall, then store the
   tokens and the owner's member id in `pass` (table above) before rebuilding.
 - **Dead-man check:** the `com.ksotis.inbox-monitor-deadman` LaunchAgent
   (every 30 min) DMs the owner once when the enabled monitor has had no
