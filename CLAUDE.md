@@ -76,7 +76,7 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - **File Manager**: lf (terminal), Finder (GUI)
 
 ### Container & Kubernetes Tools
-- Podman CLI (and `docker` wrapping it), the client for the remote `workstation` connection
+- Podman CLI (and `docker` wrapping it), the client for garage-server's Podman VM (connection `arm64`)
 - kubectl, kubectx, k9s, minikube
 - Custom kubectl-forward script from GitHub
 
