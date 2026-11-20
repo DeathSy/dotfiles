@@ -14,6 +14,11 @@
 	    inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Hermes Agent (garage-hq only, nixpkgs/home-manager/ai/hermes.nix). Pinned
+    # to a release tag with its own nixpkgs: Nix is a best-effort platform
+    # upstream, so we build exactly what that release locked.
+    hermes-agent.url = "github:NousResearch/hermes-agent/v0.23.3";
+
     # Private data layer (project paths, internal URLs; no logic). Defaults
     # to an empty module; `rebuild` overrides it with the private checkout.
     private = {
@@ -23,7 +28,7 @@
   };
 
   outputs = inputs@{
-			self, nixpkgs, nix-darwin, home-manager, private
+			self, nixpkgs, nix-darwin, home-manager, private, ...
 		}: let
     # The shared modules below are the global layer every Mac gets;
     # nixpkgs/hosts/<hostName>.nix adds that device's names and extra apps.

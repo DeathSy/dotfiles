@@ -1,6 +1,6 @@
 # garage-hq: the Mac Studio, the AI hub (../nix-darwin/ai-hub.nix). Added on
 # top of the shared config in flake.nix.
-{ ... }: {
+{ inputs, ... }: {
   imports = [ ../nix-darwin/ai-hub.nix ];
 
   networking.computerName = "ksotis-hq";
@@ -16,6 +16,8 @@
   homebrew.brews = [ "herdr" ];
 
   home-manager.users.ksotis.imports = [
+    inputs.hermes-agent.homeManagerModules.default
+    ../home-manager/ai/hermes.nix
     ../home-manager/ai/headroom.nix
     ../home-manager/herdr.nix
   ];

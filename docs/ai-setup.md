@@ -422,3 +422,34 @@ agents back:
    under your account, a work org's repo, or an unpacked archive that carries
    a `.git/config` all pass. Run `claude-trust-repo <dir>` to trust an existing
    checkout by hand.
+
+## Hermes Agent (garage-hq)
+
+`nixpkgs/home-manager/ai/hermes.nix`, imported by `nixpkgs/hosts/garage-hq.nix`
+with the Home Manager module of the `hermes-agent` flake input (pinned to a
+release tag). It runs the Hermes gateway (a Slack DM bot for the owner) as the
+`org.nix-community.home.hermes-agent` LaunchAgent and writes
+`~/.hermes/config.yaml` from `services.hermes-agent.settings` on every rebuild.
+
+- **Model:** the CLIProxyAPI gateway as the custom provider `cliproxy`
+  (`anthropic_messages`), Sonnet by default.
+- **Secrets:** `pass` entries `ai/cliproxyapi-key`, `hermes/slack-bot-token`,
+  `hermes/slack-app-token` and `hermes/slack-user-token` are copied into the
+  login Keychain (service `hermes-agent`) at activation; a missing entry is
+  skipped with a note. Hermes reads the first three from the Keychain at every
+  start (`secrets.command`), so nothing is written to `~/.hermes/.env`. The
+  user token is read only by the inbox monitor's MCP server. A rebuild after
+  adding or rotating a token refreshes the Keychain; then
+  `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-agent`.
+- **Owner:** `dotfiles.ai.hermes.slackUserId` (private overlay). Unknown DMs
+  are ignored; approvals are manual and cron jobs never auto-approve.
+- **TCC:** launchd starts `/bin/zsh`, which runs the gateway and stays the
+  job's root process, so Reminders automation is attributed to "zsh"
+  (allowed once in Privacy & Security → Automation) rather than to a
+  nix-store Python that changes with each update.
+- **Inbox monitor:** its code, state and skill live outside every repo in
+  `~/.local/state/inbox-monitor` (they name colleagues). `hermes-inbox-jobs`
+  creates the 5-minute monitor job (paused) and a daily prune job: monitor
+  sessions and run documents are kept 3 days, chat sessions 30 days
+  (`sessions.retention_days`), the LaunchAgent logs are capped at 5 MB.
+- **Logs:** `~/Library/Logs/hermes-agent{,.err}.log`, `~/.hermes/logs/`.

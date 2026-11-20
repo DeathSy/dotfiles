@@ -109,6 +109,16 @@ in
       description = "Project paths Codex trusts.";
     };
 
+    hermes.slackUserId = mkOption {
+      type = types.str;
+      default = "";
+      description = ''
+        The owner's Slack member ID (set in the private overlay). The Hermes gateway
+        (ai/hermes.nix, garage-hq only) answers only this user, and the inbox monitor
+        DMs its summaries there. Empty: the gateway answers nobody.
+      '';
+    };
+
     bootstrap = mkOption {
       type = types.lines;
       default = "";
