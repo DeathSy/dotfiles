@@ -6,4 +6,8 @@
   imports = [ ../nix-darwin/never-sleep.nix ];
 
   networking.computerName = "ksotis-server";
+
+  # A headless runtime box: no desktop-only apps or settings
+  # (nixpkgs/nix-darwin/desktop-extras.nix).
+  dotfiles.desktopExtras = false;
 }

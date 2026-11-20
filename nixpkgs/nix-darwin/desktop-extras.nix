@@ -1,5 +1,5 @@
 # Desktop-only apps and settings, on unless a host file turns them off
-# (garage-hq, a server, does): Vorssaint, Hammerspoon (and `space`), WezTerm
+# (garage-hq and garage-server, servers, do): Vorssaint, Hammerspoon (and `space`), WezTerm
 # and its config, desktoppr and the wallpaper, sf-symbols, the system hotkeys,
 # Obsidian, LibreOffice, Upscayl and TablePlus. Each stays where it is
 # defined, behind this flag; home-manager modules read it through osConfig.
