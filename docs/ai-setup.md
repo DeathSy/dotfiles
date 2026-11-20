@@ -518,12 +518,16 @@ rebuild.
   `hermes-agent/dashboard-password-hash`, kept while it still matches and the
   dashboard restarted when it changes; a random token-signing secret in
   `hermes-agent/dashboard-session-secret`). Without the hash the dashboard
-  refuses to start. Rotating the password doesn't end existing sign-ins (the
-  12-hour tokens are signed, not stored): to end them, delete the secret
+  refuses to start. Sessions: access tokens last 12 hours, refresh tokens 30
+  days. The provider signs them with a key derived from the username, the
+  password hash and the secret, so changing the password (rebuild, which
+  restarts the dashboard) ends every existing sign-in. To end them without
+  changing the password, delete the secret
   (`security delete-generic-password -s hermes-agent -a dashboard-session-secret`),
   rebuild, and `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-backend`.
   Turning the dashboard off removes the tailscale serve mapping only if it is
-  exactly ours; if `tailscale serve status` can't be read, nothing is changed. Checked: the login page, `/api/config`, `/api/env`,
+  exactly ours; if `tailscale serve status` can't be read, nothing is changed.
+  Checked: the login page, `/api/config`, `/api/env`,
   `/api/sessions` and `/api/ws` answer 302/401 without a session, a wrong
   password gets 401, an unknown `Host` gets 400. `/api/status` stays
   public by Hermes' design (version, gateway state, profile names; no
