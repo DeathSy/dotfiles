@@ -183,7 +183,7 @@ def msg_row(channel, m, permalink=None, register=True):
            "thread_ts": m.get("thread_ts") or thread_ts_from(permalink),
            "user": m.get("user"), "user_name": user_name(m.get("user")) or m.get("username"),
            "bot": bool(m.get("bot_id")), "reply_count": m.get("reply_count"),
-           "text": mask(message_text(m)[:MAX_TEXT])}
+           "text": mask(message_text(m))[:MAX_TEXT]}
     if register:  # search and thread rows only; history rows can't be used to walk a channel
         known["slack"].add(row["key"])
         known["threads"].add(f"{channel}:{row['thread_ts'] or m['ts']}")
@@ -290,7 +290,8 @@ def t_slack_thread(key):
     if total > MAX_THREAD:
         msgs = msgs[:1] + msgs[-(MAX_THREAD - 1):]
     return {"channel": channel, "thread_ts": thread_ts, "total_messages": total,
-            "omitted_middle": max(0, total - MAX_THREAD), "messages": [msg_row(channel, m) for m in msgs]}
+            "omitted_middle": max(0, total - MAX_THREAD),
+            "messages": [msg_row(channel, m) for m in msgs if m.get("user") not in EXCLUDE_USERS]}
 
 
 def t_slack_history(key, hours_before, hours_after):
@@ -303,7 +304,8 @@ def t_slack_history(key, hours_before, hours_after):
     r = slack("conversations.history", channel=channel, oldest=str(t - hb * 3600), latest=str(t + ha * 3600),
               limit=100, inclusive="true")
     return {"channel": channel,
-            "messages": [msg_row(channel, m, register=False) for m in reversed(r.get("messages", []))],
+            "messages": [msg_row(channel, m, register=False) for m in reversed(r.get("messages", []))
+                         if m.get("user") not in EXCLUDE_USERS],
             "has_more": r.get("has_more", False)}
 
 

@@ -195,6 +195,7 @@ in
           enabled = true;
           command = "${secretsHelper}";
           override_existing = true;
+          helper_timeout_seconds = 10;  # six Keychain reads
         };
 
         mcp_servers.inbox = {
@@ -284,51 +285,83 @@ in
         set +e -u +x
         ${lib.optionalString ((config.programs.password-store.settings.PASSWORD_STORE_DIR or "") != "")
           "export PASSWORD_STORE_DIR=${lib.escapeShellArg config.programs.password-store.settings.PASSWORD_STORE_DIR}"}
+        store=''${PASSWORD_STORE_DIR:-$HOME/.password-store}
         put() {  # put <account> <value>: Keychain item hermes-agent/<account>, value on stdin
           printf 'add-generic-password -U -s hermes-agent -a %s -T /usr/bin/security -w "%s"\n' "$1" "$2" \
             | /usr/bin/security -i >/dev/null 2>&1
           [ "$(/usr/bin/security find-generic-password -s hermes-agent -a "$1" -w 2>/dev/null)" = "$2" ]
         }
         if [ -z "''${DRY_RUN_CMD:-}" ]; then
-          if pw=$(${timeout} 60 ${config.programs.password-store.package}/bin/pass show hermes/dashboard-password 2>/dev/null | head -n 1) && [ -n "$pw" ]; then
-            hpy="$(${pkgs.gnused}/bin/sed -n 's/^exec "\(.*\)\/hermes" .*/\1/p' ${hermesBin})/python3"
-            hash=$(printf '%s' "$pw" | "$hpy" -c 'import sys; from plugins.dashboard_auth.basic import hash_password; print(hash_password(sys.stdin.read()))' 2>/dev/null)
-            case "$hash" in
-              *[!A-Za-z0-9\$._+/=:-]*|"") errorEcho "hermes: could not hash the dashboard password" ;;
-              *) put dashboard-password-hash "$hash" || errorEcho "hermes: could not store the dashboard password hash in the login Keychain (rebuild from the console session)" ;;
-            esac
+          hpy="$(${pkgs.gnused}/bin/sed -n 's/^exec "\(.*\)\/hermes" .*/\1/p' ${hermesBin})/python3"
+          if [ ! -f "$store/hermes/dashboard-password.gpg" ]; then
+            noteEcho "hermes: pass entry hermes/dashboard-password does not exist; the dashboard will not start until it does"
+          elif ! pw=$(${timeout} 60 ${config.programs.password-store.package}/bin/pass show hermes/dashboard-password 2>/dev/null | head -n 1) || [ -z "$pw" ]; then
+            errorEcho "hermes: could not decrypt pass entry hermes/dashboard-password (gpg passphrase prompt not answered); dashboard password not updated"
           else
-            noteEcho "hermes: pass entry hermes/dashboard-password not found; the dashboard will not start until it exists"
+            old=$(/usr/bin/security find-generic-password -s hermes-agent -a dashboard-password-hash -w 2>/dev/null)
+            # Keep the stored hash while it still matches (a fresh salt each rebuild would churn).
+            if [ -n "$old" ] && printf '%s' "$pw" | OLD="$old" "$hpy" -I -c 'import os, sys; from plugins.dashboard_auth.basic import _verify_password; sys.exit(0 if _verify_password(sys.stdin.read(), os.environ["OLD"]) else 1)' 2>/dev/null; then
+              :
+            else
+              hash=$(printf '%s' "$pw" | "$hpy" -I -c 'import sys; from plugins.dashboard_auth.basic import hash_password; print(hash_password(sys.stdin.read()))' 2>/dev/null)
+              case "$hash" in
+                *[!A-Za-z0-9\$._+/=:-]*|"") errorEcho "hermes: could not hash the dashboard password" ;;
+                *)
+                  if put dashboard-password-hash "$hash"; then
+                    noteEcho "hermes: dashboard password updated"
+                    /bin/launchctl kickstart -k "gui/$(id -u)/org.nix-community.home.hermes-backend" >/dev/null 2>&1 || true
+                  else
+                    errorEcho "hermes: could not store the dashboard password hash in the login Keychain (rebuild from the console session)"
+                  fi ;;
+              esac
+            fi
           fi
           if ! /usr/bin/security find-generic-password -s hermes-agent -a dashboard-session-secret -w >/dev/null 2>&1; then
             put dashboard-session-secret "$(${pkgs.openssl}/bin/openssl rand -base64 48 | tr -d '\n')" \
               || errorEcho "hermes: could not store the dashboard session secret"
           fi
         fi
-        unset pw hash
+        unset pw hash old
       )
     '';
 
-    home.activation.hermesTailscaleServe = lib.mkIf (cfg.dashboardPublicUrl != null)
-      (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        (
-          set +e -u
-          ts=/opt/homebrew/bin/tailscale
-          jq=${pkgs.jq}/bin/jq
-          host=${lib.escapeShellArg (lib.removePrefix "https://" cfg.dashboardPublicUrl)}
-          state=$($ts serve status --json 2>/dev/null | $jq -r --arg k "$host:443" --arg t ${lib.escapeShellArg serveTarget} '
-            if (.TCP["443"] == null and .Web[$k] == null) then "free"
-            elif (.TCP["443"] == {"HTTPS": true} and .Web[$k] == {"Handlers": {"/": {"Proxy": $t}}}
-                  and (.AllowFunnel[$k] // false) == false) then "ours"
-            else "other" end')
-          case "''${state:-free}" in
+    # tailscale serve for the dashboard. States: free (nothing on 443), ours
+    # (exactly 443 -> the loopback dashboard, no Funnel), other (anything else),
+    # unknown (status or jq failed). Only free is claimed, and only ours is
+    # removed when the dashboard is turned off; other and unknown just warn.
+    home.activation.hermesTailscaleServe = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      (
+        set +e -u
+        ts=/opt/homebrew/bin/tailscale
+        jq=${pkgs.jq}/bin/jq
+        target=${lib.escapeShellArg serveTarget}
+        state=unknown
+        if [ -x "$ts" ] && out=$($ts serve status --json 2>/dev/null) && [ -n "$out" ]; then
+          state=$(printf '%s' "$out" | $jq -r --arg t "$target" '
+            [.Web // {} | to_entries[] | select(.key | endswith(":443"))] as $w
+            | if (.TCP["443"] == null and ($w | length) == 0) then "free"
+              elif (.TCP["443"] == {"HTTPS": true} and ($w | length) == 1
+                    and $w[0].value == {"Handlers": {"/": {"Proxy": $t}}}
+                    and ((.AllowFunnel // {})[$w[0].key] // false) == false) then "ours"
+              else "other" end' 2>/dev/null) || state=unknown
+          [ -n "$state" ] || state=unknown
+        fi
+        ${if cfg.dashboardPublicUrl != null then ''
+          case "$state" in
             ours) ;;
-            free) $DRY_RUN_CMD $ts serve --bg --https=443 ${lib.escapeShellArg serveTarget} >/dev/null 2>&1 \
+            free) $DRY_RUN_CMD $ts serve --bg --https=443 "$target" >/dev/null 2>&1 \
                     || errorEcho "hermes: tailscale serve failed; run: tailscale serve --bg --https=443 ${serveTarget}" ;;
-            *) warnEcho "hermes: tailscale serve already uses HTTPS 443 for something else; not changing it (tailscale serve status)" ;;
+            other) warnEcho "hermes: tailscale serve already uses HTTPS 443 for something else; not changing it (tailscale serve status)" ;;
+            *) warnEcho "hermes: couldn't read tailscale serve status; dashboard mapping not checked" ;;
           esac
-        )
-      '');
+        '' else ''
+          case "$state" in
+            ours) $DRY_RUN_CMD $ts serve --https=443 off >/dev/null 2>&1 \
+                    || warnEcho "hermes: could not remove the dashboard's tailscale serve mapping (tailscale serve --https=443 off)" ;;
+          esac
+        ''}
+      )
+    '';
 
     home.packages = [
       keychainSync

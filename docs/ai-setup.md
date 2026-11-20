@@ -496,7 +496,10 @@ rebuild.
   Mode; no slash commands). July answers in DMs, in Slack's agent view
   ("Agents & AI apps" must be on for the workspace) and in channels it is
   invited to when @mentioned (`slack.require_mention`, no free-response
-  channels); only `SLACK_ALLOWED_USERS` (the owner) is answered anywhere. In a
+  channels); only `SLACK_ALLOWED_USERS` (the owner) is answered anywhere.
+  Hermes subscribes to `message.channels`/`message.groups` so it can follow up
+  in a thread it was mentioned in, so the gateway receives every message in
+  the channels July is invited to (it answers none of them unprompted). In a
   channel thread Hermes adds up to 30 earlier thread messages as context;
   messages from people outside the allowlist are tagged `[unverified]` and
   the model is told not to follow them, which is a prompt-level guard only.
@@ -512,9 +515,15 @@ rebuild.
   sign-in is the bundled password provider (user = the macOS user name,
   password from `pass hermes/dashboard-password`, hashed with Hermes' scrypt
   helper at activation into the Keychain item
-  `hermes-agent/dashboard-password-hash`; a random token-signing secret in
+  `hermes-agent/dashboard-password-hash`, kept while it still matches and the
+  dashboard restarted when it changes; a random token-signing secret in
   `hermes-agent/dashboard-session-secret`). Without the hash the dashboard
-  refuses to start. Checked: the login page, `/api/config`, `/api/env`,
+  refuses to start. Rotating the password doesn't end existing sign-ins (the
+  12-hour tokens are signed, not stored): to end them, delete the secret
+  (`security delete-generic-password -s hermes-agent -a dashboard-session-secret`),
+  rebuild, and `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-backend`.
+  Turning the dashboard off removes the tailscale serve mapping only if it is
+  exactly ours; if `tailscale serve status` can't be read, nothing is changed. Checked: the login page, `/api/config`, `/api/env`,
   `/api/sessions` and `/api/ws` answer 302/401 without a session, a wrong
   password gets 401, an unknown `Host` gets 400. `/api/status` stays
   public by Hermes' design (version, gateway state, profile names; no
