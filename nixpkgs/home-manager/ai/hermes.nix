@@ -22,6 +22,7 @@ let
   timeout = "${pkgs.coreutils}/bin/timeout";
   sonnet = "claude-sonnet-5-5";
   haiku = "claude-haiku-5-5";
+  cfg = config.dotfiles.ai.hermes;
 
   # Keychain "service/account" -> pass entry.
   keychainItems = {
@@ -37,6 +38,10 @@ let
     SLACK_BOT_TOKEN = "slack-bot-token";
     SLACK_APP_TOKEN = "slack-app-token";
     SLACK_ALLOWED_USERS = "slack-owner-id";
+    # Dashboard sign-in (basic provider): the scrypt hash of the owner's password
+    # and the token-signing secret, both made at activation (see below).
+    HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH = "dashboard-password-hash";
+    HERMES_DASHBOARD_BASIC_AUTH_SECRET = "dashboard-session-secret";
   };
 
   secretsHelper = pkgs.writeShellScript "hermes-secrets" ''
@@ -62,6 +67,17 @@ let
     name = "inbox-monitor/SKILL.md";
     path = ../../../hermes/inbox-monitor/SKILL.md;
   }];
+  # graphify (the knowledge-graph skill Claude Code uses) for chat sessions;
+  # a link to the live skill folder, not a copy.
+  chatSkillsDir = pkgs.runCommand "hermes-chat-skills" { } ''
+    mkdir -p $out
+    ln -s ${home}/.claude/skills/graphify $out/graphify
+  '';
+
+  # tailscale serve: HTTPS on the tailnet (never Funnel) -> the loopback
+  # dashboard. Refuses to touch port 443 when something else serves it there.
+  dashboardPort = 9119;
+  serveTarget = "http://127.0.0.1:${toString dashboardPort}";
 
   # launchd runs /bin/zsh, which stays the job's root process: macOS TCC then
   # attributes the monitor's Reminders automation to "zsh" (allowed once)
@@ -82,13 +98,6 @@ let
     wait $child; rc=$?
     while kill -0 $child 2>/dev/null; do wait $child; rc=$?; done
     exit $rc
-  '';
-
-  # The owner's DM is built by code, never by the model: a no-agent cron job runs
-  # this every 5 min; `im digest` drains the event queue (titles for the work
-  # list, counts for the rest) and prints nothing when it is empty.
-  digestScript = pkgs.writeShellScript "hermes-inbox-digest" ''
-    INBOX_STATE_DIR=${stateDir} exec /usr/bin/python3 -I ${inboxMonitor}/im digest
   '';
 
   # Daily housekeeping (a no-agent Hermes cron job): monitor sessions, run
@@ -114,7 +123,16 @@ in
       gateway.enable = true;
       workingDirectory = home;
 
-      environment.HERMES_CRON_TIMEOUT = "600";
+      environment = {
+        HERMES_CRON_TIMEOUT = "600";
+      } // lib.optionalAttrs (cfg.slackHomeChannel != null) { SLACK_HOME_CHANNEL = cfg.slackHomeChannel; };
+
+      # The dashboard (and Hermes Desktop's remote backend) on loopback only.
+      backend = {
+        mode = if cfg.dashboardPublicUrl != null then "dashboard" else "none";
+        host = "127.0.0.1";
+        port = dashboardPort;
+      };
 
       settings = {
         providers.cliproxy = {
@@ -156,10 +174,22 @@ in
         # see docs) but no MCP servers; cron jobs get only the inbox tools.
         platform_toolsets = {
           slack = [ "hermes-slack" "no_mcp" ];
+          cli = [ "hermes-cli" "no_mcp" ];  # CLI, TUI, Desktop and dashboard chats
           cron = [ "mcp-inbox" ];
         };
 
-        skills.external_dirs = [ "${skillsDir}" ];
+        skills.external_dirs = [ "${skillsDir}" "${chatSkillsDir}" ] ++ cfg.extraSkillDirs;
+        terminal = lib.optionalAttrs (cfg.terminalCwd != null) { cwd = cfg.terminalCwd; };
+
+        # Web dashboard (backend below), reachable only through tailscale serve.
+        # A non-loopback public_url engages the sign-in gate even though the
+        # listener is on loopback; with no password hash the listener refuses to start.
+        dashboard = {
+          basic_auth = {
+            username = config.home.username;
+            session_ttl_seconds = 43200;
+          };
+        } // lib.optionalAttrs (cfg.dashboardPublicUrl != null) { public_url = cfg.dashboardPublicUrl; };
 
         unauthorized_dm_behavior = "ignore";
         slack = {
@@ -234,14 +264,69 @@ in
       )
     '';
 
+    # Dashboard sign-in material, kept out of the store, argv and logs: the
+    # owner's password (pass hermes/dashboard-password) is hashed with Hermes'
+    # own scrypt helper, password on stdin; the token-signing secret is made once.
+    home.activation.hermesDashboardAuth = lib.hm.dag.entryAfter [ "hermesKeychain" ] ''
+      (
+        set +e -u +x
+        ${lib.optionalString ((config.programs.password-store.settings.PASSWORD_STORE_DIR or "") != "")
+          "export PASSWORD_STORE_DIR=${lib.escapeShellArg config.programs.password-store.settings.PASSWORD_STORE_DIR}"}
+        put() {  # put <account> <value>: Keychain item hermes-agent/<account>, value on stdin
+          printf 'add-generic-password -U -s hermes-agent -a %s -T /usr/bin/security -w "%s"\n' "$1" "$2" \
+            | /usr/bin/security -i >/dev/null 2>&1
+          [ "$(/usr/bin/security find-generic-password -s hermes-agent -a "$1" -w 2>/dev/null)" = "$2" ]
+        }
+        if [ -z "''${DRY_RUN_CMD:-}" ]; then
+          if pw=$(${timeout} 60 ${config.programs.password-store.package}/bin/pass show hermes/dashboard-password 2>/dev/null | head -n 1) && [ -n "$pw" ]; then
+            hpy="$(${pkgs.gnused}/bin/sed -n 's/^exec "\(.*\)\/hermes" .*/\1/p' ${hermesBin})/python3"
+            hash=$(printf '%s' "$pw" | "$hpy" -c 'import sys; from plugins.dashboard_auth.basic import hash_password; print(hash_password(sys.stdin.read()))' 2>/dev/null)
+            case "$hash" in
+              *[!A-Za-z0-9\$._+/=:-]*|"") errorEcho "hermes: could not hash the dashboard password" ;;
+              *) put dashboard-password-hash "$hash" || errorEcho "hermes: could not store the dashboard password hash in the login Keychain (rebuild from the console session)" ;;
+            esac
+          else
+            noteEcho "hermes: pass entry hermes/dashboard-password not found; the dashboard will not start until it exists"
+          fi
+          if ! /usr/bin/security find-generic-password -s hermes-agent -a dashboard-session-secret -w >/dev/null 2>&1; then
+            put dashboard-session-secret "$(${pkgs.openssl}/bin/openssl rand -base64 48 | tr -d '\n')" \
+              || errorEcho "hermes: could not store the dashboard session secret"
+          fi
+        fi
+        unset pw hash
+      )
+    '';
+
+    home.activation.hermesTailscaleServe = lib.mkIf (cfg.dashboardPublicUrl != null)
+      (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        (
+          set +e -u
+          ts=/opt/homebrew/bin/tailscale
+          jq=${pkgs.jq}/bin/jq
+          host=${lib.escapeShellArg (lib.removePrefix "https://" cfg.dashboardPublicUrl)}
+          state=$($ts serve status --json 2>/dev/null | $jq -r --arg k "$host:443" --arg t ${lib.escapeShellArg serveTarget} '
+            if (.TCP["443"] == null and .Web[$k] == null) then "free"
+            elif (.TCP["443"] == {"HTTPS": true} and .Web[$k] == {"Handlers": {"/": {"Proxy": $t}}}
+                  and (.AllowFunnel[$k] // false) == false) then "ours"
+            else "other" end')
+          case "''${state:-free}" in
+            ours) ;;
+            free) $DRY_RUN_CMD $ts serve --bg --https=443 ${lib.escapeShellArg serveTarget} >/dev/null 2>&1 \
+                    || errorEcho "hermes: tailscale serve failed; run: tailscale serve --bg --https=443 ${serveTarget}" ;;
+            *) warnEcho "hermes: tailscale serve already uses HTTPS 443 for something else; not changing it (tailscale serve status)" ;;
+          esac
+        )
+      '');
+
     home.packages = [
-      # Creates the paused monitor job and the daily prune job, then checks them.
+      # Creates the paused monitor job and the daily prune job (and removes the
+      # retired inbox-digest job), then checks them.
       # Idempotent; run once after the first switch (docs/ai-setup.md).
       (pkgs.writeShellScriptBin "hermes-inbox-jobs" ''
         set -eu
         exec /usr/bin/python3 -I ${./hermes-inbox-jobs.py} \
           --hermes ${hermesBin} --hermes-home ${hermesHome} --state-dir ${stateDir} \
-          --prune-script ${pruneScript} --digest-script ${digestScript} --model ${sonnet}
+          --prune-script ${pruneScript} --model ${sonnet}
       '')
     ];
   };

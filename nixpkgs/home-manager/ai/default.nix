@@ -109,6 +109,34 @@ in
       description = "Project paths Codex trusts.";
     };
 
+    hermes = {
+      dashboardPublicUrl = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "https://garage-hq.example.ts.net";
+        description = ''
+          The tailnet HTTPS URL of the Hermes dashboard (ai/hermes.nix, garage-hq
+          only). Set: the dashboard runs on loopback, `tailscale serve` maps this
+          URL to it, and sign-in is required. Null: no dashboard.
+        '';
+      };
+      slackHomeChannel = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "SLACK_HOME_CHANNEL for Hermes (the bot's DM channel with the owner).";
+      };
+      terminalCwd = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Where Hermes chat sessions start (terminal.cwd).";
+      };
+      extraSkillDirs = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = "More skills.external_dirs for Hermes (folders of SKILL.md skill folders).";
+      };
+    };
+
     bootstrap = mkOption {
       type = types.lines;
       default = "";

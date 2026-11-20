@@ -478,18 +478,52 @@ rebuild.
   reaches the model through the `window` tool, so nothing personal is in the
   repo or the world-readable store. Run `hermes-inbox-jobs` after the first
   switch: it creates the monitor job paused (every 5 min, Sonnet, toolset
-  `mcp-inbox` only, its response and failure notices kept local), the
-  `inbox-digest` job (no model: every 5 min `im digest` prints the reminders
-  created or closed since the last DM, titles for the work list and counts
-  for the other lists, and Hermes DMs that text to the owner; nothing when
-  there is nothing new; at most once: the queue is drained before Hermes
-  sends, so a Slack outage at that moment loses that DM, while Reminders stay
-  the source of truth) and the daily prune job, and checks them; rerun it any time to correct them. `hermes cron
-  resume inbox-monitor` starts it.
-- **Slack app:** `hermes/slack-manifest.json` (the existing app "July",
-  DM only: bot scopes for DMs, user scopes for the monitor's search, history
-  and reactions; Socket Mode; no slash commands or agent view, kept minimal so
-  Slack accepts it on the existing app). Paste it into the app's App Manifest, reinstall, then store the
+  `mcp-inbox` only, its response and failure notices kept local) and the
+  daily prune job, removes the retired `inbox-digest` job, and checks them;
+  rerun it any time to correct them. Reminders are the monitor's only output
+  (no Slack summary). `hermes cron resume inbox-monitor` starts it. The
+  monitor skips messages from `config.json` `exclude_users` (July's own bot
+  user, so its channel replies never become reminders) and
+  `exclude_channels` (July's DM with the owner).
+- **Slack app:** `hermes/slack-manifest.json` (the existing app "July"; Socket
+  Mode; no slash commands). July answers in DMs, in Slack's agent view
+  ("Agents & AI apps" must be on for the workspace) and in channels it is
+  invited to when @mentioned (`slack.require_mention`, no free-response
+  channels); only `SLACK_ALLOWED_USERS` (the owner) is answered anywhere. In a
+  channel thread Hermes adds up to 30 earlier thread messages as context;
+  messages from people outside the allowlist are tagged `[unverified]` and
+  the model is told not to follow them, which is a prompt-level guard only.
+  User scopes cover the monitor's search, history and reactions.
+  `SLACK_HOME_CHANNEL` is July's DM with the owner
+  (`dotfiles.ai.hermes.slackHomeChannel`).
+- **Dashboard:** with `dotfiles.ai.hermes.dashboardPublicUrl` (private
+  overlay) set, `hermes dashboard` runs as `org.nix-community.home.hermes-backend`
+  on 127.0.0.1:9119 and activation maps the tailnet URL to it with
+  `tailscale serve --https=443` (tailnet only, never Funnel; an existing,
+  different mapping on 443 is left alone with a warning). The non-loopback
+  `dashboard.public_url` engages the sign-in gate on the loopback listener;
+  sign-in is the bundled password provider (user = the macOS user name,
+  password from `pass hermes/dashboard-password`, hashed with Hermes' scrypt
+  helper at activation into the Keychain item
+  `hermes-agent/dashboard-password-hash`; a random token-signing secret in
+  `hermes-agent/dashboard-session-secret`). Without the hash the dashboard
+  refuses to start. Checked: the login page, `/api/config`, `/api/env`,
+  `/api/sessions` and `/api/ws` answer 302/401 without a session, a wrong
+  password gets 401, an unknown `Host` gets 400. `/api/status` stays
+  public by Hermes' design (version, gateway state, profile names; no
+  config or secrets). The dashboard's Config and API-keys pages write
+  `config.yaml` and `~/.hermes/.env`: a rebuild overwrites the keys Nix
+  declares there (other keys survive), and secrets don't belong in `.env`
+  here, so change settings in this repo instead. Phone: open the URL in a
+  browser with Tailscale on; there is no first-party Hermes mobile app in
+  v0.23.3. Hermes Desktop (macOS) can attach to it under Settings →
+  Connections as a remote gateway.
+- **Chat workspace:** chat sessions start in
+  `dotfiles.ai.hermes.terminalCwd` (the AppMan SaaS workspace). Extra skill
+  folders (`dotfiles.ai.hermes.extraSkillDirs`: the workspace's
+  `.claude/skills` and a short map of it from the private overlay) and
+  Claude Code's `graphify` skill (linked, not copied) are listed in each
+  chat's skill index and load on demand; nothing is copied or indexed. Paste it into the app's App Manifest, reinstall, then store the
   tokens and the owner's member id in `pass` (table above) before rebuilding.
 - **Dead-man check:** the `com.ksotis.inbox-monitor-deadman` LaunchAgent
   (every 30 min) DMs the owner once when the enabled monitor has had no

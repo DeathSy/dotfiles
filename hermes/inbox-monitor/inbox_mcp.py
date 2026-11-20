@@ -33,6 +33,7 @@ mask, CONFIG, LISTS, STATE_DIR = im_mod.mask, im_mod.CONFIG, list(im_mod.LISTS),
 OWNER = CONFIG.get("owner_slack_id", "")
 QUERIES = CONFIG.get("queries", {})            # name -> Slack search query (fixed templates)
 EXCLUDE_CHANNELS = set(CONFIG.get("exclude_channels", []))   # e.g. the Hermes bot's DM with the owner
+EXCLUDE_USERS = set(CONFIG.get("exclude_users", []))         # e.g. the Hermes bot's own user id (its replies anywhere)
 GH_OWNERS = set(CONFIG.get("gh_owners", []))
 CHANNEL_RE = re.compile(r"^[CDG][A-Z0-9]{6,}$")
 TS_RE = re.compile(r"^\d{10}\.\d{6}$")
@@ -241,7 +242,8 @@ def t_slack_search(query_name):
         pages = msgs.get("paging", {}).get("pages", 1)
         for m in msgs.get("matches", []):
             ch = m.get("channel", {})
-            if not (start <= float(m["ts"]) <= end) or ch.get("id") in EXCLUDE_CHANNELS:
+            if not (start <= float(m["ts"]) <= end) or ch.get("id") in EXCLUDE_CHANNELS \
+                    or m.get("user") in EXCLUDE_USERS:
                 continue
             if (ch.get("is_im") or ch.get("is_mpim")) and m.get("bot_id"):
                 continue  # bots in DMs (including Hermes itself) are never asks

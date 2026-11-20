@@ -121,30 +121,6 @@ def gmail_thread_id(msg_id):
         die(f"could not look up Gmail message {msg_id}: {e}")
 
 
-def event(s, kind, lst, title):
-    """Queue an event for the owner's DM digest (`./im digest`, run by a no-agent cron job)."""
-    s["events"] = (s.get("events", []) + [{"kind": kind, "list": lst, "title": title, "at": int(time.time())}])[-500:]
-
-
-def digest(s):
-    """The DM text, built by code: titles only for the work list (masked, 80 chars), counts for the rest.
-    Drains the queue; prints nothing when it is empty (Hermes then stays silent)."""
-    events, s["events"] = s.get("events", []), []
-    work = CONFIG.get("digest_title_list", LISTS[0] if LISTS else "")
-    lines, counts = [], {}
-    for ev in events:
-        if ev["list"] == work:
-            t = re.sub(r"\s+", " ", mask(ev["title"]))[:80]
-            lines.append(f"{'Created' if ev['kind'] == 'created' else 'Closed'}: {t}")
-        else:
-            c = counts.setdefault(ev["list"], {"created": 0, "closed": 0})
-            c[ev["kind"]] += 1
-    for lst, c in counts.items():
-        parts = [f"{n} {k}" for k, n in c.items() if n]
-        lines.append(f"{lst}: {', '.join(parts)}")
-    return "\n".join(lines)
-
-
 def open_entry(s, key):
     e = s.get("reminders", {}).get(key)
     if not e:
@@ -228,8 +204,6 @@ def cmd_create(s, argv):
     r = rem("create", a.list, title, body, a.due, pri, flag, f"· {a.key} ·", ",".join(LISTS))
     entry.update(id=r["id"], title=title, created=int(time.time()))
     s.setdefault("reminders", {})[a.key] = entry
-    if not r.get("existing"):
-        event(s, "created", a.list, title)
     save(s)
     out({"created": a.key, "existing": bool(r.get("existing")), "title": r["title"], "due": r["due"],
          "priority": r["priority"], "flagged": r["flagged"]})
@@ -315,12 +289,6 @@ def main(argv):
         out({"lease": s.get("lease")})
         return
 
-    if cmd == "digest":
-        text = digest(s)
-        save(s)
-        if text:
-            print(text)
-        return
 
     if cmd == "window":
         # Catch up in chunks of at most 24 h: [last_check - 600 s overlap, min(now, last_check + 24 h)].
@@ -410,7 +378,6 @@ def main(argv):
             return
         rem("complete", e["id"])
         e["closed"] = "auto-closed"
-        event(s, "closed", e["list"], e["title"])
         save(s)
         out({"completed": a[0], "title": e["title"]})
 

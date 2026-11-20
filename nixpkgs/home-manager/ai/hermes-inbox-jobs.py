@@ -10,7 +10,6 @@ ap.add_argument("--hermes", required=True)
 ap.add_argument("--hermes-home", required=True)
 ap.add_argument("--state-dir", required=True)
 ap.add_argument("--prune-script", required=True)
-ap.add_argument("--digest-script", required=True)
 ap.add_argument("--model", required=True)
 a = ap.parse_args()
 
@@ -41,7 +40,7 @@ def hermes(*args):
 # No-agent scripts must sit in $HERMES_HOME/scripts and be named relatively.
 scripts = os.path.join(a.hermes_home, "scripts")
 os.makedirs(scripts, exist_ok=True)
-for src, name in ((a.prune_script, "hermes-prune.sh"), (a.digest_script, "hermes-inbox-digest.sh")):
+for src, name in ((a.prune_script, "hermes-prune.sh"),):
     dest = os.path.join(scripts, name)
     shutil.copyfile(src, dest + ".tmp")
     os.chmod(dest + ".tmp", 0o500)
@@ -52,28 +51,13 @@ if "hermes-prune" not in have:
     hermes("cron", "create", "0 4 * * *", "--name", "hermes-prune", "--no-agent",
            "--script", "hermes-prune.sh", "--deliver", "local", "--failure-deliver", "local")
 
-owner = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "hermes-agent",
-                        "-a", "slack-owner-id", "-w"], capture_output=True, text=True).stdout.strip()
-if not re.fullmatch(r"U[A-Z0-9]{6,}", owner):
-    sys.exit("hermes-inbox-jobs: no owner Slack id in the Keychain (hermes-agent/slack-owner-id). "
-             "`pass insert hermes/slack-owner-id`, rebuild, then run this again.")
-# Deliver to the bot's DM channel with the owner (a bare user id gets channel_not_found from Hermes).
-import urllib.parse, urllib.request
-bot = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "hermes-agent", "-a", "slack-bot-token",
-                      "-w"], capture_output=True, text=True).stdout.strip()
-req = urllib.request.Request("https://slack.com/api/conversations.open",
-                             data=urllib.parse.urlencode({"users": owner}).encode(),
-                             headers={"Authorization": f"Bearer {bot}"})
-opened = json.load(urllib.request.urlopen(req, timeout=20)) if bot else {"ok": False, "error": "no bot token"}
-if not opened.get("ok"):
-    sys.exit(f"hermes-inbox-jobs: can't open the bot's DM with the owner: {opened.get('error')}")
-dm = f"slack:{opened['channel']['id']}"
+# The retired Slack digest: Reminders are the only output now.
+if "inbox-digest" in have:
+    hermes("cron", "remove", have["inbox-digest"]["id"])
+old = os.path.join(scripts, "hermes-inbox-digest.sh")
+if os.path.exists(old):
+    os.remove(old)
 
-# The monitor's own (model-written) response stays local; the owner's DM comes from inbox-digest.
-if "inbox-digest" not in have:
-    hermes("cron", "create", "every 5m", "--name", "inbox-digest", "--no-agent",
-           "--script", "hermes-inbox-digest.sh", "--deliver", dm, "--failure-deliver", "local",
-           "--no-wrap-response", "--catch-up", "off")
 deliver = "local"
 if "inbox-monitor" not in have:
     hermes("cron", "create", "every 5m", "Run one inbox-monitor cycle.", "--name", "inbox-monitor",
@@ -92,12 +76,5 @@ bad = {k: job.get(k) for k, v in want.items() if job.get(k) != v}
 if bad:
     sys.exit(f"hermes-inbox-jobs: inbox-monitor job is not as expected: {bad}")
 print(f"inbox-monitor: {job['state']}, delivers to {job.get('deliver')}, toolsets {job['enabled_toolsets']}")
-dig = jobs()["inbox-digest"]
-if dig.get("deliver") != dm:
-    api(f"print(json.dumps(update_job({dig['id']!r}, {{'deliver': {dm!r}}})))")
-    dig = jobs()["inbox-digest"]
-if dig.get("deliver") != dm or not dig.get("no_agent"):
-    sys.exit(f"hermes-inbox-jobs: inbox-digest job is not as expected: deliver={dig.get('deliver')}")
-print(f"inbox-digest: {dig['state']}, delivers to {dig['deliver']} (code-built DM)")
 
 hermes("cron", "list", "--all")
