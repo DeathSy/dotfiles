@@ -426,30 +426,73 @@ agents back:
 ## Hermes Agent (garage-hq)
 
 `nixpkgs/home-manager/ai/hermes.nix`, imported by `nixpkgs/hosts/garage-hq.nix`
-with the Home Manager module of the `hermes-agent` flake input (pinned to a
-release tag). It runs the Hermes gateway (a Slack DM bot for the owner) as the
-`org.nix-community.home.hermes-agent` LaunchAgent and writes
-`~/.hermes/config.yaml` from `services.hermes-agent.settings` on every rebuild.
+with the Home Manager module of the `hermes-agent` flake input. The input is
+pinned to the release tag v0.23.3 (released 2026-11-20) and `flake.nix` applies
+`nixpkgs/home-manager/ai/hermes-pnpm-macos.patch` (upstream PR #150967, still
+open): without it the pnpm dependency hash differs on macOS and the build
+fails. Drop the patch once a release contains the fix.
+
+It runs the Hermes gateway, the owner's always-on agent as a Slack DM bot, as
+the `org.nix-community.home.hermes-agent` LaunchAgent and writes
+`~/.hermes/config.yaml` (0600) from `services.hermes-agent.settings` on every
+rebuild.
 
 - **Model:** the CLIProxyAPI gateway as the custom provider `cliproxy`
-  (`anthropic_messages`), Sonnet by default.
-- **Secrets:** `pass` entries `ai/cliproxyapi-key`, `hermes/slack-bot-token`,
-  `hermes/slack-app-token` and `hermes/slack-user-token` are copied into the
-  login Keychain (service `hermes-agent`) at activation; a missing entry is
-  skipped with a note. Hermes reads the first three from the Keychain at every
-  start (`secrets.command`), so nothing is written to `~/.hermes/.env`. The
-  user token is read only by the inbox monitor's MCP server. A rebuild after
-  adding or rotating a token refreshes the Keychain; then
+  (`anthropic_messages`): Sonnet for chat and the monitor, Haiku for titles.
+- **Secrets:** `pass` is the source of truth; activation copies each entry
+  into the login Keychain (`security -i` on stdin, read back to check, an
+  empty or missing entry never overwrites). Rebuild from the console session:
+  over SSH the Keychain may refuse the write and activation says so.
+
+  | pass entry | Keychain service/account | read by |
+  |---|---|---|
+  | `ai/cliproxyapi-key` | `hermes-agent/cliproxy-api-key` | Hermes (`secrets.command`) |
+  | `hermes/slack-bot-token` (xoxb) | `hermes-agent/slack-bot-token` | Hermes, dead-man check |
+  | `hermes/slack-app-token` (xapp) | `hermes-agent/slack-app-token` | Hermes |
+  | `hermes/slack-owner-id` (`U…`) | `hermes-agent/slack-owner-id` | Hermes (`SLACK_ALLOWED_USERS`), dead-man check |
+  | `hermes/slack-user-token` (xoxp) | `inbox-monitor/slack-user-token` | only the inbox MCP server |
+
+  Nothing secret or personal is in `~/.hermes/.env`, `config.yaml` or the
+  Nix store. After adding or rotating a token: rebuild, then
   `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-agent`.
-- **Owner:** `dotfiles.ai.hermes.slackUserId` (private overlay). Unknown DMs
-  are ignored; approvals are manual and cron jobs never auto-approve.
-- **TCC:** launchd starts `/bin/zsh`, which runs the gateway and stays the
-  job's root process, so Reminders automation is attributed to "zsh"
-  (allowed once in Privacy & Security → Automation) rather than to a
-  nix-store Python that changes with each update.
-- **Inbox monitor:** its code, state and skill live outside every repo in
-  `~/.local/state/inbox-monitor` (they name colleagues). `hermes-inbox-jobs`
-  creates the 5-minute monitor job (paused) and a daily prune job: monitor
-  sessions and run documents are kept 3 days, chat sessions 30 days
-  (`sessions.retention_days`), the LaunchAgent logs are capped at 5 MB.
-- **Logs:** `~/Library/Logs/hermes-agent{,.err}.log`, `~/.hermes/logs/`.
+- **Start:** launchd runs `/bin/zsh`, which waits until the Keychain answers
+  (exit 75 and a launchd retry every 30 s otherwise), starts the gateway as
+  its child and forwards TERM/INT/HUP to that pid. zsh stays the job's root
+  process, so macOS attributes the monitor's Reminders automation to "zsh"
+  (allowed once in Privacy & Security → Automation) and not to a nix-store
+  Python that changes with every update.
+- **Access (accepted risk):** chat sessions get every toolset Hermes ships
+  for Slack, terminal and files included, on the local backend as the owner's
+  macOS user, by the owner's choice. A chat turn can therefore read the
+  Keychain items above, change files and send data anywhere; approvals
+  (`approvals.mode: manual`) are a heuristic for dangerous commands, not a
+  boundary. The guards that remain: only `SLACK_ALLOWED_USERS` (the owner) is
+  answered and other DMs are ignored; cron jobs never auto-approve; chat gets
+  no MCP servers (`no_mcp`), so it can't drive the monitor's Reminders and
+  Slack tools; the monitor's code and skill are read-only in the Nix store.
+- **Inbox monitor:** `hermes/inbox-monitor/` (code, README) and the skill
+  from the private overlay (`dotfiles.ai.hermes.inboxSkill`). State and
+  `config.json` live in `~/.local/state/inbox-monitor`. Run
+  `hermes-inbox-jobs` once after the first switch: it creates the monitor job
+  paused (every 5 min, Sonnet, toolset `mcp-inbox` only, failure notices kept
+  local) and the daily prune job, then checks them. `hermes cron resume
+  inbox-monitor` starts it.
+- **Dead-man check:** the `com.ksotis.inbox-monitor-deadman` LaunchAgent
+  (every 30 min) DMs the owner once when the enabled monitor has had no
+  successful cycle for an hour, and once when it recovers.
+- **Data:** Slack and email text the monitor reads is masked by its MCP
+  server (emails, Thai phone numbers and 13-digit ids, last 4 characters
+  kept) before Hermes sees it. Hermes stores it in `~/.hermes/state.db`
+  (sessions, full-text index), `~/.hermes/cron/output/` and
+  `~/.hermes/cache/spillover/`; the prune job deletes monitor sessions and
+  run documents after 1 day. Chat sessions are kept for good
+  (`sessions.auto_prune: false`); `security.redact_secrets` masks key-shaped
+  values in chat, logs and tool output. Expected size: about 288 monitor runs
+  a day at roughly 50-150 KB each, so 15-45 MB of monitor sessions at any
+  time, plus chat history growing with use; SQLite does not shrink the file
+  after deletes. Chat's `session_search` can find monitor sessions until they
+  are pruned (it can't be scoped by source). The reminders themselves live in
+  Reminders (iCloud) until the owner deletes them.
+- **Logs:** `~/Library/Logs/hermes-agent{,.err}.log` (capped at 5 MB by the
+  prune job), `~/Library/Logs/inbox-monitor-deadman.log`, `~/.hermes/logs/`
+  (rotated by Hermes).

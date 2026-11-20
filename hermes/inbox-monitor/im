@@ -1,0 +1,392 @@
+#!/usr/bin/python3 -I
+"""Inbox monitor helper: state.json bookkeeping + Apple Reminders (via reminders.js).
+
+Code is read-only (installed into the Nix store by the dotfiles); state and the owner's settings live in
+$INBOX_STATE_DIR (default ~/.local/state/inbox-monitor): state.json, config.json (0600, see README.md).
+
+  ./im window                         start of a cycle: window_start, window_end (<= 24 h chunk; catching_up);
+                                      {"skip": true} while another cycle holds the run lease
+  ./im new-slack KEY...               which "<channel_id>:<ts>" keys are not processed yet
+  ./im seen slack|gmail KEY...        mark keys processed (task or not)
+  ./im finish ok|failed ok|failed SUMMARY
+                                      Slack status, email status; advances last_check_epoch to window_end
+                                      only if both ok
+  ./im open LIST                      open reminders in <list from config.json> (to spot duplicates)
+  ./im tracked                        open reminders this monitor created, with user_note and recheck flag
+  ./im checked KEY...                 record that these tracked reminders were re-verified now
+  ./im create --key K --list L --quadrant Q --title T --ask A --from F --close-when C
+              [--due D --due-from QUOTE] [--thread-ts TS]
+  ./im complete KEY
+  ./im update KEY quadrant|due VALUE
+Internal: ./im hook-reaction (PreToolUse hook), ./im mask (stdin filter), INBOX_ADMIN=1 ./im ensure-list L
+INBOX_DRY_RUN=1 makes every write a no-op that prints what it would do.
+"""
+import argparse, fcntl, json, os, re, subprocess, sys, tempfile, time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+STATE_DIR = os.environ.get("INBOX_STATE_DIR") or os.path.expanduser("~/.local/state/inbox-monitor")
+STATE = os.path.join(STATE_DIR, "state.json")
+
+
+def _config():
+    try:
+        with open(os.path.join(STATE_DIR, "config.json")) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+CONFIG = _config()
+DRY = os.environ.get("INBOX_DRY_RUN") == "1"
+ADMIN = os.environ.get("INBOX_ADMIN") == "1"
+LISTS = tuple(CONFIG.get("lists") or ("Work", "Personal"))
+QUAD = {"do-now": ("high", "flag"), "plan": ("medium", "noflag"),
+        "delegate": ("low", "flag"), "borderline": ("low", "noflag")}
+FOOTER = "— inbox-monitor · {quad} · {key} · write your decision below this line —"
+KEY_RE = re.compile(r"^(slack:([CDG][A-Z0-9]{6,}):(\d{10}\.\d{6})|gmail:([0-9a-f]{10,20}))(#[2-9])?$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$")
+SLACK_BASE = CONFIG.get("slack_base", "https://slack.com/archives")
+CAP, LOG_CAP = 2000, 50
+MAX_WINDOW = 86400           # each cycle covers at most 24 h; older backlog is caught up over cycles
+MISS_GRACE = 600             # a reminder must be missing twice, >= 10 min apart, to count as deleted
+RECHECK = 1800               # re-verify each tracked reminder at most every 30 min
+LEASE = 1500                 # a cycle's run lease; a newer cycle skips while it is younger than this
+
+# Privacy masks (keep the last 4 chars): emails, 13-digit identity numbers, Thai phone numbers.
+MASKS = [
+    re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
+    re.compile(r"(?<![\w.])\d(?:[ -]?\d){12}(?![\w.])"),
+    re.compile(r"(?<![\w.])(?:\+66[ -]?|0)\d(?:[ -]?\d){7,8}(?![\w.])"),
+]
+
+
+def mask(s):
+    for rx in MASKS:
+        s = rx.sub(lambda m: "***" + m.group(0)[-4:], s)
+    return s
+
+
+def out(v):
+    print(json.dumps(v, ensure_ascii=False, indent=1))
+
+
+def die(msg):
+    out({"error": msg})
+    sys.exit(1)
+
+
+def load():
+    with open(STATE) as f:
+        return json.load(f)
+
+
+def save(s):
+    if DRY:
+        return
+    fd, tmp = tempfile.mkstemp(dir=STATE_DIR, prefix=".state.", suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        json.dump(s, f, ensure_ascii=False, indent=1)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, STATE)
+
+
+def rem(*args):
+    try:
+        p = subprocess.run(["osascript", "-l", "JavaScript", os.path.join(HERE, "reminders.js"), *args],
+                           capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        die("Reminders did not answer within 120 s (app busy or a dialog open on garage-hq's screen)")
+    if p.returncode != 0:
+        die("osascript failed: " + p.stderr.strip())
+    r = json.loads(p.stdout)
+    if isinstance(r, dict) and "error" in r:
+        die(r["error"])
+    return r
+
+
+def gmail_thread_id(msg_id):
+    try:
+        p = subprocess.run(["gws", "gmail", "users", "messages", "get", "--params",
+                            json.dumps({"userId": "me", "id": msg_id, "format": "minimal"})],
+                           capture_output=True, text=True, timeout=60)
+        return json.loads(p.stdout[p.stdout.index("{"):])["threadId"]
+    except Exception as e:  # noqa: BLE001
+        die(f"could not look up Gmail message {msg_id}: {e}")
+
+
+def open_entry(s, key):
+    e = s.get("reminders", {}).get(key)
+    if not e:
+        die(f"no reminder tracked for key {key} (only reminders this monitor created can be changed)")
+    if e.get("closed"):
+        die(f"reminder {key} is already closed ({e['closed']})")
+    return e
+
+
+def split_notes(body, key):
+    """(monitor-written notes, text the user wrote below the footer or None). Only the LAST canonical
+    footer for this key counts; create() keeps model text single-line and footer-free, so it can't fake one."""
+    rx = re.compile(r"^— inbox-monitor · [a-z-]+ · " + re.escape(key) + r" · write your decision below this line —$", re.M)
+    ms = list(rx.finditer(body))
+    if not ms:
+        return body.strip(), None
+    m = ms[-1]
+    note = body[m.end():].strip()
+    return body[:m.start()].strip(), note or None
+
+
+def clean(v):
+    """Model-supplied field: one line, no footer marker, masked."""
+    v = re.sub(r"\s*[\r\n]+\s*", " ", v).replace("\\n", " ").replace("inbox-monitor", "inbox monitor")
+    return mask(v.strip())
+
+
+def cmd_create(s, argv):
+    ap = argparse.ArgumentParser(prog="./im create")
+    for f in ("key", "list", "quadrant", "title", "ask", "from", "close-when"):
+        ap.add_argument("--" + f, required=True)
+    ap.add_argument("--due", default="-")
+    ap.add_argument("--due-from", default="")
+    ap.add_argument("--thread-ts", default="")
+    try:
+        a = ap.parse_args(argv)
+    except SystemExit:
+        die("usage: ./im create --key K --list L --quadrant Q --title T --ask A --from F --close-when C "
+            "[--due D --due-from QUOTE] [--thread-ts TS]")
+    m = KEY_RE.match(a.key)
+    if not m:
+        die("key must be slack:<channel_id>:<ts> or gmail:<message id>, optionally #2..#9")
+    if a.list not in LISTS:
+        die("list must be one of " + ", ".join(LISTS))
+    if a.quadrant not in QUAD:
+        die("quadrant must be do-now, plan, delegate or borderline")
+    if a.due != "-" and not DATE_RE.match(a.due):
+        die("--due must be YYYY-MM-DD or YYYY-MM-DDTHH:MM")
+    if a.due != "-" and not a.due_from.strip():
+        die("--due needs --due-from with the exact deadline phrase quoted from the message")
+    if a.thread_ts and not re.fullmatch(r"\d{10}\.\d{6}", a.thread_ts):
+        die("--thread-ts must look like 1795089919.310379")
+    if a.key in s.get("reminders", {}):
+        die(f"a reminder for {a.key} was already created in an earlier cycle; skip this one and go on")
+
+    entry = {"list": a.list, "quadrant": a.quadrant}
+    if m.group(2):  # Slack: permalink built from the key, never from model text
+        ch, ts = m.group(2), m.group(3)
+        link = f"{SLACK_BASE}/{ch}/p{ts.replace('.', '')}"
+        if a.thread_ts and a.thread_ts != ts:
+            link += f"?thread_ts={a.thread_ts}&cid={ch}"
+        entry.update(source="slack", channel=ch, ts=ts, thread_ts=a.thread_ts or ts)
+    else:
+        tid = gmail_thread_id(m.group(4))
+        link = f"https://mail.google.com/mail/u/0/#inbox/{tid}"
+        entry.update(source="gmail", message_id=m.group(4), thread_id=tid)
+
+    title = clean(a.title)
+    lines = [("(borderline) " if a.quadrant == "borderline" else "") + "Ask: " + clean(a.ask),
+             "From: " + clean(getattr(a, "from")),
+             "Source: " + link,
+             "Close when: " + clean(a.close_when)]
+    if a.due != "-":
+        lines.append('Due from: "' + clean(a.due_from) + '"')
+    body = "\n".join(lines) + "\n\n" + FOOTER.format(quad=a.quadrant, key=a.key)
+    pri, flag = QUAD[a.quadrant]
+    if DRY:
+        out({"dry_run": True, "would_create": {"key": a.key, "list": a.list, "quadrant": a.quadrant,
+                                                "title": title, "due": a.due, "notes": body}})
+        return
+    r = rem("create", a.list, title, body, a.due, pri, flag, f"· {a.key} ·", ",".join(LISTS))
+    entry.update(id=r["id"], title=title, created=int(time.time()))
+    s.setdefault("reminders", {})[a.key] = entry
+    save(s)
+    out({"created": a.key, "existing": bool(r.get("existing")), "title": r["title"], "due": r["due"],
+         "priority": r["priority"], "flagged": r["flagged"]})
+
+
+def cmd_tracked(s):
+    now, res, changed = int(time.time()), [], False
+    for key, e in s.get("reminders", {}).items():
+        if e.get("closed"):
+            continue
+        r = rem("get", e["id"])
+        if r.get("missing"):
+            first = e.setdefault("missing_since", now)
+            changed = True
+            if now - first >= MISS_GRACE:
+                e["closed"] = "deleted by user"
+            continue
+        if "missing_since" in e:
+            del e["missing_since"]
+            changed = True
+        if r.get("completed"):
+            e["closed"] = "completed"
+            changed = True
+            continue
+        notes, user_note = split_notes(r["notes"], key)
+        item = {"key": key, "list": e["list"], "quadrant": e.get("quadrant"), "title": r["title"],
+                "due": r["due"], "notes": notes, "user_note": user_note,
+                "recheck": now - e.get("last_checked", 0) >= RECHECK}
+        for f in ("channel", "thread_ts", "thread_id"):
+            if f in e:
+                item[f] = e[f]
+        res.append(item)
+    if changed:
+        save(s)
+    out(res)
+
+
+def cmd_hook_reaction():
+    """PreToolUse hook for slack_add_reaction: only `clipboard`, only on a message that became a reminder
+    within the last hour. Exit 2 blocks the call and shows stderr to the model. Fails closed."""
+    try:
+        ti = json.load(sys.stdin).get("tool_input", {})
+        if DRY:
+            reason = "dry run: no reactions"
+        elif ti.get("emoji") != "clipboard":
+            reason = "only the clipboard emoji is allowed"
+        else:
+            prefix = f"slack:{ti['channel_id']}:{ti['message_ts']}"
+            if any((k == prefix or k.startswith(prefix + "#")) and time.time() - e.get("created", 0) < 3600
+                   for k, e in load().get("reminders", {}).items()):
+                return 0
+            reason = "reactions are only allowed on a message that just became a reminder"
+    except Exception as e:  # noqa: BLE001
+        reason = f"reaction check failed, blocking: {e!r}"
+    print(reason, file=sys.stderr)
+    return 2
+
+
+def main(argv):
+    if not argv:
+        die("usage: see the ./im source header")
+    cmd, a = argv[0], argv[1:]
+    if cmd == "mask":
+        for line in sys.stdin:
+            sys.stdout.write(mask(line))
+        return
+    if cmd == "hook-reaction":
+        sys.exit(cmd_hook_reaction())
+
+    lock = open(STATE + ".lock", "w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    s = load()
+
+    if cmd == "window":
+        # Catch up in chunks of at most 24 h: [last_check - 600 s overlap, min(now, last_check + 24 h)].
+        now = int(time.time())
+        lease = s.get("lease")
+        if lease and now - lease < LEASE and not DRY:
+            out({"skip": True, "reason": f"another cycle started {now - lease} s ago"})
+            return
+        s["lease"] = now
+        override = os.environ.get("INBOX_WINDOW_START")
+        base = int(override) if override else s["last_check_epoch"]
+        start, end = base - 600, min(now, base + MAX_WINDOW)
+        s["run_end"] = end
+        save(s)
+        out({"now": now, "window_start": start, "window_end": end, "catching_up": end < now, "dry_run": DRY})
+
+    elif cmd == "new-slack":
+        seen = set(s["slack_ts"])
+        new = [k for k in a if k not in seen]
+        s["pending_slack"] = list(dict.fromkeys(s.get("pending_slack", []) + new))
+        save(s)
+        out(new)
+
+    elif cmd == "seen":
+        if not a or a[0] not in ("slack", "gmail"):
+            die("seen slack|gmail KEY...")
+        field = "slack_ts" if a[0] == "slack" else "gmail_ids"
+        have = set(s[field])
+        new = [k for k in dict.fromkeys(a[1:]) if k not in have]
+        s[field] = (s[field] + new)[-CAP:]
+        save(s)
+        out({"dry_run": DRY, "added": len(new)})
+
+    elif cmd == "finish":
+        if len(a) != 3 or a[0] not in ("ok", "failed") or a[1] not in ("ok", "failed"):
+            die("finish ok|failed ok|failed SUMMARY")
+        end = s.get("run_end")
+        if not end and not DRY:
+            die("run ./im window first")
+        # Every key this cycle returned as new must have been marked seen, or the window is not done.
+        unfinished = [k for k in s.get("pending_slack", []) if k not in set(s["slack_ts"])]
+        try:
+            with open(os.path.join(STATE_DIR, ".pending_gmail.json")) as f:
+                unfinished += [i for i in json.load(f) if i not in set(s["gmail_ids"])]
+        except FileNotFoundError:
+            pass
+        advance = a[0] == "ok" and a[1] == "ok" and not unfinished
+        if advance and not DRY:
+            s["last_check_epoch"] = end
+            s["last_ok_at"] = int(time.time())
+            s.pop("pending_slack", None)
+        s["log"] = (s.get("log", []) + [{"at": int(time.time()), "window_end": end, "slack": a[0], "email": a[1],
+                                         "summary": mask(a[2])[:300]}])[-LOG_CAP:]
+        s.pop("run_end", None)
+        s.pop("lease", None)
+        save(s)
+        out({"dry_run": DRY, "advanced": advance and not DRY,
+             "unfinished": unfinished or None})
+
+    elif cmd == "open":
+        if len(a) != 1 or a[0] not in LISTS:
+            die("open " + "|".join(LISTS))
+        out(rem("open", a[0]))
+
+    elif cmd == "tracked":
+        cmd_tracked(s)
+
+    elif cmd == "checked":
+        now = int(time.time())
+        for k in a:
+            open_entry(s, k)["last_checked"] = now
+        save(s)
+        out({"dry_run": DRY, "checked": len(a)})
+
+    elif cmd == "create":
+        cmd_create(s, a)
+
+    elif cmd == "complete":
+        if len(a) != 1:
+            die("complete KEY")
+        e = open_entry(s, a[0])
+        if DRY:
+            out({"dry_run": True, "would_complete": a[0], "title": e["title"]})
+            return
+        rem("complete", e["id"])
+        e["closed"] = "auto-closed"
+        save(s)
+        out({"completed": a[0], "title": e["title"]})
+
+    elif cmd == "update":
+        if len(a) != 3 or a[1] not in ("quadrant", "due"):
+            die("update KEY quadrant|due VALUE")
+        key, field, val = a
+        e = open_entry(s, key)
+        if field == "quadrant" and val not in QUAD:
+            die("quadrant must be do-now, plan, delegate or borderline")
+        if field == "due" and not DATE_RE.match(val):
+            die("due must be YYYY-MM-DD or YYYY-MM-DDTHH:MM (clearing a due date is not supported)")
+        if DRY:
+            out({"dry_run": True, "would_update": key, field: val})
+            return
+        if field == "quadrant":
+            pri, flag = QUAD[val]
+            rem("update", e["id"], "priority", pri)
+            rem("update", e["id"], "flag", flag)
+            e["quadrant"] = val
+            save(s)
+        else:
+            rem("update", e["id"], "due", val)
+        out({"updated": key, field: val})
+
+    elif cmd in ("ensure-list", "lists") and ADMIN:  # setup only; the agent can't set INBOX_ADMIN
+        out(rem(cmd, *a))
+
+    else:
+        die("unknown command " + cmd)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

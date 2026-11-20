@@ -109,13 +109,13 @@ in
       description = "Project paths Codex trusts.";
     };
 
-    hermes.slackUserId = mkOption {
-      type = types.str;
-      default = "";
+    hermes.inboxSkill = mkOption {
+      type = types.nullOr types.path;
+      default = null;
       description = ''
-        The owner's Slack member ID (set in the private overlay). The Hermes gateway
-        (ai/hermes.nix, garage-hq only) answers only this user, and the inbox monitor
-        DMs its summaries there. Empty: the gateway answers nobody.
+        SKILL.md of the inbox monitor (ai/hermes.nix, garage-hq only). Set by the
+        private overlay because it names colleagues and the owner's ids. Null: no
+        monitor job.
       '';
     };
 

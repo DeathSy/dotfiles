@@ -16,7 +16,8 @@
 
     # Hermes Agent (garage-hq only, nixpkgs/home-manager/ai/hermes.nix). Pinned
     # to a release tag with its own nixpkgs: Nix is a best-effort platform
-    # upstream, so we build exactly what that release locked.
+    # upstream, so we build exactly what that release locked. Used through
+    # `hermesAgent` below, which applies our local patches.
     hermes-agent.url = "github:NousResearch/hermes-agent/v0.23.3";
 
     # Private data layer (project paths, internal URLs; no logic). Defaults
@@ -28,14 +29,33 @@
   };
 
   outputs = inputs@{
-			self, nixpkgs, nix-darwin, home-manager, private, ...
+			self, nixpkgs, nix-darwin, home-manager, private, hermes-agent, ...
 		}: let
+    # hermes-agent v0.23.3 with upstream PR #150967 applied (still open): on
+    # macOS pnpm leaves an empty v11/links directory in the dependency store,
+    # so the pnpm-deps fixed-output hash differs from Linux's and the build
+    # fails (issue #150713). Drop the patch once a release includes the fix.
+    hermesAgent = let
+      src = nixpkgs.legacyPackages.aarch64-darwin.applyPatches {
+        name = "hermes-agent-v0.23.3-patched";
+        src = hermes-agent;
+        patches = [ ./nixpkgs/home-manager/ai/hermes-pnpm-macos.patch ];
+      };
+      outputs = (import "${src}/flake.nix").outputs (hermes-agent.inputs // { self = flake; });
+      flake = outputs // hermes-agent.sourceInfo // {
+        _type = "flake";
+        outPath = "${src}";
+        inherit (hermes-agent) inputs;
+        inherit outputs;
+      };
+    in flake;
+
     # The shared modules below are the global layer every Mac gets;
     # nixpkgs/hosts/<hostName>.nix adds that device's names and extra apps.
     mkHost = hostName: nix-darwin.lib.darwinSystem {
 			system = "aarch64-darwin";
 
-			specialArgs = { inherit inputs; };
+			specialArgs = { inputs = inputs // { hermes-agent = hermesAgent; }; };
 
       modules = [
 				{ networking = { inherit hostName; }; }
