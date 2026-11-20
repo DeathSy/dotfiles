@@ -30,6 +30,7 @@ Your ~/.claude/CLAUDE.md is already loaded; this covers what it doesn't make obv
 - Ask before anything sensitive: email, banking, admin consoles, anything that sends, buys, deletes or changes DNS/certs.
 - PR evidence: one named session per build, viewport 1440 px, mask personal data in the DOM before capturing, as CLAUDE.md requires. `--headed` shows a window if the user wants to watch.
 - Always name agent-browser and its named-session rule in subagent briefs (GPT agents especially won't infer it).
+- Steel agent sessions (rules in CLAUDE.md): a 409 can mean the account already has a live connect, teach or agent session (possibly the user's), the account is in a run, every browser is busy, or the lock was lost: read the message, never end a session you didn't create, and ask or retry later. A session ends on its own after 30 min without API calls or CDP traffic, or after 2 h. The user opening Connect/Teach for that account in the UI ends it, and a deploy of the rpa app ends every live session (`up-garage-server.sh` refuses while a browser is busy). Passkey (WebAuthn) prompts are declined at once, so sites fall back to OTP or password. The live view has a "Paste text" box under it that types into the focused field (e.g. an OTP from the user's phone).
 
 ## Subagents
 - They can't write report files; ask for findings as text.
