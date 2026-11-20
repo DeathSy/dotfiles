@@ -76,6 +76,11 @@ sudo darwin-rebuild switch --flake ~/studio/personal/dotfiles \
   the host (see [Gateway hosts](#gateway-hosts)).
 - Installs `agent-browser` and `googleworkspace-cli` (`gws`) with Homebrew.
 
+Open Design and the local LLM tunnel (workstation services) were retired on
+2026-11-20; drop Open Design's leftover MCP entry with
+`claude mcp remove -s user open-design`. Auto Browser stays until another
+session is done with it, then moves to `agent-browser`.
+
 `settings.json` keys the public layer manages: `$schema`, `env.*` (agent
 teams, function hooks, timeouts, context and autocompact limits, telemetry
 off, claude.ai MCP servers off), `permissions.deny`, `skillOverrides`,
@@ -99,8 +104,8 @@ hub, **garage-hq**, which took it over from garage-server (see
 Its host file imports `nixpkgs/nix-darwin/ai-hub.nix`, which declares the
 `cliproxyapi` brew service (started on every rebuild unless
 `dotfiles.ai.gateway.server.startService` is off), sets
-`dotfiles.ai.gateway.server.enable` and turns on the workstation services (steps 10 to 12 of [New machine](#new-machine)),
-and `ai/headroom.nix`. On the hub a rebuild also:
+`dotfiles.ai.gateway.server.enable` and turns on Auto Browser (step 10 of
+[New machine](#new-machine)), and `ai/headroom.nix`. On the hub a rebuild also:
 
 - writes `/opt/homebrew/etc/cliproxyapi.conf` from `cliproxyapi/config.yaml`
   (client key and management key from `pass`, mode 600), only if the file
@@ -213,13 +218,12 @@ Claude Code until step 4.
 ### Moving the gateway server to garage-hq
 
 garage-hq took the hub over from garage-server in two changes. The first gave
-it the hub role without clients, without Open Design's reverse tunnel
-(`openDesign.gatewayTunnel = false`) and with its `cliproxyapi` never started
+it the hub role without clients and with its `cliproxyapi` never started
 by Homebrew (`gateway.server.startService = false`), so a rebuild couldn't run
 a second live copy of the logins, while garage-server kept serving every Mac.
 The second, merged in step 5 (the `garage-hq-cutover` branches of this repo
 and the private one), turned garage-server into a client like garage, dropped
-both garage-hq settings and set `tunnel.host = "garage-hq"`. Steps 3 to 5
+that garage-hq setting and set `tunnel.host = "garage-hq"`. Steps 3 to 5
 take the gateway away from garage-server and garage, so they ran by hand in a
 plain terminal, not through Claude Code there. The steps, kept for a
 rollback:
@@ -233,8 +237,7 @@ rollback:
    only in step 3.
    Give garage-hq the `workstation` alias (copy its `~/.ssh/config` block) and
    a key the workstation accepts, with the host key in known_hosts; the
-   `auto-browser-tunnel`, `open-design-tunnel` and `local-llm-tunnel` logs
-   must stay quiet.
+   `auto-browser-tunnel` log must stay quiet.
 2. Do steps 1 and 2 of [Moving the personal Mac to the tunnel](#moving-the-personal-mac-to-the-tunnel)
    with garage-hq as the server and both garage and garage-server as
    clients: Remote Login on garage-hq with each client's key in its
@@ -272,11 +275,8 @@ rollback:
    Before each `rebuild`, check that it will point at garage-hq:
    `nix eval --raw ~/studio/personal/dotfiles#darwinConfigurations.$(scutil --get LocalHostName).config.home-manager.users.ksotis.dotfiles.ai.gateway.tunnel.host --override-input private path:$HOME/studio/personal/dotfiles-private`
    must print `garage-hq`. Then `rebuild` in this order: garage-server (first
-   `kill "$(cat /tmp/gateway-bridge.pid)"` if you started the bridge; its
-   reverse tunnel stops, freeing the workstation's port, and its
-   `cliproxyapi-tunnel` starts on the free 8317), garage-hq (opens the
-   reverse tunnel; while the workstation still holds a stale listener it
-   retries every 30 s, see step 11 of [New machine](#new-machine)), then garage.
+   `kill "$(cat /tmp/gateway-bridge.pid)"` if you started the bridge, so its
+   `cliproxyapi-tunnel` starts on the free 8317), garage-hq, then garage.
    On garage-server and garage, `lsof -nP -iTCP:8317 -sTCP:LISTEN` shows
    `ssh`; repeat the model list against 8317 and run one `claude -p` prompt.
 6. Hand the session coordination over; it is per Mac. The SessionStart hook
@@ -439,27 +439,3 @@ agents back:
    an existing entry, so after changing the server definition run
    `claude mcp remove -s user auto-browser` and `ai-mcp-add` again.
    Tunnel log: `~/Library/Logs/auto-browser-tunnel.log`.
-11. On the hub, Open Design (`dotfiles.ai.openDesign`, enabled in
-   `nixpkgs/nix-darwin/ai-hub.nix`): `ai-mcp-add` registers the
-   `open-design` stdio MCP server, which runs `open-design/mcp.sh` on the
-   `workstation` alias over SSH, so this Mac holds no token for it. The
-   `open-design-tunnel` launchd agent forwards 127.0.0.1:7456 to the
-   workstation's hardening proxy on 7457 for the web UI, which asks for the API
-   token (`pass show workstation/open-design/api-token`). The local port must
-   stay 7456: the app's preview URLs and origin check use it. Tunnel log:
-   `~/Library/Logs/open-design-tunnel.log`. A second agent,
-   `open-design-gateway-tunnel`, forwards the other way so Open Design's model
-   calls reach this Mac's gateway: workstation 127.0.0.1:18317 to
-   127.0.0.1:8317 here (gateway key still required). Only one Mac may own
-   that port, so only a hub with `dotfiles.ai.openDesign.gatewayTunnel` runs
-   it (default: on for a gateway server with the gateway enabled; a second
-   one sets it to false). If the connection dies uncleanly, the workstation keeps the stale
-   listener until its sshd notices (hours without `ClientAliveInterval`), and
-   the agent retries every 30 s until then. Log:
-   `~/Library/Logs/open-design-gateway-tunnel.log`.
-12. On the hub, the local LLM server (`dotfiles.ai.localLlm`, enabled in
-   `nixpkgs/nix-darwin/ai-hub.nix`): the `local-llm-tunnel` launchd agent
-   forwards 127.0.0.1:18083 to a llama.cpp `llama-server` on the same port of
-   the `workstation` alias's loopback (host key in known_hosts). The server has
-   no API key and is started by hand there; while it's down, requests get a
-   reset or empty reply. Tunnel log: `~/Library/Logs/local-llm-tunnel.log`.

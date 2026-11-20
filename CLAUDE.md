@@ -38,7 +38,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/nix-darwin/macos.nix` - macOS settings (defaults, Dock, keyboard, trackpad, firewall, power; the host names come from `flake.nix` and `nixpkgs/hosts/`) and Hammerspoon's updater settings, captured from the live machine
 - `nixpkgs/nix-darwin/vorssaint.nix` - Vorssaint menu bar app settings, captured from the live app
 - `nixpkgs/nix-darwin/hotkeys.nix` - System keyboard shortcuts, captured from the live machine, plus ⌃1…⌃9 and ⌃⌥⌘1…7 to switch to Desktop 1–16
-- `nixpkgs/nix-darwin/ai-hub.nix` - The AI hub role, imported by a host file: the CLIProxyAPI gateway for every Mac, the workstation tunnels (Auto Browser, Open Design, local LLM) and `never-sleep.nix` (the Mac never sleeps). Headroom (`nixpkgs/home-manager/ai/headroom.nix`) is a separate import in the host file
+- `nixpkgs/nix-darwin/ai-hub.nix` - The AI hub role, imported by a host file: the CLIProxyAPI gateway for every Mac, the Auto Browser tunnel to the workstation and `never-sleep.nix` (the Mac never sleeps). Headroom (`nixpkgs/home-manager/ai/headroom.nix`) is a separate import in the host file
 - `nixpkgs/nix-darwin/jankyborders.nix` - JankyBorders, a border around the focused window (imported by `garage.nix` only)
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
 - `nixpkgs/home-manager/desktop.nix` - Login items (`dotfiles.desktop.loginApps`: the shared ones here, host-only ones in `nixpkgs/hosts/<host>.nix`) and default browser/mail/PDF handlers (`dotfiles.desktop.browser` is Safari unless the host sets it; garage uses Chrome)
@@ -62,6 +62,7 @@ AI tooling (`nixpkgs/home-manager/ai/`, guide in `docs/ai-setup.md`):
 - `claude/` → `~/.claude/` (CLAUDE.md, onboarding.md, agents, hooks, own skills), linked to the checkout at `~/studio/personal/dotfiles` so edits land in the repo
 - `claude/hooks/`: `global-manager-intro.sh` (SessionStart: points sessions at the claude-config manager), `block-pattern-kill.py` (PreToolUse: refuses pattern kills), `herdr-agent-record.sh` (SessionStart/SessionEnd: records the conversation in each herdr terminal for `agents-resurrect`, see `docs/ai-setup.md`)
 - `claude/settings.base.json` and `codex/config.base.toml` are merged into the live `~/.claude/settings.json` / `~/.codex/config.toml` at activation (those stay real files)
+- Open Design and the local LLM tunnel (workstation services) were retired on 2026-11-20. Auto Browser stays until another session is done with it, then moves to the `agent-browser` CLI
 - All install and merge logic lives here; the private repo `~/studio/personal/dotfiles-private` only sets `dotfiles.ai.*` options (project paths, internal URLs) through the `private` flake input. Secrets come from `pass`. Rebuild with `rebuild`
 
 ## Development Environment
