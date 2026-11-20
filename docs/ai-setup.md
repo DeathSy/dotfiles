@@ -482,7 +482,9 @@ rebuild.
   `inbox-digest` job (no model: every 5 min `im digest` prints the reminders
   created or closed since the last DM, titles for the work list and counts
   for the other lists, and Hermes DMs that text to the owner; nothing when
-  there is nothing new) and the daily prune job, and checks them; rerun it any time to correct them. `hermes cron
+  there is nothing new; at most once: the queue is drained before Hermes
+  sends, so a Slack outage at that moment loses that DM, while Reminders stay
+  the source of truth) and the daily prune job, and checks them; rerun it any time to correct them. `hermes cron
   resume inbox-monitor` starts it.
 - **Slack app:** `hermes/slack-manifest.json` (bot "Hermes", DM only: bot
   scopes for DMs, user scopes for the monitor's search, history and

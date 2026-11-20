@@ -47,14 +47,19 @@ def main():
     try:
         mine = json.load(open(MINE))
     except (OSError, ValueError):
+        mine = None
+    if not isinstance(mine, dict) or not isinstance(mine.get("alerted", False), bool) \
+            or not isinstance(mine.get("enabled_since"), (int, float, type(None))):
         mine = {"alerted": False, "enabled_since": None}
 
     # Only a confirmed pause (or a job that was never set up) is quiet; an unreadable jobs.json or a job
     # that disappeared after it was enabled counts as a problem.
     problem = None
     try:
-        jobs = json.load(open(os.path.join(HERMES_HOME, "cron", "jobs.json")))
-        jobs = jobs.get("jobs", []) if isinstance(jobs, dict) else jobs
+        doc = json.load(open(os.path.join(HERMES_HOME, "cron", "jobs.json")))
+        jobs = doc.get("jobs") if isinstance(doc, dict) else doc
+        if not isinstance(jobs, list):
+            raise ValueError("jobs.json has an unexpected shape")
         job = next((j for j in jobs if isinstance(j, dict) and j.get("name") == "inbox-monitor"), None)
         if job is None:
             enabled = None
@@ -62,7 +67,7 @@ def main():
             enabled = bool(job.get("enabled", True)) and job.get("state") != "paused"
     except FileNotFoundError:
         enabled = None  # Hermes has no cron jobs yet; "gone" below if it was enabled before
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError):
         enabled, problem = None, "Hermes' cron/jobs.json can't be read"
     if enabled is None and (problem or mine.get("enabled_since")):
         problem = problem or "its Hermes cron job is gone"
@@ -74,9 +79,16 @@ def main():
 
         last = 0
         try:
-            last = json.load(open(os.path.join(STATE_DIR, "state.json"))).get("last_ok_at") or 0
+            st = json.load(open(os.path.join(STATE_DIR, "state.json")))
+            last = st.get("last_ok_at") if isinstance(st, dict) else None
+            if last is None:
+                last = 0
+            elif not isinstance(last, (int, float)):
+                raise ValueError("bad last_ok_at")
+            if not isinstance(st, dict):
+                raise ValueError("state.json has an unexpected shape")
         except (OSError, ValueError):
-            problem = problem or "its state.json can't be read"
+            last, problem = 0, problem or "its state.json can't be read"
         baseline = max(last, mine["enabled_since"])
         late = problem is not None or now - baseline > LATE
 

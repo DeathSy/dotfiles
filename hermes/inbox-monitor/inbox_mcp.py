@@ -71,9 +71,13 @@ def run(argv, timeout=180, stdin=None):
 def im(*args):
     rc, out, err = run([PY, IM, *[str(a) for a in args]])
     try:
-        return json.loads(out)
+        r = json.loads(out)
     except ValueError:
         raise ToolError(mask((out or err).strip()[-800:]) or f"im exited {rc}")
+    if isinstance(r, dict) and "run lease lost" in str(r.get("error", "")):
+        cycle.clear()  # every later call fails too: this cycle is over
+        raise ToolError("run lease lost: another cycle owns the state now. Stop this cycle and reply [SILENT].")
+    return r
 
 
 _self_email = []
@@ -397,7 +401,8 @@ def masked(v):
 
 
 def handle(req):
-    method, params = req.get("method"), req.get("params") or {}
+    method, params = req.get("method"), req.get("params")
+    params = {} if params is None else params
     if not isinstance(params, dict):
         raise BadParams("params must be an object")
     if method == "initialize":
@@ -411,7 +416,8 @@ def handle(req):
     if method == "tools/call":
         if not isinstance(params, dict):
             raise BadParams("params must be an object")
-        name, args = params.get("name"), params.get("arguments") or {}
+        name, args = params.get("name"), params.get("arguments")
+        args = {} if args is None else args
         if not isinstance(name, str) or not isinstance(args, dict):
             raise BadParams("name must be a string and arguments an object")
         if name not in TOOLS:
@@ -421,7 +427,9 @@ def handle(req):
         if extra:
             return {"content": [{"type": "text", "text": f"unknown arguments: {sorted(extra)}"}], "isError": True}
         try:
-            if name != "window" and cycle.get("lease"):
+            if name != "window":
+                if not cycle.get("lease"):
+                    raise ToolError("no active cycle: call window first (or stop: the lease was lost)")
                 im("renew")  # every tool call of the owning cycle keeps its lease alive
             result = masked(fn(**args))
             is_error = isinstance(result, dict) and "error" in result and len(result) == 1

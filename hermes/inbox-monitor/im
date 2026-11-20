@@ -51,7 +51,8 @@ MAX_WINDOW = 86400           # each cycle covers at most 24 h; older backlog is 
 MISS_GRACE = 600             # a reminder must be missing twice, >= 10 min apart, to count as deleted
 RECHECK = 1800               # re-verify each tracked reminder at most every 30 min
 LEASE = 1500                 # a cycle's run lease; a newer cycle skips while it is younger than this
-WRITES = {"new-slack", "seen", "finish", "checked", "create", "complete", "update"}
+# Everything a cycle does after `window` needs the cycle's own, still existing lease (fail closed).
+CYCLE_OPS = {"new-slack", "seen", "finish", "checked", "create", "complete", "update", "tracked", "open", "renew"}
 
 # Privacy masks (keep the last 4 chars): emails (also percent-encoded in URLs), 13-digit identity numbers
 # and Thai phone numbers, with spaces, dots, dashes or parentheses as separators. Digits may follow any
@@ -271,14 +272,17 @@ def cmd_hook_reaction():
     within the last hour. Exit 2 blocks the call and shows stderr to the model. Fails closed."""
     try:
         ti = json.load(sys.stdin).get("tool_input", {})
+        st = load()
         if DRY:
             reason = "dry run: no reactions"
+        elif not st.get("lease_id") or os.environ.get("INBOX_LEASE") != st["lease_id"]:
+            reason = "run lease lost: no reactions from a cycle that doesn't own the lease"
         elif ti.get("emoji") != "clipboard":
             reason = "only the clipboard emoji is allowed"
         else:
             prefix = f"slack:{ti['channel_id']}:{ti['message_ts']}"
             if any((k == prefix or k.startswith(prefix + "#")) and time.time() - e.get("created", 0) < 3600
-                   for k, e in load().get("reminders", {}).items()):
+                   for k, e in st.get("reminders", {}).items()):
                 return 0
             reason = "reactions are only allowed on a message that just became a reminder"
     except Exception as e:  # noqa: BLE001
@@ -301,10 +305,9 @@ def main(argv):
     lock = open(STATE + ".lock", "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     s = load()
-    if cmd in WRITES and s.get("lease_id") and os.environ.get("INBOX_LEASE") != s["lease_id"] and not DRY:
-        die("another cycle holds the run lease; this cycle must stop")
-    if cmd not in ("window", "digest") and s.get("lease") and not DRY \
-            and os.environ.get("INBOX_LEASE") == s.get("lease_id"):
+    if cmd in CYCLE_OPS and not DRY:
+        if not s.get("lease_id") or os.environ.get("INBOX_LEASE") != s["lease_id"]:
+            die("run lease lost: this cycle no longer owns the lease and must stop")
         s["lease"] = int(time.time())  # the owning cycle is still calling tools: keep its lease
         save(s)
 

@@ -27,7 +27,8 @@ credentials into reminders or the report.
 
 ## 1. Start
 Call `window`. If it returns `skip: true` (another cycle is still running), stop and reply exactly
-`[SILENT]`. Otherwise it gives `window_start`, `window_end`; the search tools apply that window
+`[SILENT]`. If any later tool says "run lease lost", stop at once and reply exactly `[SILENT]` (another
+cycle owns the state). Otherwise `window` gives `window_start`, `window_end`; the search tools apply that window
 themselves. It is at most 24 h; when `catching_up` is true, older backlog is handled chunk by chunk in
 later cycles.
 
