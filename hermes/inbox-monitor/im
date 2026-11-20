@@ -51,12 +51,17 @@ MAX_WINDOW = 86400           # each cycle covers at most 24 h; older backlog is 
 MISS_GRACE = 600             # a reminder must be missing twice, >= 10 min apart, to count as deleted
 RECHECK = 1800               # re-verify each tracked reminder at most every 30 min
 LEASE = 1500                 # a cycle's run lease; a newer cycle skips while it is younger than this
+WRITES = {"new-slack", "seen", "finish", "checked", "create", "complete", "update"}
 
-# Privacy masks (keep the last 4 chars): emails, 13-digit identity numbers, Thai phone numbers.
+# Privacy masks (keep the last 4 chars): emails (also percent-encoded in URLs), 13-digit identity numbers
+# and Thai phone numbers, with spaces, dots, dashes or parentheses as separators. Digits may follow any
+# letter, Thai included; they may not follow an ASCII letter/digit or "<digit>." (Slack ts, ids, URLs).
+# Names are NOT masked.
+_NUM_START = r"(?<![0-9A-Za-z])(?<!\d\.)"
 MASKS = [
-    re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
-    re.compile(r"(?<![\w.])\d(?:[ -]?\d){12}(?![\w.])"),
-    re.compile(r"(?<![\w.])(?:\+66[ -]?|0)\d(?:[ -]?\d){7,8}(?![\w.])"),
+    re.compile(r"[\w.+-]+(?:@|%40)[\w-]+(?:\.[\w-]+)+", re.I),
+    re.compile(_NUM_START + r"\d(?:[ \-]?\d){12}(?!\d)"),
+    re.compile(_NUM_START + r"(?:\+66[\s.\-]?(?:\(0\)[\s.\-]?)?\(?|\(?0)\d(?:[\s.\-()]{0,2}\d){7,8}(?![0-9])"),
 ]
 
 
@@ -113,6 +118,30 @@ def gmail_thread_id(msg_id):
         return json.loads(p.stdout[p.stdout.index("{"):])["threadId"]
     except Exception as e:  # noqa: BLE001
         die(f"could not look up Gmail message {msg_id}: {e}")
+
+
+def event(s, kind, lst, title):
+    """Queue an event for the owner's DM digest (`./im digest`, run by a no-agent cron job)."""
+    s["events"] = (s.get("events", []) + [{"kind": kind, "list": lst, "title": title, "at": int(time.time())}])[-500:]
+
+
+def digest(s):
+    """The DM text, built by code: titles only for the work list (masked, 80 chars), counts for the rest.
+    Drains the queue; prints nothing when it is empty (Hermes then stays silent)."""
+    events, s["events"] = s.get("events", []), []
+    work = CONFIG.get("digest_title_list", LISTS[0] if LISTS else "")
+    lines, counts = [], {}
+    for ev in events:
+        if ev["list"] == work:
+            t = re.sub(r"\s+", " ", mask(ev["title"]))[:80]
+            lines.append(f"{'Created' if ev['kind'] == 'created' else 'Closed'}: {t}")
+        else:
+            c = counts.setdefault(ev["list"], {"created": 0, "closed": 0})
+            c[ev["kind"]] += 1
+    for lst, c in counts.items():
+        parts = [f"{n} {k}" for k, n in c.items() if n]
+        lines.append(f"{lst}: {', '.join(parts)}")
+    return "\n".join(lines)
 
 
 def open_entry(s, key):
@@ -198,6 +227,8 @@ def cmd_create(s, argv):
     r = rem("create", a.list, title, body, a.due, pri, flag, f"· {a.key} ·", ",".join(LISTS))
     entry.update(id=r["id"], title=title, created=int(time.time()))
     s.setdefault("reminders", {})[a.key] = entry
+    if not r.get("existing"):
+        event(s, "created", a.list, title)
     save(s)
     out({"created": a.key, "existing": bool(r.get("existing")), "title": r["title"], "due": r["due"],
          "priority": r["priority"], "flagged": r["flagged"]})
@@ -270,9 +301,23 @@ def main(argv):
     lock = open(STATE + ".lock", "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     s = load()
-    if cmd != "window" and s.get("lease") and not DRY:
-        s["lease"] = int(time.time())  # a cycle that is still calling tools keeps its lease
+    if cmd in WRITES and s.get("lease_id") and os.environ.get("INBOX_LEASE") != s["lease_id"] and not DRY:
+        die("another cycle holds the run lease; this cycle must stop")
+    if cmd not in ("window", "digest") and s.get("lease") and not DRY \
+            and os.environ.get("INBOX_LEASE") == s.get("lease_id"):
+        s["lease"] = int(time.time())  # the owning cycle is still calling tools: keep its lease
         save(s)
+
+    if cmd == "renew":
+        out({"lease": s.get("lease")})
+        return
+
+    if cmd == "digest":
+        text = digest(s)
+        save(s)
+        if text:
+            print(text)
+        return
 
     if cmd == "window":
         # Catch up in chunks of at most 24 h: [last_check - 600 s overlap, min(now, last_check + 24 h)].
@@ -282,6 +327,7 @@ def main(argv):
             out({"skip": True, "reason": f"another cycle started {now - lease} s ago"})
             return
         s["lease"] = now
+        s["lease_id"] = os.environ.get("INBOX_LEASE") or os.urandom(8).hex()
         override = os.environ.get("INBOX_WINDOW_START")
         base = int(override) if override else s["last_check_epoch"]
         start, end = base - 600, min(now, base + MAX_WINDOW)
@@ -329,6 +375,7 @@ def main(argv):
         if not unfinished:  # the cycle is over (advanced or failed); keep both while it retries
             s.pop("run_end", None)
             s.pop("lease", None)
+            s.pop("lease_id", None)
         save(s)
         out({"dry_run": DRY, "advanced": advance and not DRY,
              "unfinished": unfinished or None})
@@ -360,6 +407,7 @@ def main(argv):
             return
         rem("complete", e["id"])
         e["closed"] = "auto-closed"
+        event(s, "closed", e["list"], e["title"])
         save(s)
         out({"completed": a[0], "title": e["title"]})
 

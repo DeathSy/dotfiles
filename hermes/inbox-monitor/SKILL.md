@@ -125,10 +125,8 @@ ok|failed and a one-line summary. If `finish` lists `unfinished` keys, decide th
 and call `finish` again.
 
 ## 8. Final response
-If no reminder was created, completed or updated and there were no errors, reply with exactly `[SILENT]`.
-Otherwise reply tersely. It is sent as a Slack DM inside the company workspace, so keep it minimal:
-- The work list (the profile names it): one line per created or closed reminder, title only
-  ("Created: <title>", "Closed: <title>").
-- Every other list: counts only ("<list>: 1 created", "<list>: 2 closed"), never titles.
-- One line per error, without message content.
-Details stay in Reminders; never quote messages, names of people, emails or links in this reply.
+Your response is only kept in the local run log (the owner's Slack DM is built separately by code from the
+reminders this cycle created or closed). If nothing was created, completed or updated and there were no
+errors, reply with exactly `[SILENT]`. Otherwise reply tersely, without quoting messages, emails or
+links: one line per created or closed reminder (key, list, quadrant), one line per decision applied, the
+"Possibly resolved" keys, and one line per error.

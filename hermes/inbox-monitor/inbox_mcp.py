@@ -42,18 +42,27 @@ MAX_PAGES = 10
 
 # Ids this cycle's tool results handed out; reset by `window`. Tracked reminders are added too.
 known = {"slack": set(), "threads": set(), "gmail": set(), "gmail_threads": set()}
-cycle = {}
+thread_of = {}   # message key -> its thread ts, from Slack's own results (never from the model)
+cycle = {}       # this cycle's window and lease token
 
 
 class ToolError(Exception):
     pass
 
 
+class BadParams(Exception):
+    pass
+
+
 # ── subprocess helpers ────────────────────────────────────────────────────────
 
 def run(argv, timeout=180, stdin=None):
+    env = dict(os.environ)
+    if cycle.get("lease"):
+        env["INBOX_LEASE"] = cycle["lease"]  # im only accepts writes from the cycle that owns the lease
     try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, input=stdin, cwd=STATE_DIR)
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, input=stdin, cwd=STATE_DIR,
+                           env=env)
     except subprocess.TimeoutExpired:
         raise ToolError(f"{os.path.basename(argv[1] if argv[0] == PY else argv[0])} timed out after {timeout} s")
     return p.returncode, p.stdout, p.stderr
@@ -149,6 +158,7 @@ def msg_row(channel, m, permalink=None, register=True):
     if register:  # search and thread rows only; history rows can't be used to walk a channel
         known["slack"].add(row["key"])
         known["threads"].add(f"{channel}:{row['thread_ts'] or m['ts']}")
+        thread_of[row["key"]] = row["thread_ts"] or m["ts"]
     return row
 
 
@@ -165,11 +175,14 @@ def day(epoch):
 # ── tools ─────────────────────────────────────────────────────────────────────
 
 def t_window():
-    r = im("window")
     for k in known:
         known[k].clear()
+    thread_of.clear()
     cycle.clear()
+    cycle["lease"] = os.urandom(8).hex()
+    r = im("window")
     if r.get("skip"):
+        cycle.clear()
         return r
     cycle.update(start=r["window_start"], end=r["window_end"])
     # The owner's profile (names, aliases, lists, known not-tasks) lives in config.json, not in the skill.
@@ -182,7 +195,6 @@ def t_tracked():
     for it in items if isinstance(items, list) else []:
         if it.get("channel") and it.get("thread_ts"):
             known["threads"].add(f"{it['channel']}:{it['thread_ts']}")
-            known["slack"].add(f"{it['channel']}:{it['thread_ts']}")
         if it.get("thread_id"):
             known["gmail_threads"].add(it["thread_id"])
     return items
@@ -330,10 +342,10 @@ TOOLS = {
         "due only from an explicit deadline (YYYY-MM-DD or YYYY-MM-DDTHH:MM, Bangkok) with due_from = the exact "
         "deadline words.",
         optional(S(key=STR, list=LIST, quadrant={"type": "string", "enum": ["do-now", "plan", "delegate", "borderline"]},
-                   title=STR, ask=STR, sender=STR, close_when=STR, due=STR, due_from=STR, thread_ts=STR),
-                 "due", "due_from", "thread_ts"),
-        lambda key, list, quadrant, title, ask, sender, close_when, due=None, due_from=None, thread_ts=None:
-        create(key, list, quadrant, title, ask, sender, close_when, due, due_from, thread_ts)),
+                   title=STR, ask=STR, sender=STR, close_when=STR, due=STR, due_from=STR),
+                 "due", "due_from"),
+        lambda key, list, quadrant, title, ask, sender, close_when, due=None, due_from=None:
+        create(key, list, quadrant, title, ask, sender, close_when, due, due_from)),
     "complete_reminder": ("Mark a tracked reminder completed (auto-close or the user's decision).",
                           S(key=STR), lambda key: im("complete", key)),
     "update_reminder": ("Change a tracked reminder's quadrant or due date.",
@@ -358,10 +370,13 @@ TOOLS = {
 }
 
 
-def create(key, lst, quadrant, title, ask, sender, close_when, due, due_from, thread_ts):
+def create(key, lst, quadrant, title, ask, sender, close_when, due, due_from):
     source = key.split("#")[0]
-    if source.startswith("slack:") and source[6:] not in known["slack"]:
-        raise ToolError("key must come from this cycle's Slack results")
+    thread_ts = None
+    if source.startswith("slack:"):
+        if source[6:] not in known["slack"] or source[6:] not in thread_of:
+            raise ToolError("key must come from this cycle's Slack search or thread results")
+        thread_ts = thread_of[source[6:]]
     if source.startswith("gmail:") and source[6:] not in known["gmail"]:
         raise ToolError("key must come from this cycle's gmail_list")
     return im("create", "--key", key, "--list", lst, "--quadrant", quadrant, "--title", title, "--ask", ask,
@@ -383,6 +398,8 @@ def masked(v):
 
 def handle(req):
     method, params = req.get("method"), req.get("params") or {}
+    if not isinstance(params, dict):
+        raise BadParams("params must be an object")
     if method == "initialize":
         return {"protocolVersion": params.get("protocolVersion", "2025-06-18"),
                 "capabilities": {"tools": {"listChanged": False}},
@@ -392,7 +409,11 @@ def handle(req):
     if method == "tools/list":
         return {"tools": [{"name": n, "description": d, "inputSchema": s} for n, (d, s, _) in TOOLS.items()]}
     if method == "tools/call":
+        if not isinstance(params, dict):
+            raise BadParams("params must be an object")
         name, args = params.get("name"), params.get("arguments") or {}
+        if not isinstance(name, str) or not isinstance(args, dict):
+            raise BadParams("name must be a string and arguments an object")
         if name not in TOOLS:
             return {"content": [{"type": "text", "text": f"unknown tool {name}"}], "isError": True}
         _, schema, fn = TOOLS[name]
@@ -400,6 +421,8 @@ def handle(req):
         if extra:
             return {"content": [{"type": "text", "text": f"unknown arguments: {sorted(extra)}"}], "isError": True}
         try:
+            if name != "window" and cycle.get("lease"):
+                im("renew")  # every tool call of the owning cycle keeps its lease alive
             result = masked(fn(**args))
             is_error = isinstance(result, dict) and "error" in result and len(result) == 1
             return {"content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}], "isError": is_error}
@@ -430,6 +453,11 @@ def main():
             resp = {"jsonrpc": "2.0", "id": req["id"], "result": result}
         except LookupError as e:
             resp = {"jsonrpc": "2.0", "id": req.get("id"), "error": {"code": -32601, "message": f"method not found: {e}"}}
+        except BadParams as e:
+            resp = {"jsonrpc": "2.0", "id": req.get("id"), "error": {"code": -32602, "message": str(e)}}
+        except Exception as e:  # noqa: BLE001 - never let one bad request kill the server
+            resp = {"jsonrpc": "2.0", "id": req.get("id"),
+                    "error": {"code": -32603, "message": f"internal error: {e.__class__.__name__}"}}
         sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
         sys.stdout.flush()
 

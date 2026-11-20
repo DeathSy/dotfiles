@@ -379,10 +379,6 @@
         "groups:history",
         "im:history",
         "mpim:history",
-        "channels:read",
-        "groups:read",
-        "im:read",
-        "mpim:read",
         "users:read",
         "reactions:write"
       ]

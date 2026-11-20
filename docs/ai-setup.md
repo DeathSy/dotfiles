@@ -478,8 +478,11 @@ rebuild.
   reaches the model through the `window` tool, so nothing personal is in the
   repo or the world-readable store. Run `hermes-inbox-jobs` after the first
   switch: it creates the monitor job paused (every 5 min, Sonnet, toolset
-  `mcp-inbox` only, DM to the owner, failure notices kept local) and the daily
-  prune job, and checks them; rerun it any time to correct them. `hermes cron
+  `mcp-inbox` only, its response and failure notices kept local), the
+  `inbox-digest` job (no model: every 5 min `im digest` prints the reminders
+  created or closed since the last DM, titles for the work list and counts
+  for the other lists, and Hermes DMs that text to the owner; nothing when
+  there is nothing new) and the daily prune job, and checks them; rerun it any time to correct them. `hermes cron
   resume inbox-monitor` starts it.
 - **Slack app:** `hermes/slack-manifest.json` (bot "Hermes", DM only: bot
   scopes for DMs, user scopes for the monitor's search, history and
@@ -489,8 +492,9 @@ rebuild.
   (every 30 min) DMs the owner once when the enabled monitor has had no
   successful cycle for an hour, and once when it recovers.
 - **Data:** Slack and email text the monitor reads is masked by its MCP
-  server (emails, Thai phone numbers and 13-digit ids, last 4 characters
-  kept) before Hermes sees it. Hermes stores it in `~/.hermes/state.db`
+  server (emails, also percent-encoded; Thai phone numbers in the usual
+  separators; 13-digit ids; last 4 characters kept) before Hermes sees it.
+  Names are not masked, so work-list titles in the DM can name people. Hermes stores it in `~/.hermes/state.db`
   (sessions, full-text index), `~/.hermes/cron/output/` and
   `~/.hermes/cache/spillover/`; the prune job deletes monitor sessions and
   run documents after 1 day, and all spilled tool output (chat's too) after

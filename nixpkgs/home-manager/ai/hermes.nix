@@ -84,6 +84,13 @@ let
     exit $rc
   '';
 
+  # The owner's DM is built by code, never by the model: a no-agent cron job runs
+  # this every 5 min; `im digest` drains the event queue (titles for the work
+  # list, counts for the rest) and prints nothing when it is empty.
+  digestScript = pkgs.writeShellScript "hermes-inbox-digest" ''
+    INBOX_STATE_DIR=${stateDir} exec /usr/bin/python3 -I ${inboxMonitor}/im digest
+  '';
+
   # Daily housekeeping (a no-agent Hermes cron job): monitor sessions, run
   # documents and spilled tool output 1 day; chat sessions are kept
   # (sessions.auto_prune off), but their spilled tool output goes too.
@@ -234,7 +241,7 @@ in
         set -eu
         exec /usr/bin/python3 -I ${./hermes-inbox-jobs.py} \
           --hermes ${hermesBin} --hermes-home ${hermesHome} --state-dir ${stateDir} \
-          --prune-script ${pruneScript} --model ${sonnet}
+          --prune-script ${pruneScript} --digest-script ${digestScript} --model ${sonnet}
       '')
     ];
   };

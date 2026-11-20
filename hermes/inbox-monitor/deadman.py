@@ -49,23 +49,34 @@ def main():
     except (OSError, ValueError):
         mine = {"alerted": False, "enabled_since": None}
 
+    # Only a confirmed pause (or a job that was never set up) is quiet; an unreadable jobs.json or a job
+    # that disappeared after it was enabled counts as a problem.
+    problem = None
     try:
         jobs = json.load(open(os.path.join(HERMES_HOME, "cron", "jobs.json")))
         jobs = jobs.get("jobs", []) if isinstance(jobs, dict) else jobs
-        job = next((j for j in jobs if j.get("name") == "inbox-monitor"), None)
-    except (OSError, ValueError):
-        job = None
-    enabled = bool(job) and job.get("enabled", True) and job.get("state") != "paused"
+        job = next((j for j in jobs if isinstance(j, dict) and j.get("name") == "inbox-monitor"), None)
+        if job is None:
+            enabled = None
+        else:
+            enabled = bool(job.get("enabled", True)) and job.get("state") != "paused"
+    except FileNotFoundError:
+        enabled = None  # Hermes has no cron jobs yet; "gone" below if it was enabled before
+    except (OSError, ValueError, AttributeError):
+        enabled, problem = None, "Hermes' cron/jobs.json can't be read"
+    if enabled is None and (problem or mine.get("enabled_since")):
+        problem = problem or "its Hermes cron job is gone"
+        enabled = True
     if not enabled:
         mine["enabled_since"] = None
     else:
         mine["enabled_since"] = mine.get("enabled_since") or now
 
-        problem = None
+        last = 0
         try:
             last = json.load(open(os.path.join(STATE_DIR, "state.json"))).get("last_ok_at") or 0
         except (OSError, ValueError):
-            last, problem = 0, "its state.json can't be read"
+            problem = problem or "its state.json can't be read"
         baseline = max(last, mine["enabled_since"])
         late = problem is not None or now - baseline > LATE
 
