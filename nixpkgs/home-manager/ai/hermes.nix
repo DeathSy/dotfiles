@@ -44,6 +44,44 @@ let
     HERMES_DASHBOARD_BASIC_AUTH_SECRET = "dashboard-session-secret";
   };
 
+  # Copies each pass entry into its Keychain item and says what it did. Values
+  # go to `security -i` on stdin (never a command line) and are read back; an
+  # entry that can't be decrypted (gpg locked, pinentry not answered) is an
+  # error, not a silent skip, and never overwrites the item. Writes a
+  # value-free status to ~/.local/state/hermes-keychain-sync.log.
+  keychainSync = pkgs.writeShellScriptBin "hermes-keychain-sync" ''
+    set -u +x
+    ${lib.optionalString ((config.programs.password-store.settings.PASSWORD_STORE_DIR or "") != "")
+      "export PASSWORD_STORE_DIR=${lib.escapeShellArg config.programs.password-store.settings.PASSWORD_STORE_DIR}"}
+    store=''${PASSWORD_STORE_DIR:-$HOME/.password-store}
+    pass=${config.programs.password-store.package}/bin/pass
+    log=$HOME/.local/state/hermes-keychain-sync.log
+    mkdir -p "$(dirname "$log")"; : > "$log"
+    updated=0 unchanged=0 failed=0 missing=0
+    say() { printf '%s %s\n' "$(date '+%F %T')" "$1" >> "$log"; printf 'hermes-keychain-sync: %s\n' "$1" >&2; }
+    sync_one() {  # service account pass-entry
+      if [ ! -f "$store/$3.gpg" ]; then missing=$((missing + 1)); say "$1/$2: pass entry $3 does not exist; left as it is"; return; fi
+      v=$(${timeout} 60 $pass show "$3" 2>/dev/null | head -n 1)
+      if [ -z "$v" ]; then failed=$((failed + 1)); say "$1/$2: could not decrypt pass entry $3 (gpg locked or pinentry not answered); NOT updated"; return; fi
+      case "$v" in *[!A-Za-z0-9._~+/=-]*) failed=$((failed + 1)); say "$1/$2: pass entry $3 has unexpected characters; NOT updated"; unset v; return ;; esac
+      if [ "$(/usr/bin/security find-generic-password -s "$1" -a "$2" -w 2>/dev/null)" = "$v" ]; then
+        unchanged=$((unchanged + 1)); unset v; return
+      fi
+      printf 'add-generic-password -U -s %s -a %s -T /usr/bin/security -w "%s"\n' "$1" "$2" "$v" | /usr/bin/security -i >/dev/null 2>&1
+      if [ "$(/usr/bin/security find-generic-password -s "$1" -a "$2" -w 2>/dev/null)" = "$v" ]; then
+        updated=$((updated + 1)); say "$1/$2: updated from $3"
+      else
+        failed=$((failed + 1)); say "$1/$2: could not write the login Keychain (locked, or a session without access?); NOT updated"
+      fi
+      unset v
+    }
+    ${lib.concatStrings (lib.mapAttrsToList (item: entry: ''
+      sync_one ${lib.escapeShellArg (builtins.head (lib.splitString "/" item))} ${lib.escapeShellArg (lib.last (lib.splitString "/" item))} ${lib.escapeShellArg entry}
+    '') keychainItems)}
+    say "$updated updated, $unchanged unchanged, $failed failed, $missing missing"
+    [ "$failed" -eq 0 ]
+  '';
+
   secretsHelper = pkgs.writeShellScript "hermes-secrets" ''
     # KEY=VALUE lines for Hermes' secrets.command (stdout only; Hermes discards stderr).
     ${lib.concatStrings (lib.mapAttrsToList (var: acct: ''
@@ -230,38 +268,12 @@ in
       };
     };
 
-    # pass -> login Keychain on every rebuild. Values go to `security -i` on
-    # stdin (never a command line), are read back to check, and an empty or
-    # missing pass entry never overwrites an existing item.
+    # pass -> login Keychain on every rebuild (and by hand: hermes-keychain-sync).
     home.activation.hermesKeychain = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      (
-        set +e -u +x
-        ${lib.optionalString ((config.programs.password-store.settings.PASSWORD_STORE_DIR or "") != "")
-          "export PASSWORD_STORE_DIR=${lib.escapeShellArg config.programs.password-store.settings.PASSWORD_STORE_DIR}"}
-        pass=${config.programs.password-store.package}/bin/pass
-        ${lib.concatStrings (lib.mapAttrsToList (item: entry: let
-          svc = builtins.head (lib.splitString "/" item);
-          acct = lib.last (lib.splitString "/" item);
-        in ''
-          if v=$(${timeout} 60 $pass show ${lib.escapeShellArg entry} 2>/dev/null | head -n 1) && [ -n "$v" ]; then
-            case "$v" in
-              *[!A-Za-z0-9._~+/=-]*) warnEcho "hermes: pass entry ${entry} has unexpected characters; Keychain not updated" ;;
-              *)
-                if [ -z "''${DRY_RUN_CMD:-}" ]; then
-                  printf 'add-generic-password -U -s ${svc} -a ${acct} -T /usr/bin/security -w "%s"\n' "$v" \
-                    | /usr/bin/security -i >/dev/null 2>&1 \
-                    || warnEcho "hermes: security -i failed for ${item}"
-                  if [ "$(/usr/bin/security find-generic-password -s ${svc} -a ${acct} -w 2>/dev/null)" != "$v" ]; then
-                    errorEcho "hermes: could not store ${item} in the login Keychain (locked, or an SSH session without access?). Rebuild from the console session."
-                  fi
-                fi ;;
-            esac
-          else
-            noteEcho "hermes: pass entry ${entry} not found; Keychain item ${item} left as it is"
-          fi
-        '') keychainItems)}
-        unset v
-      )
+      if [ -z "''${DRY_RUN_CMD:-}" ]; then
+        ${keychainSync}/bin/hermes-keychain-sync \
+          || errorEcho "hermes: Keychain sync incomplete (see above). Fix it, then run hermes-keychain-sync at the console."
+      fi
     '';
 
     # Dashboard sign-in material, kept out of the store, argv and logs: the
@@ -319,6 +331,7 @@ in
       '');
 
     home.packages = [
+      keychainSync
       # Creates the paused monitor job and the daily prune job (and removes the
       # retired inbox-digest job), then checks them.
       # Idempotent; run once after the first switch (docs/ai-setup.md).

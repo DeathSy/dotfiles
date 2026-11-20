@@ -453,8 +453,15 @@ rebuild.
   | `hermes/slack-user-token` (xoxp) | `inbox-monitor/slack-user-token` | only the inbox MCP server |
 
   Nothing secret or personal is in `~/.hermes/.env`, `config.yaml` or the
-  Nix store. After adding or rotating a token: rebuild, then
+  Nix store. After adding or rotating a token: rebuild (or run
+  `hermes-keychain-sync` at the console), then
   `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-agent`.
+  The sync prints one line per item it changes and a summary ("N updated, M
+  unchanged, K failed, S missing"), and writes the same, without values, to
+  `~/.local/state/hermes-keychain-sync.log`. An entry it can't decrypt (gpg
+  passphrase prompt not answered) is reported as failed and the rebuild says
+  so; before 2026-11-20 that case printed only "pass entry … not found", which
+  is how a rotated Slack user token once stayed stale.
 - **Start:** launchd runs `/bin/zsh`, which waits until the Keychain answers
   (exit 75 and a launchd retry every 30 s otherwise), starts the gateway as
   its child and forwards TERM/INT/HUP to that pid. zsh stays the job's root

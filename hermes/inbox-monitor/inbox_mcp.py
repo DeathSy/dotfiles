@@ -203,6 +203,23 @@ def day(epoch):
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 
+_warmup = []
+
+
+def warm_up_reminders():
+    """Reminders answers its first Apple Event of a while slowly (up to ~2 min); poke it in the background
+    at the start of a cycle so open_reminders/create_reminder later find it awake. Never waited on."""
+    while _warmup and _warmup[0].poll() is not None:
+        _warmup.pop(0)
+    if not _warmup:
+        try:
+            _warmup.append(subprocess.Popen(
+                ["/usr/bin/osascript", "-l", "JavaScript", "-e", 'Application("Reminders").lists.name().length'],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        except OSError:
+            pass
+
+
 def t_window():
     for k in known:
         known[k].clear()
@@ -214,6 +231,8 @@ def t_window():
         cycle.clear()
         return r
     cycle.update(start=r["window_start"], end=r["window_end"])
+    if not r.get("dry_run"):
+        warm_up_reminders()
     # The owner's profile (names, aliases, lists, known not-tasks) lives in config.json, not in the skill.
     r["profile"] = CONFIG.get("profile", "")
     return r
