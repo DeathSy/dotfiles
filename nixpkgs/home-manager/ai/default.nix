@@ -132,7 +132,10 @@ in
       ownerSlackId = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "The owner's Slack member id: the only one who may answer approvals (approvals.approvers).";
+        description = ''
+          The owner's Slack member id: the only Slack admin for Hermes (allow_admin_from),
+          so the only one who can answer approvals. Must match pass hermes/slack-owner-id.
+        '';
       };
       colleagueSlackIds = mkOption {
         type = types.listOf types.str;

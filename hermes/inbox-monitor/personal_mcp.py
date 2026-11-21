@@ -60,6 +60,9 @@ def t_slack_thread(channel, thread_ts):
 
 def t_slack_history(channel, oldest=None, latest=None, limit=50):
     check_ids(channel)
+    for v in (oldest, latest):
+        if v is not None and not re.fullmatch(r"\d{9,10}(\.\d{1,6})?", str(v)):
+            raise ToolError("oldest/latest must be unix times like 1795089919 or 1795089919.310379")
     r = slack("conversations.history", channel=channel, oldest=oldest, latest=latest,
               limit=max(1, min(int(limit), 200)), inclusive="true")
     return {"channel": channel, "messages": [row(channel, m) for m in reversed(r.get("messages", []))],
@@ -110,7 +113,8 @@ def t_reminder_create(list, title, notes="", due="-", priority="none", flagged=F
     if due != "-" and not re.fullmatch(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?", due):
         raise ToolError("due must be YYYY-MM-DD, YYYY-MM-DDTHH:MM or -")
     marker = f"· chat:{uuid.uuid4().hex[:12]} ·"  # unique, so the duplicate check never matches; never monitor-tracked
-    return rem("create", list, title, notes, due, priority, "flag" if flagged else "noflag", marker, list)
+    body = (notes.rstrip() + "\n\n" if notes.strip() else "") + f"— added from chat {marker}"
+    return rem("create", list, title, body, due, priority, "flag" if flagged else "noflag", marker, list)
 
 
 def t_reminder_update(id, field, value):

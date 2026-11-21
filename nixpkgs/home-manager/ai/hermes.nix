@@ -162,6 +162,11 @@ let
 in
 {
   config = {
+    assertions = [{
+      assertion = cfg.colleagueSlackIds == [ ] || cfg.ownerSlackId != null;
+      message = "dotfiles.ai.hermes.colleagueSlackIds needs dotfiles.ai.hermes.ownerSlackId, or the owner-only approval gating disappears.";
+    }];
+
     programs.hermes-agent.enable = true;
 
     services.hermes-agent = {
@@ -321,6 +326,17 @@ in
       fi
     '';
 
+    # The owner id lives in two places (pass/Keychain for SLACK_ALLOWED_USERS, the
+    # private overlay for the admin gating); they must agree.
+    home.activation.hermesOwnerCheck = lib.mkIf (cfg.ownerSlackId != null)
+      (lib.hm.dag.entryAfter [ "hermesKeychain" ] ''
+        k=$(/usr/bin/security find-generic-password -s hermes-agent -a slack-owner-id -w 2>/dev/null)
+        if [ -n "$k" ] && [ "$k" != ${lib.escapeShellArg cfg.ownerSlackId} ]; then
+          errorEcho "hermes: pass hermes/slack-owner-id and dotfiles.ai.hermes.ownerSlackId differ; fix one so the allowlist and the admin are the same person"
+        fi
+        unset k
+      '');
+
     # Dashboard sign-in material, kept out of the store, argv and logs: the
     # owner's password (pass hermes/dashboard-password) is hashed with Hermes'
     # own scrypt helper, password on stdin; the token-signing secret is made once.
@@ -404,7 +420,10 @@ in
           esac
         }
         serve_map 443 ${lib.escapeShellArg serveTarget} ${if cfg.dashboardPublicUrl != null then "on" else "off"} dashboard
-        serve_map ${toString apiServePort} ${lib.escapeShellArg apiTarget} ${if cfg.apiServer && cfg.dashboardPublicUrl != null then "on" else "off"} "API server"
+        api=${if cfg.apiServer && cfg.dashboardPublicUrl != null then "on" else "off"}
+        # No key in the Keychain: the API server doesn't start, so don't publish the port.
+        [ "$api" = on ] && ! /usr/bin/security find-generic-password -s hermes-agent -a api-server-key >/dev/null 2>&1 && api=off
+        serve_map ${toString apiServePort} ${lib.escapeShellArg apiTarget} "$api" "API server"
       )
     '';
 

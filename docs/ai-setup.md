@@ -473,11 +473,11 @@ rebuild.
   macOS user, by the owner's choice. A chat turn can therefore read the
   Keychain items above, change files and send data anywhere; approvals
   (`approvals.mode: manual`) are a heuristic for dangerous commands, not a
-  boundary. The guards that remain: only `SLACK_ALLOWED_USERS` (the owner) is
-  answered and other DMs are ignored; cron jobs never auto-approve; chat gets
-  no MCP servers (`no_mcp`), so the monitor's Reminders and Slack tools are
-  not offered to it (its terminal could still run that code directly, which
-  is part of the accepted risk); the monitor's code and skill are read-only in
+  boundary. The guards that remain: only `SLACK_ALLOWED_USERS` (the owner and
+  the listed colleagues) is answered and other DMs are ignored; cron jobs never
+  auto-approve; chat is offered only the `personal` MCP server, not the
+  monitor's `inbox` server (its terminal could still run that code directly,
+  which is part of the accepted risk); the monitor's code and skill are read-only in
   the Nix store, so they can't be rewritten by accident.
 - **Inbox monitor:** `hermes/inbox-monitor/` (code, generic skill, README).
   Everything personal (the owner's names, ids, lists, query templates, known
@@ -497,7 +497,8 @@ rebuild.
   request URLs, which Socket Mode doesn't need; files, group DMs, reactions). July answers in DMs, in Slack's agent view
   ("Agents & AI apps" must be on for the workspace) and in channels it is
   invited to when @mentioned (`slack.require_mention`, no free-response
-  channels); only `SLACK_ALLOWED_USERS` (the owner) is answered anywhere.
+  channels); only `SLACK_ALLOWED_USERS` (the owner and the listed colleagues)
+  is answered anywhere.
   Hermes subscribes to `message.channels`/`message.groups` so it can follow up
   in a thread it was mentioned in, so the gateway receives every message in
   the channels July is invited to (it answers none of them unprompted). In a
@@ -547,7 +548,10 @@ rebuild.
   key is `pass hermes/api-server-key` → Keychain `hermes-agent/api-server-key`
   → `API_SERVER_KEY` via secrets.command, and the API server refuses to start
   without it. `/health` answers without a key. API sessions get Hermes' API
-  toolset without MCP servers. The key is full remote control of the agent,
+  toolset plus the `personal` MCP server. The key must be at least 16
+  characters from `A-Za-z0-9._~+/=-` (what `hermes-keychain-sync` accepts),
+  e.g. `openssl rand -hex 32`; without it in the Keychain the 8443 mapping is
+  removed. The key is full remote control of the agent,
   including its cron jobs (the Jobs API can edit or run the inbox monitor):
   treat it like the dashboard password. Rotate: `pass insert -f
   hermes/api-server-key`, `hermes-keychain-sync`, kickstart the gateway.
@@ -564,7 +568,12 @@ rebuild.
   and the owner is the only admin (`allow_admin_from`), so only the owner can
   run `/approve` or `/deny`, i.e. answer a dangerous-command approval, even
   for a colleague's own command (`approvals.approvers` stays at its default,
-  because a narrowed list always lets the requester approve).
+  because a narrowed list always lets the requester approve). This is not a
+  security boundary against a colleague: July's terminal runs as the owner's
+  macOS user, so a colleague can have it read the Keychain (the API key, the
+  Slack user token, the dashboard secrets), call the API server at
+  127.0.0.1:8642 (where host-side approvals apply), or edit the monitor's
+  state and code. That follows from giving colleagues the terminal.
 - **No code changes (an instruction, not enforced):** July's persona
   (`dotfiles.ai.hermes.soulFile` → `~/.hermes/SOUL.md`, the AppMan support
   assistant) tells it never to write, change or commit code or open PRs;
