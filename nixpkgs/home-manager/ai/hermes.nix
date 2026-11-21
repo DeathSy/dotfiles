@@ -171,9 +171,6 @@ in
 
       environment = {
         HERMES_CRON_TIMEOUT = "600";
-        # The file tools (write_file/patch) may only write here, so July can't edit
-        # the repos under ~/workspace. The terminal is not confined by this.
-        HERMES_WRITE_SAFE_ROOT = "${home}/.local/share/hermes/files";
       } // lib.optionalAttrs cfg.apiServer {
         API_SERVER_ENABLED = "true";
         API_SERVER_HOST = "127.0.0.1";
@@ -269,9 +266,10 @@ in
           unauthorized_dm_behavior = "ignore";
           free_response_channels = "";
         } // lib.optionalAttrs (cfg.ownerSlackId != null) (let
-          # Colleagues are regular users: plain chat plus these commands. Answering a
-          # dangerous-command approval is /approve or /deny, which only the owner (the
-          # admin) may run, so a colleague can't approve even their own command.
+          # Colleagues have every tool (owner's choice) but are regular users for slash
+          # commands: plain chat plus these. Answering a dangerous-command approval is
+          # /approve or /deny, which only the owner (the admin) may run, so a colleague
+          # can't approve even their own command.
           # (approvals.approvers stays at its default: narrowing it would let every
           # requester approve their own commands.)
           userCommands = [ "help" "whoami" "commands" "new" "stop" "retry" "undo" "title" "save"
@@ -303,10 +301,6 @@ in
       ExitTimeOut = 60;
       ThrottleInterval = lib.mkForce 30;
     };
-
-    home.activation.hermesWriteRoot = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      run mkdir -p ${home}/.local/share/hermes/files
-    '';
 
     launchd.agents.inbox-monitor-deadman = {
       enable = true;
