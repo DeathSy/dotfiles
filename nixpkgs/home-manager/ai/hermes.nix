@@ -2,9 +2,19 @@
 
 # Hermes Agent (Nous Research, https://hermes-agent.nousresearch.com) on the AI
 # hub: the owner's always-on agent, reachable as a Slack DM bot, plus the inbox
-# monitor as one of its cron jobs. Imported by nixpkgs/hosts/garage-hq.nix
-# together with the flake's (locally patched) Home Manager module. Guide and the
-# accepted risk: docs/ai-setup.md, "Hermes Agent".
+# monitor as one of its cron jobs. Imported by nixpkgs/hosts/garage-hq.nix.
+# Guide and the accepted risk: docs/ai-setup.md, "Hermes Agent".
+#
+# Hermes itself is NOT installed by Nix: it is a normal, mutable install from
+# its own installer (~/.hermes/hermes-agent, command ~/.local/bin/hermes), so
+# the dashboard and the apps can install skills, plugins and MCP servers, edit
+# config.yaml and run `hermes update`. Its gateway runs as Hermes' own launchd
+# job ai.hermes.gateway (`hermes gateway install`), so `hermes gateway restart`,
+# the dashboard's System page and `hermes update` drive that job instead of
+# starting a second, unmanaged gateway. This module keeps our plumbing around it:
+# Keychain secrets, the inbox MCP code and skills (stable links), the dashboard
+# launchd job, tailscale serve, the dead-man and hermes-config-check (our config
+# rules, restored at every rebuild and checked every 15 minutes).
 #
 # Secrets: pass is the source of truth. The gpg key has a passphrase, so a
 # launchd start can't read pass; activation (an interactive rebuild) copies the
@@ -13,12 +23,15 @@
 #                          slack-owner-id  -> Hermes, via `secrets.command`
 #   service inbox-monitor: slack-user-token -> only the inbox MCP server reads it
 # Nothing secret or personal is written to ~/.hermes/.env, config.yaml or the
-# Nix store.
+# Nix store; hermes-config-check reports secret-looking keys that appear there.
 let
   home = config.home.homeDirectory;
   hermesHome = "${home}/.hermes";
   stateDir = "${home}/.local/state/inbox-monitor";
-  hermesBin = "${config.programs.hermes-agent.package}/bin/hermes";
+  hermesBin = "${home}/.local/bin/hermes";  # published by Hermes' installer
+  # Stable paths for config.yaml (it outlives rebuilds now): links into the store.
+  share = "${home}/.local/share/hermes-inbox";
+  secretsPath = "${home}/.local/bin/hermes-secrets";
   timeout = "${pkgs.coreutils}/bin/timeout";
   sonnet = "claude-sonnet-5-5";
   haiku = "claude-haiku-5-5";
@@ -132,26 +145,27 @@ let
   apiServePort = 8443;   # its tailnet HTTPS port
   apiTarget = "http://127.0.0.1:${toString apiPort}";
 
-  # launchd runs /bin/zsh, which stays the job's root process: macOS TCC then
-  # attributes the monitor's Reminders automation to "zsh" (allowed once)
-  # instead of a nix-store Python that changes with every update.
-  # Preflight: the gateway needs the model key; while the login Keychain is not
-  # readable yet (just after a reboot) exit non-zero so launchd retries.
-  # TERM/INT/HUP are forwarded to the recorded gateway pid, and zsh waits for it.
-  gatewayWrapper = pkgs.writeText "hermes-gateway.zsh" ''
-    child=
-    trap 'if [[ -n $child ]]; then kill -TERM $child 2>/dev/null; else exit 143; fi' TERM INT HUP
-    for i in {1..12}; do
-      ${timeout} 10 /usr/bin/security find-generic-password -s hermes-agent -a cliproxy-api-key -w >/dev/null 2>&1 && break
-      (( i == 12 )) && { print -u2 "hermes-gateway: Keychain item hermes-agent/cliproxy-api-key not readable; retrying via launchd"; exit 75; }
-      sleep 5
-    done
-    ${hermesBin} gateway ${lib.escapeShellArgs config.services.hermes-agent.extraArgs} "$@" &
-    child=$!
-    wait $child; rc=$?
-    while kill -0 $child 2>/dev/null; do wait $child; rc=$?; done
-    exit $rc
-  '';
+  # The dashboard as our own launchd job. Not Home Manager's launchd.agents: that
+  # wraps every job in `/bin/sh -c "wait4path … && exec …"`, and Hermes only
+  # recognises a launchd-supervised dashboard (for `hermes update`'s restart)
+  # when ProgramArguments is the `hermes dashboard` command itself.
+  dashboardLabel = "com.ksotis.hermes-dashboard";
+  dashboardPlist = pkgs.writeText "${dashboardLabel}.plist" (lib.generators.toPlist { escape = true; } {
+    Label = dashboardLabel;
+    ProgramArguments = [ hermesBin "dashboard" "--host" "127.0.0.1" "--port" (toString dashboardPort) "--no-open" ];
+    EnvironmentVariables = {
+      HERMES_HOME = hermesHome;
+      PATH = lib.concatStringsSep ":" [ "${home}/.local/bin" "/etc/profiles/per-user/${config.home.username}/bin"
+        "/run/current-system/sw/bin" "/nix/var/nix/profiles/default/bin" "/opt/homebrew/bin" "/usr/bin" "/bin" "/usr/sbin" "/sbin" ];
+    };
+    WorkingDirectory = home;
+    RunAtLoad = true;
+    KeepAlive = true;
+    ThrottleInterval = 5;
+    ProcessType = "Background";
+    StandardOutPath = "${home}/Library/Logs/hermes-backend.log";
+    StandardErrorPath = "${home}/Library/Logs/hermes-backend.err.log";
+  });
 
   # Daily housekeeping (a no-agent Hermes cron job): monitor sessions, run
   # documents and spilled tool output 1 day; chat sessions are kept
@@ -160,10 +174,123 @@ let
     set -u
     ${hermesBin} sessions prune --source cron --older-than 1 --yes >/dev/null 2>&1 || echo "hermes-prune: session prune failed"
     find ${hermesHome}/cron/output ${hermesHome}/cache/spillover -type f -mmin +1440 -delete 2>/dev/null
-    for f in ${home}/Library/Logs/hermes-agent.log ${home}/Library/Logs/hermes-agent.err.log; do
+    for f in ${hermesHome}/logs/gateway.log ${hermesHome}/logs/gateway.error.log \
+             ${home}/Library/Logs/hermes-backend.log ${home}/Library/Logs/hermes-backend.err.log; do
       [ -f "$f" ] && [ "$(stat -f %z "$f")" -gt 5000000 ] && : > "$f"
     done
     echo "[SILENT]"
+  '';
+
+  # ── config.yaml rules for hermes-config-check ─────────────────────────────
+  # `rules` are ours and restored when they drift (safety and plumbing);
+  # `defaults` are seeded once and then belong to Hermes, the dashboard and the
+  # owner (model choice, skills, memory …).
+  mcpServer = script: {
+    command = "/usr/bin/python3";
+    args = [ "-I" "${share}/code/${script}" ];
+    env = {
+      INBOX_STATE_DIR = stateDir;
+      INBOX_GWS = "/opt/homebrew/bin/gws";
+      INBOX_GH = "${pkgs.gh}/bin/gh";
+      PATH = "/usr/bin:/bin";
+    };
+    timeout = 280;
+  };
+  # Colleagues have every tool (owner's choice) but are regular users for slash
+  # commands: plain chat plus these. Answering a dangerous-command approval is
+  # /approve or /deny, which only the owner (the admin) may run, so a colleague
+  # can't approve even their own command.
+  userCommands = [ "help" "whoami" "commands" "new" "stop" "retry" "undo" "title" "save"
+                   "resume" "sessions" "usage" "btw" "queue" "steer" "compress" "context" ];
+  eq = path: value: { inherit path value; op = "equals"; };
+  rules = [
+    (eq [ "secrets" "command" ] {
+      enabled = true;
+      command = secretsPath;
+      override_existing = true;
+      helper_timeout_seconds = 10;  # seven Keychain reads
+    })
+    (eq [ "mcp_servers" "inbox" ] (mcpServer "inbox_mcp.py"))
+    # The owner's own data tools for chat (owner's choice: unmasked Slack-as-owner,
+    # Gmail, Reminders in any list, GitHub PRs). No monitor bookkeeping in it.
+    (eq [ "mcp_servers" "personal" ] (mcpServer "personal_mcp.py"))
+    # Naming servers makes a platform's list an allowlist: the monitor's inbox
+    # server stays cron-only, chat keeps its preset plus the personal server
+    # (and whatever else the owner adds from the dashboard).
+    (eq [ "platform_toolsets" "cron" ] [ "mcp-inbox" ])
+  ] ++ lib.concatMap (p: [
+    { path = [ "platform_toolsets" p ]; op = "contains"; value = [ "hermes-${lib.replaceStrings [ "_" ] [ "-" ] p}" "mcp-personal" ]; }
+    { path = [ "platform_toolsets" p ]; op = "excludes"; value = [ "mcp-inbox" ]; }
+  ]) [ "slack" "cli" "api_server" ] ++ [
+    # The monitor's skill and the chat skills (stable links; extra dirs too).
+    { path = [ "skills" "external_dirs" ]; op = "contains"; value = skillDirs; drop_prefix = "/nix/store/"; }
+    # Web dashboard, reachable only through tailscale serve. A non-loopback
+    # public_url engages the sign-in gate although the listener is on loopback;
+    # with no password hash the listener refuses to start.
+    (eq [ "dashboard" "basic_auth" "username" ] config.home.username)
+    (eq [ "unauthorized_dm_behavior" ] "ignore")
+    (eq [ "slack" "unauthorized_dm_behavior" ] "ignore")
+    (eq [ "slack" "require_mention" ] true)
+    (eq [ "slack" "free_response_channels" ] "")
+    (eq [ "approvals" "mode" ] "manual")
+    (eq [ "approvals" "cron_mode" ] "deny")
+    (eq [ "approvals" "single_query_mode" ] "deny")
+    (eq [ "approvals" "unattended_mode" ] "deny")
+    # Narrowing approvals.approvers lets every requester approve their own commands.
+    { path = [ "approvals" "approvers" ]; op = "absent"; }
+    (eq [ "security" "redact_secrets" ] true)
+  ] ++ lib.optional (cfg.dashboardPublicUrl != null) (eq [ "dashboard" "public_url" ] cfg.dashboardPublicUrl)
+    ++ lib.optionals (cfg.ownerSlackId != null) [
+    (eq [ "slack" "allow_admin_from" ] [ cfg.ownerSlackId ])
+    (eq [ "slack" "group_allow_admin_from" ] [ cfg.ownerSlackId ])
+    (eq [ "slack" "user_allowed_commands" ] userCommands)
+    (eq [ "slack" "group_user_allowed_commands" ] userCommands)
+  ];
+  defaults = lib.mapAttrsToList (k: value: { path = lib.splitString "." k; inherit value; }) ({
+    "providers.cliproxy" = {
+      api = config.dotfiles.ai.gateway.url;
+      transport = "anthropic_messages";
+      key_env = "CLIPROXY_API_KEY";
+    };
+    "model" = { provider = "cliproxy"; default = sonnet; };
+    # Side tasks stay on the gateway too: cheap ones on Haiku, the rest on the main model.
+    "auxiliary" = {
+      title_generation = { provider = "cliproxy"; model = haiku; };
+      compression = { provider = "cliproxy"; model = sonnet; };
+      vision = { provider = "main"; };
+      background_review = { provider = "main"; };
+      curator = { provider = "main"; };
+    };
+    "dashboard.basic_auth.session_ttl_seconds" = 43200;
+    "memory.memory_enabled" = true;  # built-in, local files only; no external provider
+    # Chat history is kept for good (owner's choice); the daily prune job
+    # removes cron sessions after a day.
+    "sessions.auto_prune" = false;
+  } // lib.optionalAttrs (cfg.terminalCwd != null) { "terminal.cwd" = cfg.terminalCwd; });
+  skillDirs = [ "${share}/skills" "${share}/chat-skills" ]
+    ++ lib.imap0 (i: _: "${share}/extra-skills/${toString i}") cfg.extraSkillDirs;
+  # Non-secret .env keys Hermes reads at start.
+  envRules = {
+    HERMES_CRON_TIMEOUT = "600";
+  } // lib.optionalAttrs cfg.apiServer {
+    API_SERVER_ENABLED = "true";
+    API_SERVER_HOST = "127.0.0.1";
+    API_SERVER_PORT = toString apiPort;
+  } // lib.optionalAttrs (cfg.slackHomeChannel != null) { SLACK_HOME_CHANNEL = cfg.slackHomeChannel; };
+  checkSpec = pkgs.writeText "hermes-config-check.json" (builtins.toJSON {
+    hermes_home = hermesHome;
+    state_file = "${stateDir}/.config-check.json";
+    deadman = "${share}/code/deadman.py";
+    inherit rules defaults;
+    env = envRules;
+    env_absent = lib.optionals (!cfg.apiServer) [ "API_SERVER_ENABLED" ];
+    soul = if cfg.soulFile != null then "${cfg.soulFile}" else null;
+    gateway_label = "ai.hermes.gateway";
+    dashboard_port = if cfg.dashboardPublicUrl != null then dashboardPort else null;
+    api_port = if cfg.apiServer then apiPort else null;
+  });
+  configCheck = pkgs.writeShellScriptBin "hermes-config-check" ''
+    exec ${pkgs.python3.withPackages (ps: [ ps.pyyaml ])}/bin/python3 -I ${./hermes-config-check.py} --spec ${checkSpec} "$@"
   '';
 
 in
@@ -174,145 +301,22 @@ in
       message = "dotfiles.ai.hermes.colleagueSlackIds needs dotfiles.ai.hermes.ownerSlackId, or the owner-only approval gating disappears.";
     }];
 
-    programs.hermes-agent.enable = true;
+    # Stable links into the store for config.yaml, which now outlives rebuilds.
+    home.file = {
+      ".local/bin/hermes-secrets".source = secretsHelper;
+      ".local/share/hermes-inbox/code".source = inboxMonitor;
+      ".local/share/hermes-inbox/skills".source = skillsDir;
+      ".local/share/hermes-inbox/chat-skills".source = chatSkillsDir;
+    } // lib.listToAttrs (lib.imap0 (i: dir: lib.nameValuePair ".local/share/hermes-inbox/extra-skills/${toString i}" {
+      source = config.lib.file.mkOutOfStoreSymlink dir;
+    }) cfg.extraSkillDirs);
 
-    services.hermes-agent = {
-      enable = true;
-      gateway.enable = true;
-      workingDirectory = home;
-
-      environment = {
-        HERMES_CRON_TIMEOUT = "600";
-      } // lib.optionalAttrs cfg.apiServer {
-        API_SERVER_ENABLED = "true";
-        API_SERVER_HOST = "127.0.0.1";
-        API_SERVER_PORT = toString apiPort;
-      } // lib.optionalAttrs (cfg.slackHomeChannel != null) { SLACK_HOME_CHANNEL = cfg.slackHomeChannel; };
-
-      hermesHomeFiles = lib.optionalAttrs (cfg.soulFile != null) { "SOUL.md" = cfg.soulFile; };
-
-      # The dashboard (and Hermes Desktop's remote backend) on loopback only.
-      backend = {
-        mode = if cfg.dashboardPublicUrl != null then "dashboard" else "none";
-        host = "127.0.0.1";
-        port = dashboardPort;
-      };
-
-      settings = {
-        providers.cliproxy = {
-          api = config.dotfiles.ai.gateway.url;
-          transport = "anthropic_messages";
-          key_env = "CLIPROXY_API_KEY";
-        };
-        model = {
-          provider = "cliproxy";
-          default = sonnet;
-        };
-        # Side tasks stay on the gateway too: cheap ones on Haiku, the rest on the main model.
-        auxiliary = {
-          title_generation = { provider = "cliproxy"; model = haiku; };
-          compression = { provider = "cliproxy"; model = sonnet; };
-          vision = { provider = "main"; };
-          background_review = { provider = "main"; };
-          curator = { provider = "main"; };
-        };
-
-        secrets.command = {
-          enabled = true;
-          command = "${secretsHelper}";
-          override_existing = true;
-          helper_timeout_seconds = 10;  # six Keychain reads
-        };
-
-        mcp_servers.inbox = {
-          command = "/usr/bin/python3";
-          args = [ "-I" "${inboxMonitor}/inbox_mcp.py" ];
-          env = {
-            INBOX_STATE_DIR = stateDir;
-            INBOX_GWS = "/opt/homebrew/bin/gws";
-            INBOX_GH = "${pkgs.gh}/bin/gh";
-            PATH = "/usr/bin:/bin";
-          };
-          timeout = 280;
-        };
-
-        # The owner's own data tools for chat (owner's choice: unmasked Slack-as-owner,
-        # Gmail, Reminders in any list, GitHub PRs). No monitor bookkeeping in it.
-        mcp_servers.personal = {
-          command = "/usr/bin/python3";
-          args = [ "-I" "${inboxMonitor}/personal_mcp.py" ];
-          env = {
-            INBOX_STATE_DIR = stateDir;
-            INBOX_GWS = "/opt/homebrew/bin/gws";
-            INBOX_GH = "${pkgs.gh}/bin/gh";
-            PATH = "/usr/bin:/bin";
-          };
-          timeout = 280;
-        };
-        # Chat gets everything Hermes ships plus the owner's personal-data
-        # server (owner's choice, see docs); naming servers makes the list an
-        # allowlist, so the monitor's inbox server stays cron-only.
-        platform_toolsets = {
-          slack = [ "hermes-slack" "mcp-personal" ];
-          cli = [ "hermes-cli" "mcp-personal" ];  # CLI, TUI, Desktop and dashboard chats
-          api_server = [ "hermes-api-server" "mcp-personal" ];  # the API server (phone app, OpenAI clients)
-          cron = [ "mcp-inbox" ];
-        };
-
-        skills.external_dirs = [ "${skillsDir}" "${chatSkillsDir}" ] ++ cfg.extraSkillDirs;
-        terminal = lib.optionalAttrs (cfg.terminalCwd != null) { cwd = cfg.terminalCwd; };
-
-        # Web dashboard (backend below), reachable only through tailscale serve.
-        # A non-loopback public_url engages the sign-in gate even though the
-        # listener is on loopback; with no password hash the listener refuses to start.
-        dashboard = {
-          basic_auth = {
-            username = config.home.username;
-            session_ttl_seconds = 43200;
-          };
-        } // lib.optionalAttrs (cfg.dashboardPublicUrl != null) { public_url = cfg.dashboardPublicUrl; };
-
-        unauthorized_dm_behavior = "ignore";
-        slack = {
-          require_mention = true;
-          unauthorized_dm_behavior = "ignore";
-          free_response_channels = "";
-        } // lib.optionalAttrs (cfg.ownerSlackId != null) (let
-          # Colleagues have every tool (owner's choice) but are regular users for slash
-          # commands: plain chat plus these. Answering a dangerous-command approval is
-          # /approve or /deny, which only the owner (the admin) may run, so a colleague
-          # can't approve even their own command.
-          # (approvals.approvers stays at its default: narrowing it would let every
-          # requester approve their own commands.)
-          userCommands = [ "help" "whoami" "commands" "new" "stop" "retry" "undo" "title" "save"
-                           "resume" "sessions" "usage" "btw" "queue" "steer" "compress" "context" ];
-        in {
-          allow_admin_from = [ cfg.ownerSlackId ];
-          user_allowed_commands = userCommands;
-          group_allow_admin_from = [ cfg.ownerSlackId ];
-          group_user_allowed_commands = userCommands;
-        });
-
-        approvals = {
-          mode = "manual";
-          cron_mode = "deny";
-          single_query_mode = "deny";
-          unattended_mode = "deny";
-        };
-
-        memory.memory_enabled = true; # built-in, local files only; no external provider
-        security.redact_secrets = true;
-        # Chat history is kept for good (owner's choice); the daily prune job
-        # removes cron sessions after a day.
-        sessions.auto_prune = false;
-      };
-    };
-
-    launchd.agents.hermes-agent.config = {
-      ProgramArguments = lib.mkForce [ "/bin/zsh" "-f" "${gatewayWrapper}" ];
-      ExitTimeOut = 60;
-      ThrottleInterval = lib.mkForce 30;
-    };
+    # Hermes' installer adds ~/.local/bin to PATH in ~/.zprofile unless a line
+    # there already does; that file is a read-only store link, so the append
+    # would fail the install. This is the line it looks for.
+    programs.zsh.profileExtra = ''
+      case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
+    '';
 
     launchd.agents.inbox-monitor-deadman = {
       enable = true;
@@ -324,6 +328,54 @@ in
         StandardErrorPath = "${home}/Library/Logs/inbox-monitor-deadman.log";
       };
     };
+
+    # Every 15 minutes: our config rules and the runtime (one gateway under
+    # ai.hermes.gateway, no unmanaged runtime job, loopback listeners). DMs the
+    # owner when a problem persists for two runs, and when it clears.
+    launchd.agents.hermes-config-check = {
+      enable = true;
+      config = {
+        Label = "com.ksotis.hermes-config-check";
+        ProgramArguments = [ "${configCheck}/bin/hermes-config-check" "--alert" "--quiet" ];
+        StartInterval = 900;
+        StandardOutPath = "${home}/Library/Logs/hermes-config-check.log";
+        StandardErrorPath = "${home}/Library/Logs/hermes-config-check.log";
+      };
+    };
+
+    # Our config rules into the live config.yaml/.env at every rebuild (replaces
+    # the Nix module's deep merge). Skipped until Hermes is installed.
+    home.activation.hermesConfig = lib.hm.dag.entryAfter [ "linkGeneration" "hermesKeychain" ] ''
+      if [ -z "''${DRY_RUN_CMD:-}" ] && [ -f ${hermesHome}/config.yaml ]; then
+        ${configCheck}/bin/hermes-config-check --fix --quiet \
+          || warnEcho "hermes: hermes-config-check reports problems (above)"
+      elif [ ! -f ${hermesHome}/config.yaml ]; then
+        noteEcho "hermes: ~/.hermes/config.yaml not found; install Hermes (docs/ai-setup.md), then rebuild"
+      fi
+    '';
+
+    # The dashboard job: a real file in ~/Library/LaunchAgents (launchd ignores
+    # symlinked plists), reloaded when it changes. Waits for Hermes' command.
+    home.activation.hermesDashboard = lib.hm.dag.entryAfter [ "linkGeneration" "hermesDashboardAuth" ] ''
+      (
+        set +e -u
+        dst=${home}/Library/LaunchAgents/${dashboardLabel}.plist
+        target=gui/$(id -u)/${dashboardLabel}
+        if [ ${if cfg.dashboardPublicUrl != null then "1" else "0"} = 0 ]; then
+          if [ -f "$dst" ]; then
+            $DRY_RUN_CMD /bin/launchctl bootout "$target" 2>/dev/null
+            $DRY_RUN_CMD rm -f "$dst"
+          fi
+        elif [ ! -x ${hermesBin} ]; then
+          noteEcho "hermes: ${hermesBin} not found; dashboard job not installed yet"
+        elif ! cmp -s ${dashboardPlist} "$dst" || ! /bin/launchctl print "$target" >/dev/null 2>&1; then
+          $DRY_RUN_CMD /bin/launchctl bootout "$target" 2>/dev/null
+          $DRY_RUN_CMD install -m 0644 ${dashboardPlist} "$dst"
+          $DRY_RUN_CMD /bin/launchctl bootstrap "gui/$(id -u)" "$dst" \
+            || errorEcho "hermes: could not load ${dashboardLabel} (launchctl bootstrap gui/$(id -u) $dst)"
+        fi
+      )
+    '';
 
     # pass -> login Keychain on every rebuild (and by hand: hermes-keychain-sync).
     home.activation.hermesKeychain = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -346,7 +398,8 @@ in
 
     # Dashboard sign-in material, kept out of the store, argv and logs: the
     # owner's password (pass hermes/dashboard-password) is hashed with Hermes'
-    # own scrypt helper, password on stdin; the token-signing secret is made once.
+    # scrypt format (hermes-dashboard-password.py), password on stdin; the
+    # token-signing secret is made once.
     home.activation.hermesDashboardAuth = lib.hm.dag.entryAfter [ "hermesKeychain" ] ''
       (
         set +e -u +x
@@ -359,7 +412,7 @@ in
           [ "$(/usr/bin/security find-generic-password -s hermes-agent -a "$1" -w 2>/dev/null)" = "$2" ]
         }
         if [ -z "''${DRY_RUN_CMD:-}" ]; then
-          hpy="$(${pkgs.gnused}/bin/sed -n 's/^exec "\(.*\)\/hermes" .*/\1/p' ${hermesBin})/python3"
+          hpy=${pkgs.python3}/bin/python3
           if [ ! -f "$store/hermes/dashboard-password.gpg" ]; then
             noteEcho "hermes: pass entry hermes/dashboard-password does not exist; the dashboard will not start until it does"
           elif ! pw=$(${timeout} 60 ${config.programs.password-store.package}/bin/pass show hermes/dashboard-password 2>/dev/null | head -n 1) || [ -z "$pw" ]; then
@@ -367,16 +420,16 @@ in
           else
             old=$(/usr/bin/security find-generic-password -s hermes-agent -a dashboard-password-hash -w 2>/dev/null)
             # Keep the stored hash while it still matches (a fresh salt each rebuild would churn).
-            if [ -n "$old" ] && printf '%s' "$pw" | OLD="$old" "$hpy" -I -c 'import os, sys; from plugins.dashboard_auth.basic import _verify_password; sys.exit(0 if _verify_password(sys.stdin.read(), os.environ["OLD"]) else 1)' 2>/dev/null; then
+            if [ -n "$old" ] && printf '%s' "$pw" | OLD="$old" "$hpy" -I ${./hermes-dashboard-password.py} verify 2>/dev/null; then
               :
             else
-              hash=$(printf '%s' "$pw" | "$hpy" -I -c 'import sys; from plugins.dashboard_auth.basic import hash_password; print(hash_password(sys.stdin.read()))' 2>/dev/null)
+              hash=$(printf '%s' "$pw" | "$hpy" -I ${./hermes-dashboard-password.py} hash 2>/dev/null)
               case "$hash" in
                 *[!A-Za-z0-9\$._+/=:-]*|"") errorEcho "hermes: could not hash the dashboard password" ;;
                 *)
                   if put dashboard-password-hash "$hash"; then
                     noteEcho "hermes: dashboard password updated"
-                    /bin/launchctl kickstart -k "gui/$(id -u)/org.nix-community.home.hermes-backend" >/dev/null 2>&1 || true
+                    /bin/launchctl kickstart -k "gui/$(id -u)/${dashboardLabel}" >/dev/null 2>&1 || true
                   else
                     errorEcho "hermes: could not store the dashboard password hash in the login Keychain (rebuild from the console session)"
                   fi ;;
@@ -453,6 +506,7 @@ in
 
     home.packages = [
       keychainSync
+      configCheck
       # Creates the paused monitor job and the daily prune job (and removes the
       # retired inbox-digest job), then checks them.
       # Idempotent; run once after the first switch (docs/ai-setup.md).

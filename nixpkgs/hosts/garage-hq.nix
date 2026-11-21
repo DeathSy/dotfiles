@@ -16,7 +16,6 @@
   homebrew.brews = [ "herdr" ];
 
   home-manager.users.ksotis.imports = [
-    inputs.hermes-agent.homeManagerModules.default
     ../home-manager/ai/hermes.nix
     ../home-manager/ai/headroom.nix
     ../home-manager/herdr.nix

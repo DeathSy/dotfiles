@@ -425,17 +425,47 @@ agents back:
 
 ## Hermes Agent (garage-hq)
 
-`nixpkgs/home-manager/ai/hermes.nix`, imported by `nixpkgs/hosts/garage-hq.nix`
-with the Home Manager module of the `hermes-agent` flake input. The input is
-pinned to the release tag v0.23.3 (released 2026-11-20) and `flake.nix` applies
-`nixpkgs/home-manager/ai/hermes-pnpm-macos.patch` (upstream PR #150967, still
-open): without it the pnpm dependency hash differs on macOS and the build
-fails. Drop the patch once a release contains the fix.
+`nixpkgs/home-manager/ai/hermes.nix`, imported by `nixpkgs/hosts/garage-hq.nix`.
+Hermes itself is a normal, mutable install from its official installer, not a
+Nix package: the code in `~/.hermes/hermes-agent`, the command
+`~/.local/bin/hermes`, updated with `hermes update` (or the dashboard). The
+dashboard and the apps can install skills, plugins and MCP servers and edit
+`config.yaml`; nothing reverts that except our own rules (below).
 
-It runs the Hermes gateway, the owner's always-on agent as a Slack DM bot, as
-the `org.nix-community.home.hermes-agent` LaunchAgent and writes
-`~/.hermes/config.yaml` (0600) from `services.hermes-agent.settings` on every
-rebuild.
+The gateway, the owner's always-on agent as a Slack DM bot, runs as Hermes' own
+launchd job `ai.hermes.gateway` (written by `hermes gateway install`, kept
+current by Hermes). Because Hermes knows that job, `hermes gateway restart`,
+the dashboard's System page, `hermes update` and every client that needs a
+gateway (`hermes chat`, the TUI, the apps) start or restart that job instead of
+spawning a second, unmanaged gateway (`com.nousresearch.hermes.runtime.*`,
+launched through `osascript`). The repo adds around it:
+
+- `hermes-config-check`: our config rules (secrets helper, MCP servers,
+  toolset allowlists, Slack admin gating, approvals, dashboard sign-in, the
+  skills, loopback API server in `.env`). Activation runs it with `--fix` on
+  every rebuild; launchd runs it every 15 minutes (check only) and DMs the
+  owner when a problem persists for two runs (and once when it clears). It
+  also reports secret-looking keys in `config.yaml`/`.env` (names only), more
+  than one gateway process, a gateway not under `ai.hermes.gateway`, any
+  loaded unmanaged runtime job, and a dashboard or API listener beyond
+  loopback. Settings outside the rules (model, memory, `terminal.cwd`, …)
+  are seeded once and then belong to Hermes and the owner.
+- Stable links for `config.yaml`: `~/.local/bin/hermes-secrets` (the secrets
+  helper) and `~/.local/share/hermes-inbox/{code,skills,chat-skills,extra-skills/N}`.
+- The dashboard job `com.ksotis.hermes-dashboard` (written as a real plist by
+  activation, with `hermes dashboard` itself as ProgramArguments so Hermes'
+  update recognises it), tailscale serve, the Keychain sync, the dead-man.
+
+Install (once, at the console; the monitor paused first): run the official
+installer with `--skip-setup` (no setup wizard, no service prompt; it adds
+nothing to the shell files because `~/.zprofile` already has its PATH line),
+then `hermes gateway install`, rebuild, `hermes-inbox-jobs`, and
+`hermes-config-check` until it prints OK. What the installer touches:
+`~/.hermes/hermes-agent` (git checkout), `~/.hermes/tools` (pinned uv),
+`~/.local/bin/hermes`, a local install receipt under
+`~/.hermes/telemetry/shared_metrics/pending_installs` (sent only if shared
+metrics are on), `~/.hermes/{.env,config.yaml}` only when missing, and
+`brew install git` if git were missing.
 
 - **Model:** the CLIProxyAPI gateway as the custom provider `cliproxy`
   (`anthropic_messages`): Sonnet for chat and the monitor, Haiku for titles.
@@ -455,24 +485,26 @@ rebuild.
   | `hermes/dashboard-password` | `hermes-agent/dashboard-password-hash` (scrypt hash) | Hermes dashboard sign-in |
   | `hermes/dashboard-session-token` (32+ chars) | `hermes-agent/dashboard-session-token` | Hermes dashboard token-mode sign-in (`HERMES_DASHBOARD_SESSION_TOKEN`) |
 
-  No secret is in `~/.hermes/.env`, `config.yaml` or the Nix store. Not
-  secret but personal: the owner's Slack id is in the generated `config.yaml`
+  No secret is in `~/.hermes/.env`, `config.yaml` or the Nix store (the
+  dashboard's API-keys page could write one into `.env`;
+  `hermes-config-check` reports it). Not
+  secret but personal: the owner's Slack id is in `config.yaml`
   (admin gating) and the colleagues' ids are in the secrets helper, both in
   the local Nix store from the private overlay; neither is in the public repo. After adding or rotating a token: rebuild (or run
-  `hermes-keychain-sync` at the console), then
-  `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-agent`.
+  `hermes-keychain-sync` at the console), then `hermes gateway restart`
+  (between monitor cycles).
   The sync prints one line per item it changes and a summary ("N updated, M
   unchanged, K failed, S missing"), and writes the same, without values, to
   `~/.local/state/hermes-keychain-sync.log`. An entry it can't decrypt (gpg
   passphrase prompt not answered) is reported as failed and the rebuild says
   so; before 2026-11-20 that case printed only "pass entry … not found", which
   is how a rotated Slack user token once stayed stale.
-- **Start:** launchd runs `/bin/zsh`, which waits until the Keychain answers
-  (exit 75 and a launchd retry every 30 s otherwise), starts the gateway as
-  its child and forwards TERM/INT/HUP to that pid. zsh stays the job's root
-  process, so macOS attributes the monitor's Reminders automation to "zsh"
-  (allowed once in Privacy & Security → Automation) and not to a nix-store
-  Python that changes with every update.
+- **Start:** Hermes' job runs the gateway through `/usr/bin/osascript` (its
+  Local Network wrapper), so macOS attributes the monitor's Reminders
+  automation to osascript (allowed in Privacy & Security → Automation). Until
+  2026-11 a `/bin/zsh` wrapper (Keychain preflight, "zsh" in TCC) did this; a
+  locked Keychain now only means the gateway starts without its keys until
+  the next restart, which the dead-man reports.
 - **Access (accepted risk):** chat sessions get every toolset Hermes ships
   for Slack, terminal and files included, on the local backend as the owner's
   macOS user, by the owner's choice. A chat turn can therefore read the
@@ -483,7 +515,10 @@ rebuild.
   auto-approve; chat is offered only the `personal` MCP server, not the
   monitor's `inbox` server (its terminal could still run that code directly,
   which is part of the accepted risk); the monitor's code and skill are read-only in
-  the Nix store, so they can't be rewritten by accident.
+  the Nix store, so they can't be rewritten by accident. With the mutable
+  install a chat turn or the dashboard can also change `config.yaml`, install
+  plugins or run `hermes update`; `hermes-config-check` restores our rules at
+  the next rebuild and reports drift within about 30 minutes.
 - **Inbox monitor:** `hermes/inbox-monitor/` (code, generic skill, README).
   Everything personal (the owner's names, ids, lists, query templates, known
   not-tasks) is in `~/.local/state/inbox-monitor/config.json` (0600) and
@@ -514,14 +549,14 @@ rebuild.
   `SLACK_HOME_CHANNEL` is July's DM with the owner
   (`dotfiles.ai.hermes.slackHomeChannel`).
 - **Dashboard:** with `dotfiles.ai.hermes.dashboardPublicUrl` (private
-  overlay) set, `hermes dashboard` runs as `org.nix-community.home.hermes-backend`
+  overlay) set, `hermes dashboard` runs as `com.ksotis.hermes-dashboard`
   on 127.0.0.1:9119 and activation maps the tailnet URL to it with
   `tailscale serve --https=443` (tailnet only, never Funnel; an existing,
   different mapping on 443 is left alone with a warning). The non-loopback
   `dashboard.public_url` engages the sign-in gate on the loopback listener;
   sign-in is the bundled password provider (user = the macOS user name,
-  password from `pass hermes/dashboard-password`, hashed with Hermes' scrypt
-  helper at activation into the Keychain item
+  password from `pass hermes/dashboard-password`, hashed in Hermes' scrypt
+  format (`hermes-dashboard-password.py`) at activation into the Keychain item
   `hermes-agent/dashboard-password-hash`, kept while it still matches and the
   dashboard restarted when it changes; a random token-signing secret in
   `hermes-agent/dashboard-session-secret`). Without the hash the dashboard
@@ -531,7 +566,7 @@ rebuild.
   restarts the dashboard) ends every existing sign-in. To end them without
   changing the password, delete the secret
   (`security delete-generic-password -s hermes-agent -a dashboard-session-secret`),
-  rebuild, and `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-backend`.
+  rebuild, and `launchctl kickstart -k gui/$UID/com.ksotis.hermes-dashboard`.
   Turning the dashboard off removes the tailscale serve mapping only if it is
   exactly ours; if `tailscale serve status` can't be read, nothing is changed.
   Checked: the login page, `/api/config`, `/api/env`,
@@ -539,9 +574,9 @@ rebuild.
   password gets 401, an unknown `Host` gets 400. `/api/status` stays
   public by Hermes' design (version, gateway state, profile names; no
   config or secrets). The dashboard's Config and API-keys pages write
-  `config.yaml` and `~/.hermes/.env`: a rebuild overwrites the keys Nix
-  declares there (other keys survive), and secrets don't belong in `.env`
-  here, so change settings in this repo instead. Phone: open the URL in a
+  `config.yaml` and `~/.hermes/.env`: changes to our rules are restored by
+  the next rebuild (and reported by the 15-minute check), anything else
+  stays; secrets don't belong in `.env` here. Phone: open the URL in a
   browser with Tailscale on; there is no first-party Hermes mobile app in
   v0.23.3. Hermes Desktop (macOS) can attach to it under Settings →
   Connections as a remote gateway.
@@ -571,7 +606,7 @@ rebuild.
   removed. The key is full remote control of the agent,
   including its cron jobs (the Jobs API can edit or run the inbox monitor):
   treat it like the dashboard password. Rotate: `pass insert -f
-  hermes/api-server-key`, `hermes-keychain-sync`, kickstart the gateway.
+  hermes/api-server-key`, `hermes-keychain-sync`, `hermes gateway restart`.
 - **Colleagues (owner's choice):** `dotfiles.ai.hermes.colleagueSlackIds`
   (private overlay) are added to `SLACK_ALLOWED_USERS` next to the owner. They
   get the same agent as the owner: every tool, the terminal, the `personal`
