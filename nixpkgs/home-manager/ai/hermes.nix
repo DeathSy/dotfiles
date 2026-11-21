@@ -390,7 +390,7 @@ in
     # loopback target, no Funnel), other (anything else), unknown (status or jq
     # failed). Only free is claimed; only ours is removed when a service is
     # turned off; other and unknown just warn.
-    home.activation.hermesTailscaleServe = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.hermesTailscaleServe = lib.hm.dag.entryAfter [ "writeBoundary" "hermesKeychain" ] ''
       (
         set +e -u
         ts=/opt/homebrew/bin/tailscale
@@ -422,7 +422,11 @@ in
         serve_map 443 ${lib.escapeShellArg serveTarget} ${if cfg.dashboardPublicUrl != null then "on" else "off"} dashboard
         api=${if cfg.apiServer && cfg.dashboardPublicUrl != null then "on" else "off"}
         # No key in the Keychain: the API server doesn't start, so don't publish the port.
-        [ "$api" = on ] && ! /usr/bin/security find-generic-password -s hermes-agent -a api-server-key >/dev/null 2>&1 && api=off
+        if [ "$api" = on ]; then
+          key=$(/usr/bin/security find-generic-password -s hermes-agent -a api-server-key -w 2>/dev/null)
+          [ "''${#key}" -ge 16 ] || api=off
+          unset key
+        fi
         serve_map ${toString apiServePort} ${lib.escapeShellArg apiTarget} "$api" "API server"
       )
     '';

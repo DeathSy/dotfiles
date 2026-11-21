@@ -450,10 +450,14 @@ rebuild.
   | `hermes/slack-bot-token` (xoxb) | `hermes-agent/slack-bot-token` | Hermes, dead-man check |
   | `hermes/slack-app-token` (xapp) | `hermes-agent/slack-app-token` | Hermes |
   | `hermes/slack-owner-id` (`U…`) | `hermes-agent/slack-owner-id` | Hermes (`SLACK_ALLOWED_USERS`), dead-man check |
-  | `hermes/slack-user-token` (xoxp) | `inbox-monitor/slack-user-token` | only the inbox MCP server |
+  | `hermes/slack-user-token` (xoxp) | `inbox-monitor/slack-user-token` | the inbox and personal MCP servers (inside their processes) |
+  | `hermes/api-server-key` | `hermes-agent/api-server-key` | Hermes (`API_SERVER_KEY`), the 8443 publishing check |
+  | `hermes/dashboard-password` | `hermes-agent/dashboard-password-hash` (scrypt hash) | Hermes dashboard sign-in |
 
-  Nothing secret or personal is in `~/.hermes/.env`, `config.yaml` or the
-  Nix store. After adding or rotating a token: rebuild (or run
+  No secret is in `~/.hermes/.env`, `config.yaml` or the Nix store. Not
+  secret but personal: the owner's Slack id is in the generated `config.yaml`
+  (admin gating) and the colleagues' ids are in the secrets helper, both in
+  the local Nix store from the private overlay; neither is in the public repo. After adding or rotating a token: rebuild (or run
   `hermes-keychain-sync` at the console), then
   `launchctl kickstart -k gui/$UID/org.nix-community.home.hermes-agent`.
   The sync prints one line per item it changes and a summary ("N updated, M
