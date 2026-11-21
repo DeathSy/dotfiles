@@ -191,7 +191,7 @@ let
     env = {
       INBOX_STATE_DIR = stateDir;
       INBOX_GWS = "/opt/homebrew/bin/gws";
-      INBOX_GH = "${pkgs.gh}/bin/gh";
+      INBOX_GH = "/etc/profiles/per-user/${config.home.username}/bin/gh";  # stable, unlike a store path
       PATH = "/usr/bin:/bin";
     };
     timeout = 280;
@@ -202,7 +202,10 @@ let
   # can't approve even their own command.
   userCommands = [ "help" "whoami" "commands" "new" "stop" "retry" "undo" "title" "save"
                    "resume" "sessions" "usage" "btw" "queue" "steer" "compress" "context" ];
-  eq = path: value: { inherit path value; op = "equals"; };
+  # `auto`: the security subset, which the 15-minute agent restores by itself
+  # (and DMs about); the rest is restored at the next rebuild and only reported.
+  eq = path: value: { inherit path value; op = "equals"; auto = true; };
+  chatPlatforms = [ "slack" "cli" "api_server" "acp" "tui" "webhook" ];
   rules = [
     (eq [ "secrets" "command" ] {
       enabled = true;
@@ -219,9 +222,11 @@ let
     # (and whatever else the owner adds from the dashboard).
     (eq [ "platform_toolsets" "cron" ] [ "mcp-inbox" ])
   ] ++ lib.concatMap (p: [
-    { path = [ "platform_toolsets" p ]; op = "contains"; value = [ "hermes-${lib.replaceStrings [ "_" ] [ "-" ] p}" "mcp-personal" ]; }
-    { path = [ "platform_toolsets" p ]; op = "excludes"; value = [ "mcp-inbox" ]; }
-  ]) [ "slack" "cli" "api_server" ] ++ [
+    # A platform without its own list gets EVERY enabled MCP server (inbox too),
+    # so each chat surface Hermes has (acp, tui, webhook included) gets a list.
+    { path = [ "platform_toolsets" p ]; op = "contains"; value = [ "hermes-${lib.replaceStrings [ "_" ] [ "-" ] p}" "mcp-personal" ]; auto = true; }
+    { path = [ "platform_toolsets" p ]; op = "excludes"; value = [ "mcp-inbox" ]; auto = true; }
+  ]) chatPlatforms ++ [
     # The monitor's skill and the chat skills (stable links; extra dirs too).
     { path = [ "skills" "external_dirs" ]; op = "contains"; value = skillDirs; drop_prefix = "/nix/store/"; }
     # Web dashboard, reachable only through tailscale serve. A non-loopback
@@ -237,7 +242,7 @@ let
     (eq [ "approvals" "single_query_mode" ] "deny")
     (eq [ "approvals" "unattended_mode" ] "deny")
     # Narrowing approvals.approvers lets every requester approve their own commands.
-    { path = [ "approvals" "approvers" ]; op = "absent"; }
+    { path = [ "approvals" "approvers" ]; op = "absent"; auto = true; }
     (eq [ "security" "redact_secrets" ] true)
   ] ++ lib.optional (cfg.dashboardPublicUrl != null) (eq [ "dashboard" "public_url" ] cfg.dashboardPublicUrl)
     ++ lib.optionals (cfg.ownerSlackId != null) [
@@ -286,6 +291,11 @@ let
     env_absent = lib.optionals (!cfg.apiServer) [ "API_SERVER_ENABLED" ];
     soul = if cfg.soulFile != null then "${cfg.soulFile}" else null;
     gateway_label = "ai.hermes.gateway";
+    dashboard_label = dashboardLabel;
+    hermes_bin = hermesBin;
+    hermes_root = "${hermesHome}/hermes-agent";
+    chat_platforms = chatPlatforms ++ [ "cron" ];
+    cron_only_server = "inbox";
     dashboard_port = if cfg.dashboardPublicUrl != null then dashboardPort else null;
     api_port = if cfg.apiServer then apiPort else null;
   });
@@ -329,15 +339,19 @@ in
       };
     };
 
-    # Every 15 minutes: our config rules and the runtime (one gateway under
-    # ai.hermes.gateway, no unmanaged runtime job, loopback listeners). DMs the
-    # owner when a problem persists for two runs, and when it clears.
+    # Every 30 minutes and whenever config.yaml or .env change: restores the
+    # security rules (DM + graceful gateway restart when needed) and checks the
+    # rest and the runtime (one gateway under ai.hermes.gateway, no unmanaged
+    # runtime job, loopback listeners, resolved toolsets). DMs the owner when a
+    # problem persists for two runs, and when it clears.
     launchd.agents.hermes-config-check = {
       enable = true;
       config = {
         Label = "com.ksotis.hermes-config-check";
-        ProgramArguments = [ "${configCheck}/bin/hermes-config-check" "--alert" "--quiet" ];
-        StartInterval = 900;
+        ProgramArguments = [ "${configCheck}/bin/hermes-config-check" "--auto" "--alert" "--quiet" ];
+        StartInterval = 1800;
+        WatchPaths = [ "${hermesHome}/config.yaml" "${hermesHome}/.env" ];
+        ThrottleInterval = 60;
         StandardOutPath = "${home}/Library/Logs/hermes-config-check.log";
         StandardErrorPath = "${home}/Library/Logs/hermes-config-check.log";
       };

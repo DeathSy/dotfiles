@@ -443,12 +443,19 @@ launched through `osascript`). The repo adds around it:
 - `hermes-config-check`: our config rules (secrets helper, MCP servers,
   toolset allowlists, Slack admin gating, approvals, dashboard sign-in, the
   skills, loopback API server in `.env`). Activation runs it with `--fix` on
-  every rebuild; launchd runs it every 15 minutes (check only) and DMs the
-  owner when a problem persists for two runs (and once when it clears). It
-  also reports secret-looking keys in `config.yaml`/`.env` (names only), more
+  every rebuild. launchd runs it every 30 minutes and whenever `config.yaml`
+  or `.env` change (`--auto`): it restores the security subset at once (Slack
+  gating, approvals, toolset lists, MCP servers, secrets helper, dashboard
+  sign-in, `.env`), DMs the owner what it restored, and restarts the gateway
+  with `hermes gateway restart` (drains running turns) when a restored
+  setting is read only at gateway start (`slack.*`, `mcp_servers.*`,
+  `secrets.*`, `.env`; toolsets and approvals are re-read per turn). Other
+  problems are reported by DM when seen on two runs in a row (and once when
+  they clear): secret-looking keys in `config.yaml`/`.env` (names only), more
   than one gateway process, a gateway not under `ai.hermes.gateway`, any
-  loaded unmanaged runtime job, and a dashboard or API listener beyond
-  loopback. Settings outside the rules (model, memory, `terminal.cwd`, …)
+  loaded unmanaged runtime job, a dashboard or API listener beyond loopback,
+  and any chat platform whose toolsets, resolved by Hermes' own resolver,
+  include the monitor's `inbox` server. Settings outside the rules (model, memory, `terminal.cwd`, …)
   are seeded once and then belong to Hermes and the owner.
 - Stable links for `config.yaml`: `~/.local/bin/hermes-secrets` (the secrets
   helper) and `~/.local/share/hermes-inbox/{code,skills,chat-skills,extra-skills/N}`.
@@ -456,16 +463,20 @@ launched through `osascript`). The repo adds around it:
   activation, with `hermes dashboard` itself as ProgramArguments so Hermes'
   update recognises it), tailscale serve, the Keychain sync, the dead-man.
 
-Install (once, at the console; the monitor paused first): run the official
-installer with `--skip-setup` (no setup wizard, no service prompt; it adds
-nothing to the shell files because `~/.zprofile` already has its PATH line),
-then `hermes gateway install`, rebuild, `hermes-inbox-jobs`, and
-`hermes-config-check` until it prints OK. What the installer touches:
-`~/.hermes/hermes-agent` (git checkout), `~/.hermes/tools` (pinned uv),
-`~/.local/bin/hermes`, a local install receipt under
+Install (done once, 2026-11-21, replacing the Nix-packaged Hermes): pause the
+monitor, back up `~/.hermes` (`tar` without `hermes-agent/` and `tools/` to
+`~/.local/state/hermes-backup-<ts>.tgz`, 0600), boot out the old jobs, remove
+`~/.hermes/.managed`, run the official installer with `--skip-setup` (no setup
+wizard and no service prompt; it adds nothing to the shell files because
+`~/.zprofile` already has its PATH line), `hermes gateway install`, rebuild,
+`hermes-inbox-jobs`, then `hermes-config-check` until it prints OK. What the
+installer touches: `~/.hermes/hermes-agent` (git checkout), `~/.hermes/tools`
+(pinned uv), `~/.local/bin/hermes`, a local install receipt under
 `~/.hermes/telemetry/shared_metrics/pending_installs` (sent only if shared
 metrics are on), `~/.hermes/{.env,config.yaml}` only when missing, and
-`brew install git` if git were missing.
+`brew install git` if git were missing. Its post-install maintenance syncs
+bundled skills, migrates `config.yaml` to the new version and installs
+default plugins.
 
 - **Model:** the CLIProxyAPI gateway as the custom provider `cliproxy`
   (`anthropic_messages`): Sonnet for chat and the monitor, Haiku for titles.
@@ -517,8 +528,11 @@ metrics are on), `~/.hermes/{.env,config.yaml}` only when missing, and
   which is part of the accepted risk); the monitor's code and skill are read-only in
   the Nix store, so they can't be rewritten by accident. With the mutable
   install a chat turn or the dashboard can also change `config.yaml`, install
-  plugins or run `hermes update`; `hermes-config-check` restores our rules at
-  the next rebuild and reports drift within about 30 minutes.
+  plugins or run `hermes update`; `hermes-config-check` restores the
+  security rules within seconds (or at worst 30 minutes) and the rest at the
+  next rebuild. Keeping `inbox` out of chat is tool-list hygiene, not a
+  boundary: a chat turn's terminal can edit `config.yaml` or run
+  `inbox_mcp.py` itself.
 - **Inbox monitor:** `hermes/inbox-monitor/` (code, generic skill, README).
   Everything personal (the owner's names, ids, lists, query templates, known
   not-tasks) is in `~/.local/state/inbox-monitor/config.json` (0600) and
@@ -575,7 +589,7 @@ metrics are on), `~/.hermes/{.env,config.yaml}` only when missing, and
   public by Hermes' design (version, gateway state, profile names; no
   config or secrets). The dashboard's Config and API-keys pages write
   `config.yaml` and `~/.hermes/.env`: changes to our rules are restored by
-  the next rebuild (and reported by the 15-minute check), anything else
+  the check (security subset at once, the rest at the next rebuild), anything else
   stays; secrets don't belong in `.env` here. Phone: open the URL in a
   browser with Tailscale on; there is no first-party Hermes mobile app in
   v0.23.3. Hermes Desktop (macOS) can attach to it under Settings →
@@ -647,10 +661,12 @@ metrics are on), `~/.hermes/{.env,config.yaml}` only when missing, and
   monitor's bookkeeping: no window/finish/seen/tracked tools, no access to the
   monitor's state, and reminders it creates are not tracked by the monitor.
 - **MCP in chat:** Hermes can't exclude a single MCP server from a platform:
-  a `platform_toolsets` list either names its MCP servers or gets all of them.
-  The chat lists name `mcp-personal`, which keeps the monitor's `inbox` server
-  cron-only; to give chat another MCP server, add it to `mcp_servers` and name
-  it in the `slack`, `cli` and `api_server` lists too.
+  a `platform_toolsets` list either names its MCP servers or gets all of them,
+  and a platform with no list gets all of them too. Every chat surface (`slack`,
+  `cli`, `api_server`, `acp`, `tui`, `webhook`) therefore has a list naming
+  `mcp-personal`, which keeps the monitor's `inbox` server cron-only; to give
+  chat another MCP server, add it in the dashboard and name it in those lists
+  (the check keeps our entries and leaves yours).
 - **Chat workspace:** chat sessions start in
   `dotfiles.ai.hermes.terminalCwd` (the AppMan SaaS workspace). Extra skill
   folders (`dotfiles.ai.hermes.extraSkillDirs`: the workspace's
