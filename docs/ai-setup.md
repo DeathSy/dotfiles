@@ -656,7 +656,11 @@ default plugins.
   (`hermes/inbox-monitor/personal_mcp.py`): Slack search, threads, history and
   reactions as the owner (the user token stays inside the server), Gmail search,
   messages and threads, Reminders in any list (list, read, create, complete,
-  update), GitHub PR state, and Slack messages as July itself (`slack_bot_dm` to a
+  update), GitHub PR state, Gmail attachments and Google Drive files
+  (`gmail_attachment`, `drive_search`, `drive_fetch`: saved 0600 under
+  `~/.cache/july-attachments` and `~/.cache/july-drive`, text extracted with macOS's
+  own PDFKit/textutil and the XLSX XML; password-protected PDFs are reported as
+  such), and Slack messages as July itself (`slack_bot_dm` to a
   member id or unique name, `slack_bot_post` to a channel July is in; bot token from
   the Keychain inside the server). Hermes ships no agent-callable send tool, hence
   these two; the persona sends to anyone but the requester only after they confirm

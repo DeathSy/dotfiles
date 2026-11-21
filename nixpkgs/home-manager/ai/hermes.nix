@@ -120,9 +120,9 @@ let
   # ~/.local/state/inbox-monitor (see hermes/inbox-monitor/README.md).
   inboxMonitor = pkgs.runCommand "inbox-monitor" { } ''
     mkdir -p $out
-    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,personal_mcp.py,im,reminders.js,fetch_gmail.py,deadman.py} $out/
+    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,personal_mcp.py,im,reminders.js,docs_text.js,fetch_gmail.py,deadman.py} $out/
     chmod 0555 $out/inbox_mcp.py $out/personal_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py
-    chmod 0444 $out/reminders.js
+    chmod 0444 $out/reminders.js $out/docs_text.js
   '';
   # The skill is generic; the owner's names, ids, lists and known not-tasks come
   # from config.json (0600, outside the store) through the `window` tool.
