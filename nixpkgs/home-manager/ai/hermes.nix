@@ -343,7 +343,7 @@ in
     # security rules (DM + graceful gateway restart when needed) and checks the
     # rest and the runtime (one gateway under ai.hermes.gateway, no unmanaged
     # runtime job, loopback listeners, resolved toolsets). DMs the owner when a
-    # problem persists for two runs, and when it clears.
+    # problem stays unchanged for 20 minutes, and when it clears.
     launchd.agents.hermes-config-check = {
       enable = true;
       config = {

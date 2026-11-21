@@ -450,7 +450,7 @@ launched through `osascript`). The repo adds around it:
   with `hermes gateway restart` (drains running turns) when a restored
   setting is read only at gateway start (`slack.*`, `mcp_servers.*`,
   `secrets.*`, `.env`; toolsets and approvals are re-read per turn). Other
-  problems are reported by DM when seen on two runs in a row (and once when
+  problems are reported by DM when unchanged for 20 minutes (and once when
   they clear): secret-looking keys in `config.yaml`/`.env` (names only), more
   than one gateway process, a gateway not under `ai.hermes.gateway`, any
   loaded unmanaged runtime job, a dashboard or API listener beyond loopback,

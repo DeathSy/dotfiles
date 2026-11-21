@@ -14,8 +14,8 @@ Modes: no flag changes nothing. --fix (activation, at every rebuild) applies eve
 .env and the file fixes. --auto (the launchd agent: every 30 min and when config.yaml/.env change) applies
 only the rules marked auto (the security subset) and .env, DMs the owner what it restored, and restarts
 the gateway gracefully when a restored setting is read only at gateway start (slack.*, mcp_servers.*,
-secrets.*, .env). --alert DMs the owner about problems seen on two runs in a row, and once when they
-clear. Output names settings, never values.
+secrets.*, .env). --alert DMs the owner about problems unchanged for 20 minutes (over at least two runs), and once
+when they clear. Output names settings, never values.
 
 The resolved-toolset assertion uses Hermes' own resolver (hermes_cli.tools_config) from the installed
 checkout: no chat platform may resolve to the monitor's inbox MCP server.
@@ -36,6 +36,7 @@ home = spec["hermes_home"]
 cfg_path, env_path = os.path.join(home, "config.yaml"), os.path.join(home, ".env")
 problems, changes = [], []
 restart = set()  # "gateway" / "dashboard": a restored setting is read at process start
+PERSIST = 1200
 START_READ = {"slack", "mcp_servers", "secrets", "unauthorized_dm_behavior"}
 
 
@@ -356,7 +357,9 @@ for name, port, need in (("dashboard", spec.get("dashboard_port"), True), ("API 
 # ── report ──────────────────────────────────────────────────────────────────
 if restart and a.auto:
     # Graceful: `hermes gateway restart` drains running turns, then launchd starts the job again.
-    if "gateway" in restart:
+    if "gateway" in restart and not job_pid:
+        changes.append("gateway not restarted: its launchd job isn't running")
+    elif "gateway" in restart:
         r = run([spec["hermes_bin"], "gateway", "restart"], timeout=900)
         changes.append("gateway restarted" if r is not None and r.returncode == 0 else "gateway restart FAILED (run: hermes gateway restart)")
     if "dashboard" in restart:
@@ -387,7 +390,11 @@ if a.alert:
     except (OSError, ValueError):
         mine = {}
     key = sorted(problems)
-    if key and key == mine.get("last") and key != mine.get("alerted"):
+    # Alert only on problems unchanged for PERSIST seconds (WatchPaths runs can come seconds apart,
+    # e.g. while an install or update rewrites config.yaml).
+    if key != mine.get("last"):
+        mine["since"] = int(time.time())
+    if key and key == mine.get("last") and key != mine.get("alerted") and time.time() - mine.get("since", 0) >= PERSIST:
         s = importlib.util.spec_from_file_location("deadman", spec["deadman"])
         dm = importlib.util.module_from_spec(s)
         s.loader.exec_module(dm)
