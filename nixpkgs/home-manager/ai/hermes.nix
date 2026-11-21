@@ -246,7 +246,18 @@ let
     # Narrowing approvals.approvers lets every requester approve their own commands.
     { path = [ "approvals" "approvers" ]; op = "absent"; auto = true; }
     (eq [ "security" "redact_secrets" ] true)
-  ] ++ lib.optional (cfg.dashboardPublicUrl != null) (eq [ "dashboard" "public_url" ] cfg.dashboardPublicUrl)
+  ] ++ lib.concatLists (lib.mapAttrsToList (task: model: [
+    # Side tasks pinned to the model gateway: `provider: main` resolved to a generic
+    # "custom" provider with no endpoint, and vision failed with "connection error".
+    (eq [ "auxiliary" task "provider" ] "cliproxy")
+    (eq [ "auxiliary" task "model" ] model)
+  ]) {
+    title_generation = haiku;
+    compression = sonnet;
+    vision = sonnet;
+    background_review = sonnet;
+    curator = sonnet;
+  }) ++ lib.optional (cfg.dashboardPublicUrl != null) (eq [ "dashboard" "public_url" ] cfg.dashboardPublicUrl)
     ++ lib.optionals (cfg.ownerSlackId != null) [
     (eq [ "slack" "allow_admin_from" ] [ cfg.ownerSlackId ])
     (eq [ "slack" "group_allow_admin_from" ] [ cfg.ownerSlackId ])
@@ -260,14 +271,6 @@ let
       key_env = "CLIPROXY_API_KEY";
     };
     "model" = { provider = "cliproxy"; default = sonnet; };
-    # Side tasks stay on the gateway too: cheap ones on Haiku, the rest on the main model.
-    "auxiliary" = {
-      title_generation = { provider = "cliproxy"; model = haiku; };
-      compression = { provider = "cliproxy"; model = sonnet; };
-      vision = { provider = "main"; };
-      background_review = { provider = "main"; };
-      curator = { provider = "main"; };
-    };
     "dashboard.basic_auth.session_ttl_seconds" = 43200;
     "memory.memory_enabled" = true;  # built-in, local files only; no external provider
     # Chat history is kept for good (owner's choice); the daily prune job

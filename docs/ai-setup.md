@@ -479,7 +479,11 @@ bundled skills, migrates `config.yaml` to the new version and installs
 default plugins.
 
 - **Model:** the CLIProxyAPI gateway as the custom provider `cliproxy`
-  (`anthropic_messages`): Sonnet for chat and the monitor, Haiku for titles.
+  (`anthropic_messages`): Sonnet for chat and the monitor, Haiku for titles. The
+  side tasks (vision, compression, background review, curator) are pinned to
+  `cliproxy` too and the config check restores them: `provider: main` resolved to a
+  generic "custom" provider without an endpoint, so vision failed with "connection
+  error on custom". Images pass through CLIProxy and Headroom (tested 2026-11-21).
 - **Secrets:** `pass` is the source of truth; activation copies each entry
   into the login Keychain (`security -i` on stdin, read back to check, an
   empty or missing entry never overwrites). Rebuild from the console session:
