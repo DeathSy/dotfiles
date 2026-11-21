@@ -397,36 +397,49 @@ in
         jq=${pkgs.jq}/bin/jq
         out=""
         [ -x "$ts" ] && out=$($ts serve status --json 2>/dev/null) || out=""
-        serve_state() {  # port target
+        serve_state() {  # port target [v1-target]: free | ours | oursv1 (plus /v1 -> v1-target) | other | unknown
           [ -n "$out" ] || { echo unknown; return; }
-          st=$(printf '%s' "$out" | $jq -r --arg p "$1" --arg t "$2" '
+          st=$(printf '%s' "$out" | $jq -r --arg p "$1" --arg t "$2" --arg v "''${3:-}" '
             [.Web // {} | to_entries[] | select(.key | endswith(":" + $p))] as $w
             | if ((.TCP // {})[$p] == null and ($w | length) == 0) then "free"
               elif ((.TCP // {})[$p] == {"HTTPS": true} and ($w | length) == 1
-                    and $w[0].value == {"Handlers": {"/": {"Proxy": $t}}}
-                    and ((.AllowFunnel // {})[$w[0].key] // false) == false) then "ours"
+                    and ((.AllowFunnel // {})[$w[0].key] // false) == false) then
+                (if $w[0].value == {"Handlers": {"/": {"Proxy": $t}}} then "ours"
+                 elif ($v != "" and $w[0].value == {"Handlers": {"/": {"Proxy": $t}, "/v1": {"Proxy": $v}}}) then "oursv1"
+                 else "other" end)
               else "other" end' 2>/dev/null) || st=unknown
           echo "''${st:-unknown}"
         }
         serve_map() {  # port target want(on|off) name
           case "$3:$(serve_state "$1" "$2")" in
-            on:ours|off:free|off:other|off:unknown) ;;
+            on:ours|on:oursv1|off:free|off:other|off:unknown) ;;
             on:free) $DRY_RUN_CMD $ts serve --bg --https="$1" "$2" >/dev/null 2>&1 \
                        || errorEcho "hermes: tailscale serve failed for the $4; run: tailscale serve --bg --https=$1 $2" ;;
             on:other) warnEcho "hermes: tailscale serve already uses HTTPS $1 for something else; $4 not published (tailscale serve status)" ;;
             on:unknown) warnEcho "hermes: couldn't read tailscale serve status; $4 mapping on $1 not checked" ;;
-            off:ours) $DRY_RUN_CMD $ts serve --https="$1" off >/dev/null 2>&1 \
+            off:ours|off:oursv1) $DRY_RUN_CMD $ts serve --https="$1" off >/dev/null 2>&1 \
                         || warnEcho "hermes: could not remove the $4's tailscale serve mapping (tailscale serve --https=$1 off)" ;;
           esac
         }
-        serve_map 443 ${lib.escapeShellArg serveTarget} ${if cfg.dashboardPublicUrl != null then "on" else "off"} dashboard
         api=${if cfg.apiServer && cfg.dashboardPublicUrl != null then "on" else "off"}
-        # No key in the Keychain: the API server doesn't start, so don't publish the port.
+        # No key in the Keychain: the API server doesn't start, so don't publish it.
         if [ "$api" = on ]; then
           key=$(/usr/bin/security find-generic-password -s hermes-agent -a api-server-key -w 2>/dev/null)
           [ "''${#key}" -ge 16 ] || api=off
           unset key
         fi
+        v1=${lib.escapeShellArg "${apiTarget}/v1"}
+        # 443: the dashboard at /, and (with the API server on) /v1 -> the API server,
+        # so one URL serves both the dashboard sign-in and the OpenAI-style API.
+        serve_map 443 ${lib.escapeShellArg serveTarget} ${if cfg.dashboardPublicUrl != null then "on" else "off"} dashboard
+        out=$($ts serve status --json 2>/dev/null) || out=""
+        case "$api:$(serve_state 443 ${lib.escapeShellArg serveTarget} "$v1")" in
+          on:ours) $DRY_RUN_CMD $ts serve --bg --https=443 --set-path /v1 "$v1" >/dev/null 2>&1 \
+                     || errorEcho "hermes: tailscale serve failed for /v1; run: tailscale serve --bg --https=443 --set-path /v1 $v1" ;;
+          off:oursv1) $DRY_RUN_CMD $ts serve --https=443 --set-path /v1 off >/dev/null 2>&1 \
+                        || warnEcho "hermes: could not remove /v1 from the 443 mapping" ;;
+        esac
+        out=$($ts serve status --json 2>/dev/null) || out=""
         serve_map ${toString apiServePort} ${lib.escapeShellArg apiTarget} "$api" "API server"
       )
     '';

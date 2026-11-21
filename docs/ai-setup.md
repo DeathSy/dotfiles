@@ -548,7 +548,11 @@ rebuild.
   Hermes' OpenAI-compatible API server (`/v1/chat/completions`, `/v1/responses`,
   `/v1/runs`, `/api/jobs`, `/api/sessions`, …) on 127.0.0.1:8642, published on
   the tailnet at `https://<dashboard host>:8443` by the same tailscale serve
-  logic (never Funnel). Every request needs `Authorization: Bearer <key>`; the
+  logic (never Funnel). The dashboard URL itself (port 443) also routes `/v1`
+  to the API server, so one URL serves both: the Nous mobile app's chat uses
+  `/v1/…` with the API key, and its Bot Mode signs in to the dashboard there.
+  On 443 only `/v1/*` reaches the API server; its `/api/*` and `/health`
+  routes are shadowed by the dashboard's, so clients that need them use 8443. Every request needs `Authorization: Bearer <key>`; the
   key is `pass hermes/api-server-key` → Keychain `hermes-agent/api-server-key`
   → `API_SERVER_KEY` via secrets.command, and the API server refuses to start
   without it. `/health` answers without a key. API sessions get Hermes' API
