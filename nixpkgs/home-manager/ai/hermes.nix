@@ -32,6 +32,7 @@ let
     "hermes-agent/slack-owner-id" = "hermes/slack-owner-id";
     "inbox-monitor/slack-user-token" = "hermes/slack-user-token";
     "hermes-agent/api-server-key" = "hermes/api-server-key";
+    "hermes-agent/dashboard-session-token" = "hermes/dashboard-session-token";
   };
   # Environment variable -> Keychain account (service hermes-agent), for Hermes.
   hermesEnv = {
@@ -90,6 +91,12 @@ let
       v=$(/usr/bin/security find-generic-password -s hermes-agent -a ${acct} -w 2>/dev/null) \
         && [ -n "$v" ] && printf '%s=%s\n' ${var} "$v"
     '') hermesEnv)}
+    # Dashboard deployment token for token-mode clients (Hermes Desktop's remote
+    # gateway, the mobile app's Bot Mode): bearer REST + /api/ws ?token=. Only a
+    # token of 32+ characters is handed over.
+    t=$(/usr/bin/security find-generic-password -s hermes-agent -a dashboard-session-token -w 2>/dev/null)
+    [ "''${#t}" -ge 32 ] && printf 'HERMES_DASHBOARD_SESSION_TOKEN=%s\n' "$t"
+    unset t
     # Who July answers: the owner (Keychain) plus the colleagues from the private overlay.
     owner=$(/usr/bin/security find-generic-password -s hermes-agent -a slack-owner-id -w 2>/dev/null)
     [ -n "$owner" ] && printf 'SLACK_ALLOWED_USERS=%s\n' "$owner${lib.concatMapStrings (id: ",${id}") cfg.colleagueSlackIds}"

@@ -453,6 +453,7 @@ rebuild.
   | `hermes/slack-user-token` (xoxp) | `inbox-monitor/slack-user-token` | the inbox and personal MCP servers (inside their processes) |
   | `hermes/api-server-key` | `hermes-agent/api-server-key` | Hermes (`API_SERVER_KEY`), the 8443 publishing check |
   | `hermes/dashboard-password` | `hermes-agent/dashboard-password-hash` (scrypt hash) | Hermes dashboard sign-in |
+  | `hermes/dashboard-session-token` (32+ chars) | `hermes-agent/dashboard-session-token` | Hermes dashboard token-mode sign-in (`HERMES_DASHBOARD_SESSION_TOKEN`) |
 
   No secret is in `~/.hermes/.env`, `config.yaml` or the Nix store. Not
   secret but personal: the owner's Slack id is in the generated `config.yaml`
@@ -548,7 +549,15 @@ rebuild.
   Hermes' OpenAI-compatible API server (`/v1/chat/completions`, `/v1/responses`,
   `/v1/runs`, `/api/jobs`, `/api/sessions`, …) on 127.0.0.1:8642, published on
   the tailnet at `https://<dashboard host>:8443` by the same tailscale serve
-  logic (never Funnel). The dashboard URL itself (port 443) also routes `/v1`
+  logic (never Funnel). Token-mode clients (Hermes Desktop's remote gateway,
+  the Nous mobile app's Bot Mode) sign in to the dashboard backend with
+  `HERMES_DASHBOARD_SESSION_TOKEN` (pass `hermes/dashboard-session-token`, at
+  least 32 characters from the keychain-sync charset, e.g. `openssl rand -hex
+  32`): bearer on REST and `?token=` on `/api/ws`. It works next to the
+  password sign-in, and `hermes dashboard` includes everything `hermes serve`
+  offers, so the same backend serves both. In the app: backend address
+  `https://<dashboard host>` (no port), auth "Session token". The dashboard
+  URL itself (port 443) also routes `/v1`
   to the API server, so one URL serves both: the Nous mobile app's chat uses
   `/v1/…` with the API key, and its Bot Mode signs in to the dashboard there.
   On 443 only `/v1/*` reaches the API server; its `/api/*` and `/health`
