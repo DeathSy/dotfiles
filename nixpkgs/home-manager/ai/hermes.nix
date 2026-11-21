@@ -170,7 +170,9 @@ let
   # Daily housekeeping (a no-agent Hermes cron job): monitor sessions, run
   # documents and spilled tool output 1 day; chat sessions are kept
   # (sessions.auto_prune off), but their spilled tool output goes too.
-  pruneScript = pkgs.writeShellScript "hermes-prune" ''
+  # Copied into ~/.hermes/scripts, so it uses the system shell (no store path to go stale).
+  pruneScript = pkgs.writeScript "hermes-prune" ''
+    #!/bin/bash
     set -u
     ${hermesBin} sessions prune --source cron --older-than 1 --yes >/dev/null 2>&1 || echo "hermes-prune: session prune failed"
     find ${hermesHome}/cron/output ${hermesHome}/cache/spillover -type f -mmin +1440 -delete 2>/dev/null
@@ -527,7 +529,7 @@ in
       (pkgs.writeShellScriptBin "hermes-inbox-jobs" ''
         set -eu
         exec /usr/bin/python3 -I ${./hermes-inbox-jobs.py} \
-          --hermes ${hermesBin} --hermes-home ${hermesHome} --hermes-root ${hermesHome}/hermes-agent \
+          --hermes ${hermesBin} --hermes-home ${hermesHome} \
           --state-dir ${stateDir} \
           --prune-script ${pruneScript} --model ${sonnet}
       '')

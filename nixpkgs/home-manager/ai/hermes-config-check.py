@@ -233,49 +233,35 @@ if soul and not os.path.exists(os.path.join(home, "SOUL.md")):
 
 # ── resolved toolsets (Hermes' own resolver) ───────────────────────────────
 RESOLVE = r"""
-import json, os, sys, yaml
-sys.path.insert(0, os.environ["HERMES_ROOT"])
+import json, os
+from hermes_cli.config import load_config
 from hermes_cli.tools_config import _get_platform_tools, _get_enabled_platforms
-cfg = yaml.safe_load(open(os.environ["HERMES_CONFIG"])) or {}
+cfg = load_config()
 plats = set(json.loads(os.environ["PLATFORMS"])) | set(cfg.get("platform_toolsets") or {}) | set(_get_enabled_platforms())
 print(json.dumps({p: sorted(_get_platform_tools(cfg, p)) for p in sorted(plats)}))
 """
 
 
-def hermes_python(launcher):
-    """The interpreter behind Hermes' command: follow `exec <program> …` lines through the shell launchers
-    (~/.local/bin/hermes -> <checkout>/.hermes/bin/hermes -> `exec <python> -I -c <bootstrap> "$@"`)."""
-    import shlex
-    path = launcher
-    for _ in range(4):
-        path = os.path.realpath(path)
-        if re.fullmatch(r"python[0-9.]*", os.path.basename(path)):
-            return path
-        try:
-            with open(path, "rb") as f:
-                head = f.read(65536)
-            if not head.startswith(b"#!"):
-                return None
-            line = next(l for l in head.decode("utf-8", "replace").splitlines() if l.startswith("exec "))
-            path = shlex.split(line)[1]
-        except (OSError, StopIteration, ValueError, IndexError):
-            return None
-    return None
+def hermes_run(code, extra_env=None, timeout=90):
+    """Run Python code inside Hermes' own runtime (its launcher's --run-module, which builds the
+    interpreter, sys.path and dependency environment): `hermes --run-module cProfile -o /dev/null
+    /dev/stdin` executes stdin like a script. Returns the last stdout line, or None."""
+    try:
+        p = subprocess.run([spec["hermes_bin"], "--run-module", "cProfile", "-o", "/dev/null", "/dev/stdin"],
+                           input=code, capture_output=True, text=True, timeout=timeout,
+                           env=dict(os.environ, HERMES_HOME=home, **(extra_env or {})))
+        lines = p.stdout.strip().splitlines()
+        return lines[-1] if p.returncode == 0 and lines else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
 
 
 if cfg is not None:
-    py = hermes_python(spec["hermes_bin"])
-    if py:
-        try:
-            out = subprocess.run([py, "-I", "-c", RESOLVE], capture_output=True, text=True, timeout=60,
-                                 env={"HERMES_ROOT": spec["hermes_root"], "HERMES_CONFIG": cfg_path, "HOME": os.environ.get("HOME", ""),
-                                      "HERMES_HOME": home, "PATH": "/usr/bin:/bin", "PLATFORMS": json.dumps(spec["chat_platforms"])})
-            resolved = json.loads(out.stdout.strip().splitlines()[-1]) if out.returncode == 0 else None
-        except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
-            resolved = None
-    else:
+    try:
+        resolved = json.loads(hermes_run(RESOLVE, {"PLATFORMS": json.dumps(spec["chat_platforms"])}) or "null")
+    except ValueError:
         resolved = None
-    if resolved is None:
+    if not isinstance(resolved, dict):
         problems.append("could not resolve the platform toolsets with Hermes' resolver (is Hermes installed?)")
     else:
         leaking = sorted(p for p, tools in resolved.items() if p != "cron" and spec["cron_only_server"] in tools)
