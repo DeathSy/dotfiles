@@ -551,6 +551,28 @@ rebuild.
   including its cron jobs (the Jobs API can edit or run the inbox monitor):
   treat it like the dashboard password. Rotate: `pass insert -f
   hermes/api-server-key`, `hermes-keychain-sync`, kickstart the gateway.
+- **Colleagues (owner's choice):** `dotfiles.ai.hermes.colleagueSlackIds`
+  (private overlay) are added to `SLACK_ALLOWED_USERS` next to the owner. They
+  get the same agent as the owner: the same tools, the terminal, the
+  `personal` data server and the owner's accounts. Each person has their own
+  sessions (DMs per user; `group_sessions_per_user` keeps channel sessions
+  per user too), but built-in memory is per profile, so `MEMORY.md` and
+  `USER.md` (which describes the owner) are shared; the persona tells July
+  that USER.md is the owner's. Colleagues are regular users for slash
+  commands (`slack.user_allowed_commands`: chat and session commands only)
+  and the owner is the only admin (`allow_admin_from`), so only the owner can
+  run `/approve` or `/deny`, i.e. answer a dangerous-command approval, even
+  for a colleague's own command (`approvals.approvers` stays at its default,
+  because a narrowed list always lets the requester approve).
+- **No code changes:** July's persona (`dotfiles.ai.hermes.soulFile` →
+  `~/.hermes/SOUL.md`, the AppMan support assistant) forbids writing,
+  committing or opening PRs; reading code is fine. The file tools can only
+  write under `~/.local/share/hermes/files` (`HERMES_WRITE_SAFE_ROOT`), so
+  they can't touch `~/workspace`. The terminal is not confined by that:
+  Hermes has no terminal-level path guard and its dangerous-command patterns
+  can't be extended, so a terminal `git commit` or file edit is stopped only
+  by the persona (a prompt-level rule), not enforced. A hard guard would need
+  a Hermes plugin `pre_tool_call` hook or a separate macOS user.
 - **Personal data in chat (owner's choice):** chat (Slack, CLI/TUI/Desktop/
   dashboard, API server) gets the `personal` MCP server
   (`hermes/inbox-monitor/personal_mcp.py`): Slack search, threads, history and

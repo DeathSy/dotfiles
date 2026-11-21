@@ -38,7 +38,6 @@ let
     CLIPROXY_API_KEY = "cliproxy-api-key";
     SLACK_BOT_TOKEN = "slack-bot-token";
     SLACK_APP_TOKEN = "slack-app-token";
-    SLACK_ALLOWED_USERS = "slack-owner-id";
     # Dashboard sign-in (basic provider): the scrypt hash of the owner's password
     # and the token-signing secret, both made at activation (see below).
     HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH = "dashboard-password-hash";
@@ -91,6 +90,9 @@ let
       v=$(/usr/bin/security find-generic-password -s hermes-agent -a ${acct} -w 2>/dev/null) \
         && [ -n "$v" ] && printf '%s=%s\n' ${var} "$v"
     '') hermesEnv)}
+    # Who July answers: the owner (Keychain) plus the colleagues from the private overlay.
+    owner=$(/usr/bin/security find-generic-password -s hermes-agent -a slack-owner-id -w 2>/dev/null)
+    [ -n "$owner" ] && printf 'SLACK_ALLOWED_USERS=%s\n' "$owner${lib.concatMapStrings (id: ",${id}") cfg.colleagueSlackIds}"
     exit 0
   '';
 
@@ -169,11 +171,16 @@ in
 
       environment = {
         HERMES_CRON_TIMEOUT = "600";
+        # The file tools (write_file/patch) may only write here, so July can't edit
+        # the repos under ~/workspace. The terminal is not confined by this.
+        HERMES_WRITE_SAFE_ROOT = "${home}/.local/share/hermes/files";
       } // lib.optionalAttrs cfg.apiServer {
         API_SERVER_ENABLED = "true";
         API_SERVER_HOST = "127.0.0.1";
         API_SERVER_PORT = toString apiPort;
       } // lib.optionalAttrs (cfg.slackHomeChannel != null) { SLACK_HOME_CHANNEL = cfg.slackHomeChannel; };
+
+      hermesHomeFiles = lib.optionalAttrs (cfg.soulFile != null) { "SOUL.md" = cfg.soulFile; };
 
       # The dashboard (and Hermes Desktop's remote backend) on loopback only.
       backend = {
@@ -261,7 +268,20 @@ in
           require_mention = true;
           unauthorized_dm_behavior = "ignore";
           free_response_channels = "";
-        };
+        } // lib.optionalAttrs (cfg.ownerSlackId != null) (let
+          # Colleagues are regular users: plain chat plus these commands. Answering a
+          # dangerous-command approval is /approve or /deny, which only the owner (the
+          # admin) may run, so a colleague can't approve even their own command.
+          # (approvals.approvers stays at its default: narrowing it would let every
+          # requester approve their own commands.)
+          userCommands = [ "help" "whoami" "commands" "new" "stop" "retry" "undo" "title" "save"
+                           "resume" "sessions" "usage" "btw" "queue" "steer" "compress" "context" ];
+        in {
+          allow_admin_from = [ cfg.ownerSlackId ];
+          user_allowed_commands = userCommands;
+          group_allow_admin_from = [ cfg.ownerSlackId ];
+          group_user_allowed_commands = userCommands;
+        });
 
         approvals = {
           mode = "manual";
@@ -283,6 +303,10 @@ in
       ExitTimeOut = 60;
       ThrottleInterval = lib.mkForce 30;
     };
+
+    home.activation.hermesWriteRoot = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run mkdir -p ${home}/.local/share/hermes/files
+    '';
 
     launchd.agents.inbox-monitor-deadman = {
       enable = true;

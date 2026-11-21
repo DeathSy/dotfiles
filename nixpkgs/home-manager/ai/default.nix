@@ -129,6 +129,24 @@ in
           tailnet at HTTPS port 8443 via tailscale serve.
         '';
       };
+      ownerSlackId = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "The owner's Slack member id: the only one who may answer approvals (approvals.approvers).";
+      };
+      colleagueSlackIds = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = ''
+          Slack member ids of colleagues July answers too (added to SLACK_ALLOWED_USERS
+          next to the owner). They get the same agent as the owner, data included.
+        '';
+      };
+      soulFile = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        description = "July's persona, installed as ~/.hermes/SOUL.md (replaces Hermes' default identity).";
+      };
       slackHomeChannel = mkOption {
         type = types.nullOr types.str;
         default = null;
