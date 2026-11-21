@@ -488,7 +488,7 @@ default plugins.
   | pass entry | Keychain service/account | read by |
   |---|---|---|
   | `ai/cliproxyapi-key` | `hermes-agent/cliproxy-api-key` | Hermes (`secrets.command`) |
-  | `hermes/slack-bot-token` (xoxb) | `hermes-agent/slack-bot-token` | Hermes, dead-man check |
+  | `hermes/slack-bot-token` (xoxb) | `hermes-agent/slack-bot-token` | Hermes, dead-man check, the personal MCP server (July's own Slack messages) |
   | `hermes/slack-app-token` (xapp) | `hermes-agent/slack-app-token` | Hermes |
   | `hermes/slack-owner-id` (`U…`) | `hermes-agent/slack-owner-id` | Hermes (`SLACK_ALLOWED_USERS`), dead-man check |
   | `hermes/slack-user-token` (xoxp) | `inbox-monitor/slack-user-token` | the inbox and personal MCP servers (inside their processes) |
@@ -656,7 +656,11 @@ default plugins.
   (`hermes/inbox-monitor/personal_mcp.py`): Slack search, threads, history and
   reactions as the owner (the user token stays inside the server), Gmail search,
   messages and threads, Reminders in any list (list, read, create, complete,
-  update), and GitHub PR state. Its output is not masked, and chat sessions are
+  update), GitHub PR state, and Slack messages as July itself (`slack_bot_dm` to a
+  member id or unique name, `slack_bot_post` to a channel July is in; bot token from
+  the Keychain inside the server). Hermes ships no agent-callable send tool, hence
+  these two; the persona sends to anyone but the requester only after they confirm
+  the exact text. Its output is not masked, and chat sessions are
   kept for good, so whatever chat reads stays in `state.db`. It has none of the
   monitor's bookkeeping: no window/finish/seen/tracked tools, no access to the
   monitor's state, and reminders it creates are not tracked by the monitor.

@@ -1,5 +1,6 @@
 #!/usr/bin/python3 -I
-"""personal: the owner's own data tools for Hermes chat (Slack as the owner, Gmail, Reminders, GitHub PRs).
+"""personal: the owner's own data tools for Hermes chat (Slack as the owner, Gmail, Reminders, GitHub PRs),
+plus sending Slack messages as July (the bot: slack_bot_dm, slack_bot_post; Hermes ships no send tool).
 
 The owner chose to give July (chat) full access to their personal data, so nothing here is masked and the
 arguments are by value. What chat must NOT reach is the inbox monitor's bookkeeping: this server has no
@@ -7,7 +8,7 @@ window/finish/seen/tracked tools, never reads or writes the monitor's state.json
 are not tracked by the monitor. It reuses inbox_mcp.py's Slack/Gmail/Reminders plumbing and its JSON-RPC
 loop; the Slack user token still comes from the Keychain inside the process and never appears in output.
 """
-import importlib.machinery, importlib.util, json, os, re, sys, time, uuid
+import importlib.machinery, importlib.util, json, os, re, sys, time, urllib.parse, urllib.request, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _loader = importlib.machinery.SourceFileLoader("inbox_mcp", os.path.join(HERE, "inbox_mcp.py"))
@@ -81,6 +82,97 @@ def t_slack_react(channel, ts, emoji):
     return {"reacted": f"{channel}:{ts}", "emoji": emoji}
 
 
+# ── Slack as the bot (July) ───────────────────────────────────────────────────
+# Messages July sends in its own name. The persona requires showing the exact text to the requester and
+# their confirmation before anything goes to someone else. The bot token is read from the Keychain here
+# and never returned.
+
+_bot_token, _members = [], []
+USER_RE = re.compile(r"^[UW][A-Z0-9]{6,}$")
+
+
+def bot(method, **params):
+    if not _bot_token:
+        rc, out, _ = run([base.SECURITY, "find-generic-password", "-s", "hermes-agent", "-a", "slack-bot-token", "-w"],
+                         timeout=10)
+        if rc != 0 or not out.strip().startswith("xoxb-"):
+            raise ToolError("Slack bot token not available (Keychain item hermes-agent/slack-bot-token)")
+        _bot_token.append(out.strip())
+    data = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None}).encode()
+    req = urllib.request.Request(f"https://slack.com/api/{method}", data=data,
+                                 headers={"Authorization": f"Bearer {_bot_token[0]}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            body = json.load(r)
+    except (OSError, ValueError) as e:
+        raise ToolError(f"Slack {method}: {e.__class__.__name__}")
+    if not body.get("ok"):
+        raise ToolError(f"Slack {method}: {body.get('error', 'unknown error')}")
+    return body
+
+
+def find_user(who):
+    """A member id, or a unique match on Slack handle / display name / real name (case-insensitive)."""
+    who = (who or "").strip().lstrip("@")
+    if USER_RE.match(who):
+        return who, None
+    if not _members:
+        cursor = None
+        while True:
+            r = bot("users.list", limit=200, cursor=cursor)
+            _members.extend(m for m in r.get("members", []) if not m.get("deleted") and not m.get("is_bot"))
+            cursor = (r.get("response_metadata") or {}).get("next_cursor")
+            if not cursor:
+                break
+    key = who.lower()
+    names = lambda m: {m.get("name", "").lower(), (m.get("profile") or {}).get("display_name", "").lower(),
+                       (m.get("real_name") or "").lower()}
+    hits = [m for m in _members if key in names(m)] or [m for m in _members if any(key in n for n in names(m) if n)]
+    if len(hits) != 1:
+        cands = ", ".join(f"{m.get('real_name') or m.get('name')} ({m['id']})" for m in hits[:8])
+        raise ToolError(f"{'no' if not hits else len(hits)} Slack members match {who!r}" + (f": {cands}" if hits else
+                        "; use the member id"))
+    return hits[0]["id"], hits[0].get("real_name") or hits[0].get("name")
+
+
+def permalink(channel, ts):
+    try:
+        return bot("chat.getPermalink", channel=channel, message_ts=ts).get("permalink")
+    except ToolError:
+        return None
+
+
+def t_slack_bot_dm(user, text):
+    if not (text or "").strip():
+        raise ToolError("text is empty")
+    uid, name = find_user(user)
+    channel = bot("conversations.open", users=uid)["channel"]["id"]
+    ts = bot("chat.postMessage", channel=channel, text=text)["ts"]
+    return {"sent_as": "July (bot)", "to": name or uid, "user": uid, "channel": channel, "ts": ts,
+            "permalink": permalink(channel, ts)}
+
+
+def t_slack_bot_post(channel, text, thread_ts=None):
+    if not (text or "").strip():
+        raise ToolError("text is empty")
+    ch = (channel or "").strip()
+    if ch.startswith("#"):
+        want, cursor, found = ch[1:].lower(), None, None
+        while not found:
+            r = bot("conversations.list", types="public_channel,private_channel", exclude_archived="true",
+                    limit=200, cursor=cursor)
+            found = next((c["id"] for c in r.get("channels", []) if c.get("name", "").lower() == want), None)
+            cursor = (r.get("response_metadata") or {}).get("next_cursor")
+            if not cursor:
+                break
+        if not found:
+            raise ToolError(f"no channel named {ch} visible to July")
+        ch = found
+    check_ids(ch, thread_ts)
+    ts = bot("chat.postMessage", channel=ch, text=text, thread_ts=thread_ts)["ts"]
+    return {"sent_as": "July (bot)", "channel": ch, "ts": ts, "thread_ts": thread_ts, "permalink": permalink(ch, ts)}
+
+
 # ── Gmail ─────────────────────────────────────────────────────────────────────
 
 def gmail(*args):
@@ -145,6 +237,12 @@ TOOLS = {
                       opt(S(channel=STR, oldest=STR, latest=STR, limit=INT), "oldest", "latest", "limit"),
                       t_slack_history),
     "slack_react": ("React to a Slack message as the owner.", S(channel=STR, ts=STR, emoji=STR), t_slack_react),
+    "slack_bot_dm": ("Send a Slack DM AS JULY (the bot) to a member (id like U…, or a unique handle/name). Only after "
+                     "the requester has seen and confirmed the exact text when the recipient is someone else.",
+                     S(user=STR, text=STR), t_slack_bot_dm),
+    "slack_bot_post": ("Post AS JULY (the bot) in a channel July is in (C…/G… id or #name), optionally in a thread. "
+                       "Only after the requester has confirmed the exact text.",
+                       opt(S(channel=STR, text=STR, thread_ts=STR), "thread_ts"), t_slack_bot_post),
     "gmail_search": ("Search the owner's Gmail (Gmail query syntax, e.g. 'from:x newer_than:7d', 'in:inbox is:unread').",
                      opt(S(query=STR, count=INT), "count"),
                      lambda query, count=20: gmail("--search", query, max(1, min(int(count), 50)))),
