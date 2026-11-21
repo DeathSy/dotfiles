@@ -8,21 +8,42 @@ import argparse, json, os, re, shutil, subprocess, sys
 ap = argparse.ArgumentParser()
 ap.add_argument("--hermes", required=True)
 ap.add_argument("--hermes-home", required=True)
+ap.add_argument("--hermes-root", required=True, help="Hermes' checkout (cron.jobs lives there)")
 ap.add_argument("--state-dir", required=True)
 ap.add_argument("--prune-script", required=True)
 ap.add_argument("--model", required=True)
 a = ap.parse_args()
 
 env = dict(os.environ, HERMES_HOME=a.hermes_home)
-wrapper = open(a.hermes).read()
-m = re.search(r'^exec "(.+)/hermes" ', wrapper, re.M)
-if not m:
-    sys.exit("hermes-inbox-jobs: can't find Hermes' Python next to " + a.hermes)
-hermes_py = os.path.join(m.group(1), "python3")
+def hermes_python(launcher):
+    """The interpreter behind Hermes' command: follow `exec <program> …` lines through the shell launchers
+    (~/.local/bin/hermes -> <checkout>/.hermes/bin/hermes -> `exec <python> -I -c <bootstrap> "$@"`)."""
+    import shlex
+    path = launcher
+    for _ in range(4):
+        path = os.path.realpath(path)
+        if re.fullmatch(r"python[0-9.]*", os.path.basename(path)):
+            return path
+        try:
+            with open(path, "rb") as f:
+                head = f.read(65536)
+            if not head.startswith(b"#!"):
+                return None
+            line = next(l for l in head.decode("utf-8", "replace").splitlines() if l.startswith("exec "))
+            path = shlex.split(line)[1]
+        except (OSError, StopIteration, ValueError, IndexError):
+            return None
+    return None
+
+
+hermes_py = hermes_python(a.hermes)
+if not hermes_py:
+    sys.exit("hermes-inbox-jobs: can't find Hermes' Python behind " + a.hermes)
 
 
 def api(code):
-    p = subprocess.run([hermes_py, "-c", "import json\nfrom cron.jobs import list_jobs, update_job\n" + code],
+    p = subprocess.run([hermes_py, "-I", "-c", f"import json, sys\nsys.path.insert(0, {a.hermes_root!r})\n"
+                        "from cron.jobs import list_jobs, update_job\n" + code],
                        env=env, capture_output=True, text=True)
     if p.returncode != 0:
         sys.exit("hermes-inbox-jobs: Hermes cron API failed:\n" + p.stderr.strip()[-2000:])

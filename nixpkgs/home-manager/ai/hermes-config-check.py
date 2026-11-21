@@ -42,7 +42,8 @@ START_READ = {"slack", "mcp_servers", "secrets", "unauthorized_dm_behavior"}
 
 def fixing(rule=None):
     return a.fix or (a.auto and (rule is None or rule.get("auto", False)))
-SECRETISH = re.compile(r"(api_?key|token|secret|password|passwd|private_?key)$", re.I)
+SECRETISH = re.compile(r"(api_?key|token|secret|password|passwd|private_?key)$", re.I)  # config.yaml keys
+ENV_SECRETISH = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?)$", re.I)  # API_SERVER_KEY, *_TOKEN …
 
 
 def say(msg):
@@ -197,7 +198,7 @@ if lines is not None:
             problems.append(f"could not write .env ({e.__class__.__name__})")
     elif wrong:
         problems.append(".env " + ", ".join(sorted(set(wrong))) + " differ from the dotfiles values")
-    leaked = sorted(k for k, v in have.items() if v and SECRETISH.search(k) and k not in spec["env"])
+    leaked = sorted(k for k, v in have.items() if v and ENV_SECRETISH.search(k) and k not in spec["env"])
     if leaked:
         problems.append(".env holds secret-looking keys " + ", ".join(leaked) + "; move them to pass + the Keychain (secrets helper)")
 
@@ -241,20 +242,29 @@ print(json.dumps({p: sorted(_get_platform_tools(cfg, p)) for p in sorted(plats)}
 """
 
 
-def hermes_python():
-    # The launcher is `#!/bin/sh` + `exec <python> -I -c <bootstrap> "$@"` (hermes_cli/_launchers.py).
+def hermes_python(launcher):
+    """The interpreter behind Hermes' command: follow `exec <program> …` lines through the shell launchers
+    (~/.local/bin/hermes -> <checkout>/.hermes/bin/hermes -> `exec <python> -I -c <bootstrap> "$@"`)."""
     import shlex
-    try:
-        for line in open(os.path.realpath(spec["hermes_bin"])):
-            if line.startswith("exec "):
-                return shlex.split(line)[1]
-    except (OSError, ValueError, IndexError):
-        pass
+    path = launcher
+    for _ in range(4):
+        path = os.path.realpath(path)
+        if re.fullmatch(r"python[0-9.]*", os.path.basename(path)):
+            return path
+        try:
+            with open(path, "rb") as f:
+                head = f.read(65536)
+            if not head.startswith(b"#!"):
+                return None
+            line = next(l for l in head.decode("utf-8", "replace").splitlines() if l.startswith("exec "))
+            path = shlex.split(line)[1]
+        except (OSError, StopIteration, ValueError, IndexError):
+            return None
     return None
 
 
 if cfg is not None:
-    py = hermes_python()
+    py = hermes_python(spec["hermes_bin"])
     if py:
         try:
             out = subprocess.run([py, "-I", "-c", RESOLVE], capture_output=True, text=True, timeout=60,

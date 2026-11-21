@@ -527,7 +527,8 @@ in
       (pkgs.writeShellScriptBin "hermes-inbox-jobs" ''
         set -eu
         exec /usr/bin/python3 -I ${./hermes-inbox-jobs.py} \
-          --hermes ${hermesBin} --hermes-home ${hermesHome} --state-dir ${stateDir} \
+          --hermes ${hermesBin} --hermes-home ${hermesHome} --hermes-root ${hermesHome}/hermes-agent \
+          --state-dir ${stateDir} \
           --prune-script ${pruneScript} --model ${sonnet}
       '')
     ];
