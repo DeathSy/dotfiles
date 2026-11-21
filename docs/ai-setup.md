@@ -551,11 +551,20 @@ rebuild.
   including its cron jobs (the Jobs API can edit or run the inbox monitor):
   treat it like the dashboard password. Rotate: `pass insert -f
   hermes/api-server-key`, `hermes-keychain-sync`, kickstart the gateway.
+- **Personal data in chat (owner's choice):** chat (Slack, CLI/TUI/Desktop/
+  dashboard, API server) gets the `personal` MCP server
+  (`hermes/inbox-monitor/personal_mcp.py`): Slack search, threads, history and
+  reactions as the owner (the user token stays inside the server), Gmail search,
+  messages and threads, Reminders in any list (list, read, create, complete,
+  update), and GitHub PR state. Its output is not masked, and chat sessions are
+  kept for good, so whatever chat reads stays in `state.db`. It has none of the
+  monitor's bookkeeping: no window/finish/seen/tracked tools, no access to the
+  monitor's state, and reminders it creates are not tracked by the monitor.
 - **MCP in chat:** Hermes can't exclude a single MCP server from a platform:
   a `platform_toolsets` list either names its MCP servers or gets all of them.
-  Chat lists therefore carry `no_mcp`, keeping the inbox monitor's tools out;
-  to give chat another MCP server, add it to `mcp_servers` and name it in the
-  platform lists (`slack`, `cli`, `api_server`) in place of `no_mcp`.
+  The chat lists name `mcp-personal`, which keeps the monitor's `inbox` server
+  cron-only; to give chat another MCP server, add it to `mcp_servers` and name
+  it in the `slack`, `cli` and `api_server` lists too.
 - **Chat workspace:** chat sessions start in
   `dotfiles.ai.hermes.terminalCwd` (the AppMan SaaS workspace). Extra skill
   folders (`dotfiles.ai.hermes.extraSkillDirs`: the workspace's

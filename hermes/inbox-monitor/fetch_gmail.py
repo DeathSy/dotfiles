@@ -2,7 +2,8 @@
 """fetch_gmail.py <start> [<end>]  compact JSON of inbox emails between the epochs not yet in state.json's
                                   gmail_ids (skips Promotions/Social/Forums/Updates, flags calendar invites)
 fetch_gmail.py --body <id>        one message with its decoded text body
-fetch_gmail.py --thread <thread>  every message of a thread (oldest first), decoded bodies shortened"""
+fetch_gmail.py --thread <thread>  every message of a thread (oldest first), decoded bodies shortened
+fetch_gmail.py --search <q> [n]   the owner's own Gmail search for chat (no state, at most 50)"""
 import base64, html, json, os, re, subprocess, sys
 from email.utils import getaddresses
 
@@ -76,6 +77,15 @@ if len(sys.argv) == 3 and sys.argv[1] == "--thread":
     t = gws("threads", "get", {"userId": "me", "id": sys.argv[2], "format": "full"})
     me = my_address()
     show([summary(m, 1500, me) for m in t.get("messages", [])])
+    sys.exit(0)
+
+if len(sys.argv) in (3, 4) and sys.argv[1] == "--search":
+    # Owner's own search (chat): any Gmail query, newest first; never touches the monitor's state.
+    limit = min(int(sys.argv[3]) if len(sys.argv) == 4 else 20, 50)
+    r = gws("messages", "list", {"userId": "me", "q": sys.argv[2], "maxResults": limit})
+    me = my_address()
+    show([summary(gws("messages", "get", {"userId": "me", "id": m["id"], "format": "full"}), 600, me)
+          for m in r.get("messages", [])])
     sys.exit(0)
 
 since = int(sys.argv[1])

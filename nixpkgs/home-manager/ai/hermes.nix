@@ -98,8 +98,8 @@ let
   # ~/.local/state/inbox-monitor (see hermes/inbox-monitor/README.md).
   inboxMonitor = pkgs.runCommand "inbox-monitor" { } ''
     mkdir -p $out
-    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,im,reminders.js,fetch_gmail.py,deadman.py} $out/
-    chmod 0555 $out/inbox_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py
+    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,personal_mcp.py,im,reminders.js,fetch_gmail.py,deadman.py} $out/
+    chmod 0555 $out/inbox_mcp.py $out/personal_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py
     chmod 0444 $out/reminders.js
   '';
   # The skill is generic; the owner's names, ids, lists and known not-tasks come
@@ -219,12 +219,27 @@ in
           };
           timeout = 280;
         };
-        # Chat gets everything Hermes ships for Slack (the owner's choice,
-        # see docs) but no MCP servers; cron jobs get only the inbox tools.
+
+        # The owner's own data tools for chat (owner's choice: unmasked Slack-as-owner,
+        # Gmail, Reminders in any list, GitHub PRs). No monitor bookkeeping in it.
+        mcp_servers.personal = {
+          command = "/usr/bin/python3";
+          args = [ "-I" "${inboxMonitor}/personal_mcp.py" ];
+          env = {
+            INBOX_STATE_DIR = stateDir;
+            INBOX_GWS = "/opt/homebrew/bin/gws";
+            INBOX_GH = "${pkgs.gh}/bin/gh";
+            PATH = "/usr/bin:/bin";
+          };
+          timeout = 280;
+        };
+        # Chat gets everything Hermes ships plus the owner's personal-data
+        # server (owner's choice, see docs); naming servers makes the list an
+        # allowlist, so the monitor's inbox server stays cron-only.
         platform_toolsets = {
-          slack = [ "hermes-slack" "no_mcp" ];
-          cli = [ "hermes-cli" "no_mcp" ];  # CLI, TUI, Desktop and dashboard chats
-          api_server = [ "hermes-api-server" "no_mcp" ];  # the API server (phone app, OpenAI clients)
+          slack = [ "hermes-slack" "mcp-personal" ];
+          cli = [ "hermes-cli" "mcp-personal" ];  # CLI, TUI, Desktop and dashboard chats
+          api_server = [ "hermes-api-server" "mcp-personal" ];  # the API server (phone app, OpenAI clients)
           cron = [ "mcp-inbox" ];
         };
 

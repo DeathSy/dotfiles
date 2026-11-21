@@ -447,7 +447,13 @@ def masked(v):
     return v
 
 
+# What this process serves; personal_mcp.py swaps in its own tools, unmasked and without the cycle lease.
+SERVER = {"name": "inbox", "tools": None, "mask": True, "lease": True}
+
+
 def handle(req):
+    tools = SERVER["tools"] or TOOLS
+    out = masked if SERVER["mask"] else (lambda v: v)
     method, params = req.get("method"), req.get("params")
     params = {} if params is None else params
     if not isinstance(params, dict):
@@ -455,11 +461,11 @@ def handle(req):
     if method == "initialize":
         return {"protocolVersion": params.get("protocolVersion", "2025-06-18"),
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "inbox", "version": "2.0"}}
+                "serverInfo": {"name": SERVER["name"], "version": "2.0"}}
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {"tools": [{"name": n, "description": d, "inputSchema": s} for n, (d, s, _) in TOOLS.items()]}
+        return {"tools": [{"name": n, "description": d, "inputSchema": s} for n, (d, s, _) in tools.items()]}
     if method == "tools/call":
         if not isinstance(params, dict):
             raise BadParams("params must be an object")
@@ -467,22 +473,22 @@ def handle(req):
         args = {} if args is None else args
         if not isinstance(name, str) or not isinstance(args, dict):
             raise BadParams("name must be a string and arguments an object")
-        if name not in TOOLS:
+        if name not in tools:
             return {"content": [{"type": "text", "text": f"unknown tool {name}"}], "isError": True}
-        _, schema, fn = TOOLS[name]
+        _, schema, fn = tools[name]
         extra = set(args) - set(schema["properties"])
         if extra:
             return {"content": [{"type": "text", "text": f"unknown arguments: {sorted(extra)}"}], "isError": True}
         try:
-            if name != "window":
+            if SERVER["lease"] and name != "window":
                 if not cycle.get("lease"):
                     raise ToolError("no active cycle: call window first (or stop: the lease was lost)")
                 im("renew")  # every tool call of the owning cycle keeps its lease alive
-            result = masked(fn(**args))
+            result = out(fn(**args))
             is_error = isinstance(result, dict) and "error" in result and len(result) == 1
             return {"content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}], "isError": is_error}
         except (ToolError, TypeError, ValueError) as e:
-            return {"content": [{"type": "text", "text": mask(str(e))}], "isError": True}
+            return {"content": [{"type": "text", "text": out(str(e))}], "isError": True}
         except Exception as e:  # noqa: BLE001
             return {"content": [{"type": "text", "text": f"internal error: {e.__class__.__name__}"}], "isError": True}
     if req.get("id") is None:
