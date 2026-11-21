@@ -492,8 +492,9 @@ rebuild.
   monitor skips messages from `config.json` `exclude_users` (July's own bot
   user, so its channel replies never become reminders) and
   `exclude_channels` (July's DM with the owner).
-- **Slack app:** `hermes/slack-manifest.json` (the existing app "July"; Socket
-  Mode; no slash commands). July answers in DMs, in Slack's agent view
+- **Slack app:** `hermes/slack-manifest.json`, the full `hermes slack manifest
+  --agent-view` output for the existing app "July" (slash commands without
+  request URLs, which Socket Mode doesn't need; files, group DMs, reactions). July answers in DMs, in Slack's agent view
   ("Agents & AI apps" must be on for the workspace) and in channels it is
   invited to when @mentioned (`slack.require_mention`, no free-response
   channels); only `SLACK_ALLOWED_USERS` (the owner) is answered anywhere.
@@ -538,6 +539,23 @@ rebuild.
   browser with Tailscale on; there is no first-party Hermes mobile app in
   v0.23.3. Hermes Desktop (macOS) can attach to it under Settings →
   Connections as a remote gateway.
+- **API server:** with `dotfiles.ai.hermes.apiServer` the gateway also runs
+  Hermes' OpenAI-compatible API server (`/v1/chat/completions`, `/v1/responses`,
+  `/v1/runs`, `/api/jobs`, `/api/sessions`, …) on 127.0.0.1:8642, published on
+  the tailnet at `https://<dashboard host>:8443` by the same tailscale serve
+  logic (never Funnel). Every request needs `Authorization: Bearer <key>`; the
+  key is `pass hermes/api-server-key` → Keychain `hermes-agent/api-server-key`
+  → `API_SERVER_KEY` via secrets.command, and the API server refuses to start
+  without it. `/health` answers without a key. API sessions get Hermes' API
+  toolset without MCP servers. The key is full remote control of the agent,
+  including its cron jobs (the Jobs API can edit or run the inbox monitor):
+  treat it like the dashboard password. Rotate: `pass insert -f
+  hermes/api-server-key`, `hermes-keychain-sync`, kickstart the gateway.
+- **MCP in chat:** Hermes can't exclude a single MCP server from a platform:
+  a `platform_toolsets` list either names its MCP servers or gets all of them.
+  Chat lists therefore carry `no_mcp`, keeping the inbox monitor's tools out;
+  to give chat another MCP server, add it to `mcp_servers` and name it in the
+  platform lists (`slack`, `cli`, `api_server`) in place of `no_mcp`.
 - **Chat workspace:** chat sessions start in
   `dotfiles.ai.hermes.terminalCwd` (the AppMan SaaS workspace). Extra skill
   folders (`dotfiles.ai.hermes.extraSkillDirs`: the workspace's

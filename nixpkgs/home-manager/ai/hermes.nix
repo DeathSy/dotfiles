@@ -31,6 +31,7 @@ let
     "hermes-agent/slack-app-token" = "hermes/slack-app-token";
     "hermes-agent/slack-owner-id" = "hermes/slack-owner-id";
     "inbox-monitor/slack-user-token" = "hermes/slack-user-token";
+    "hermes-agent/api-server-key" = "hermes/api-server-key";
   };
   # Environment variable -> Keychain account (service hermes-agent), for Hermes.
   hermesEnv = {
@@ -42,6 +43,8 @@ let
     # and the token-signing secret, both made at activation (see below).
     HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH = "dashboard-password-hash";
     HERMES_DASHBOARD_BASIC_AUTH_SECRET = "dashboard-session-secret";
+    # API server bearer key (the API server refuses to start without it).
+    API_SERVER_KEY = "api-server-key";
   };
 
   # Copies each pass entry into its Keychain item and says what it did. Values
@@ -116,6 +119,9 @@ let
   # dashboard. Refuses to touch port 443 when something else serves it there.
   dashboardPort = 9119;
   serveTarget = "http://127.0.0.1:${toString dashboardPort}";
+  apiPort = 8642;        # Hermes' OpenAI-compatible API server, loopback only
+  apiServePort = 8443;   # its tailnet HTTPS port
+  apiTarget = "http://127.0.0.1:${toString apiPort}";
 
   # launchd runs /bin/zsh, which stays the job's root process: macOS TCC then
   # attributes the monitor's Reminders automation to "zsh" (allowed once)
@@ -163,6 +169,10 @@ in
 
       environment = {
         HERMES_CRON_TIMEOUT = "600";
+      } // lib.optionalAttrs cfg.apiServer {
+        API_SERVER_ENABLED = "true";
+        API_SERVER_HOST = "127.0.0.1";
+        API_SERVER_PORT = toString apiPort;
       } // lib.optionalAttrs (cfg.slackHomeChannel != null) { SLACK_HOME_CHANNEL = cfg.slackHomeChannel; };
 
       # The dashboard (and Hermes Desktop's remote backend) on loopback only.
@@ -214,6 +224,7 @@ in
         platform_toolsets = {
           slack = [ "hermes-slack" "no_mcp" ];
           cli = [ "hermes-cli" "no_mcp" ];  # CLI, TUI, Desktop and dashboard chats
+          api_server = [ "hermes-api-server" "no_mcp" ];  # the API server (phone app, OpenAI clients)
           cron = [ "mcp-inbox" ];
         };
 
@@ -325,41 +336,42 @@ in
       )
     '';
 
-    # tailscale serve for the dashboard. States: free (nothing on 443), ours
-    # (exactly 443 -> the loopback dashboard, no Funnel), other (anything else),
-    # unknown (status or jq failed). Only free is claimed, and only ours is
-    # removed when the dashboard is turned off; other and unknown just warn.
+    # tailscale serve, one HTTPS port per service (tailnet only, never Funnel).
+    # States per port: free (nothing there), ours (exactly that port -> our
+    # loopback target, no Funnel), other (anything else), unknown (status or jq
+    # failed). Only free is claimed; only ours is removed when a service is
+    # turned off; other and unknown just warn.
     home.activation.hermesTailscaleServe = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       (
         set +e -u
         ts=/opt/homebrew/bin/tailscale
         jq=${pkgs.jq}/bin/jq
-        target=${lib.escapeShellArg serveTarget}
-        state=unknown
-        if [ -x "$ts" ] && out=$($ts serve status --json 2>/dev/null) && [ -n "$out" ]; then
-          state=$(printf '%s' "$out" | $jq -r --arg t "$target" '
-            [.Web // {} | to_entries[] | select(.key | endswith(":443"))] as $w
-            | if (.TCP["443"] == null and ($w | length) == 0) then "free"
-              elif (.TCP["443"] == {"HTTPS": true} and ($w | length) == 1
+        out=""
+        [ -x "$ts" ] && out=$($ts serve status --json 2>/dev/null) || out=""
+        serve_state() {  # port target
+          [ -n "$out" ] || { echo unknown; return; }
+          st=$(printf '%s' "$out" | $jq -r --arg p "$1" --arg t "$2" '
+            [.Web // {} | to_entries[] | select(.key | endswith(":" + $p))] as $w
+            | if ((.TCP // {})[$p] == null and ($w | length) == 0) then "free"
+              elif ((.TCP // {})[$p] == {"HTTPS": true} and ($w | length) == 1
                     and $w[0].value == {"Handlers": {"/": {"Proxy": $t}}}
                     and ((.AllowFunnel // {})[$w[0].key] // false) == false) then "ours"
-              else "other" end' 2>/dev/null) || state=unknown
-          [ -n "$state" ] || state=unknown
-        fi
-        ${if cfg.dashboardPublicUrl != null then ''
-          case "$state" in
-            ours) ;;
-            free) $DRY_RUN_CMD $ts serve --bg --https=443 "$target" >/dev/null 2>&1 \
-                    || errorEcho "hermes: tailscale serve failed; run: tailscale serve --bg --https=443 ${serveTarget}" ;;
-            other) warnEcho "hermes: tailscale serve already uses HTTPS 443 for something else; not changing it (tailscale serve status)" ;;
-            *) warnEcho "hermes: couldn't read tailscale serve status; dashboard mapping not checked" ;;
+              else "other" end' 2>/dev/null) || st=unknown
+          echo "''${st:-unknown}"
+        }
+        serve_map() {  # port target want(on|off) name
+          case "$3:$(serve_state "$1" "$2")" in
+            on:ours|off:free|off:other|off:unknown) ;;
+            on:free) $DRY_RUN_CMD $ts serve --bg --https="$1" "$2" >/dev/null 2>&1 \
+                       || errorEcho "hermes: tailscale serve failed for the $4; run: tailscale serve --bg --https=$1 $2" ;;
+            on:other) warnEcho "hermes: tailscale serve already uses HTTPS $1 for something else; $4 not published (tailscale serve status)" ;;
+            on:unknown) warnEcho "hermes: couldn't read tailscale serve status; $4 mapping on $1 not checked" ;;
+            off:ours) $DRY_RUN_CMD $ts serve --https="$1" off >/dev/null 2>&1 \
+                        || warnEcho "hermes: could not remove the $4's tailscale serve mapping (tailscale serve --https=$1 off)" ;;
           esac
-        '' else ''
-          case "$state" in
-            ours) $DRY_RUN_CMD $ts serve --https=443 off >/dev/null 2>&1 \
-                    || warnEcho "hermes: could not remove the dashboard's tailscale serve mapping (tailscale serve --https=443 off)" ;;
-          esac
-        ''}
+        }
+        serve_map 443 ${lib.escapeShellArg serveTarget} ${if cfg.dashboardPublicUrl != null then "on" else "off"} dashboard
+        serve_map ${toString apiServePort} ${lib.escapeShellArg apiTarget} ${if cfg.apiServer && cfg.dashboardPublicUrl != null then "on" else "off"} "API server"
       )
     '';
 

@@ -120,6 +120,15 @@ in
           URL to it, and sign-in is required. Null: no dashboard.
         '';
       };
+      apiServer = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Run Hermes' OpenAI-compatible API server on 127.0.0.1:8642 (key from pass
+          hermes/api-server-key) and, with dashboardPublicUrl set, publish it on the
+          tailnet at HTTPS port 8443 via tailscale serve.
+        '';
+      };
       slackHomeChannel = mkOption {
         type = types.nullOr types.str;
         default = null;
