@@ -3,6 +3,8 @@
 //   ensure-list <list>
 //   open <list>                 open reminders: title, due, priority, flagged
 //   get <id>                    one reminder (any state); {"missing":true} only for "Can't get object" (-1728)
+//   getmany <list> <id>...      the given reminders of one list in a few bulk reads:
+//                               {"found": {id: reminder}, "notfound": [ids not in that list]}
 //   create <list> <title> <notes> <due|-> <high|medium|low|none> <flag|noflag> <marker> <managed lists, comma-separated>
 //                               idempotent: if a reminder in any managed list already has <marker> in its notes,
 //                               returns that one with "existing": true instead of creating another
@@ -94,6 +96,19 @@ function run(argv) {
         for (let i = 0; i < names.length; i++)
           if (!done[i]) res.push({ title: names[i], due: iso(due[i]), priority: PRI_NAME(pri[i]), flagged: fl[i] });
         return JSON.stringify(res);
+      }
+      case "getmany": {
+        // One bulk read per property instead of one osascript launch per reminder (32 sequential
+        // `get`s took ~7 min with a sluggish Reminders.app).
+        const rs = findList(app, a[0]).reminders;
+        const ids = rs.id(), names = rs.name(), done = rs.completed(), pri = rs.priority(), fl = rs.flagged(),
+              due = rs.dueDate(), rem = rs.remindMeDate(), body = rs.body();
+        const want = new Set(a.slice(1)), found = {};
+        for (let i = 0; i < ids.length; i++)
+          if (want.has(ids[i]))
+            found[ids[i]] = { id: ids[i], title: names[i], completed: done[i], priority: PRI_NAME(pri[i]),
+                              flagged: fl[i], due: iso(due[i]), remind_at: iso(rem[i]), notes: body[i] || "" };
+        return JSON.stringify({ found, notfound: a.slice(1).filter((id) => !(id in found)) });
       }
       case "get": {
         const r = byId(app, a[0]);

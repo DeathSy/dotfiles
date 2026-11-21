@@ -211,10 +211,20 @@ def cmd_create(s, argv):
 
 def cmd_tracked(s):
     now, res, changed = int(time.time()), [], False
+    # One bulk read per list; only reminders not found in their list (moved or deleted) are looked up one by one.
+    by_list, got = {}, {}
+    for e in s.get("reminders", {}).values():
+        if not e.get("closed"):
+            by_list.setdefault(e["list"], []).append(e["id"])
+    for lst, ids in by_list.items():
+        r = rem("getmany", lst, *ids)
+        got.update(r["found"])
+        for i in r["notfound"]:
+            got[i] = rem("get", i)
     for key, e in s.get("reminders", {}).items():
         if e.get("closed"):
             continue
-        r = rem("get", e["id"])
+        r = got[e["id"]]
         if r.get("missing"):
             first = e.setdefault("missing_since", now)
             changed = True
