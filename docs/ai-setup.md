@@ -720,8 +720,9 @@ default plugins.
   is settled. If Slack still isn't healthy 10 minutes after the restart, or
   it goes down again for 5 minutes within an hour of the last automatic
   restart, the check stops restarting until Slack has recovered and DMs an
-  alert. When Slack recovers it sends one "connected again" DM, if the alert
-  got through. Failed DMs are retried every minute (the restart notice is
+  alert. Slack counts as recovered only after 3 minutes of continuous
+  health, so a flapping connection gets one alert, not one per flap. It
+  then sends one "connected again" DM, if the alert got through. Failed DMs are retried every minute (the restart notice is
   queued, the alert is resent until it gets through). No more restarts
   happen while they fail, so a network outage longer than an hour still
   gets only one restart. If the check itself fails 10 times in a row, it DMs

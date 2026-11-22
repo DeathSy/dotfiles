@@ -189,7 +189,7 @@ def slack_check(now, st, save):
     """One step of the Slack safeguard; `st` is its persisted state (changed in place), `save()` writes it.
 
     State: since (outage start), last_run, restarted_at (our restart awaiting its verdict), last_restart,
-    suppressed (no more restarts until Slack recovers), alerted (that alert was delivered), alert_text,
+    healthy_since (start of the current healthy stretch), suppressed (no more restarts until Slack recovers), alerted (that alert was delivered), alert_text,
     pending (restart notices not delivered yet)."""
     last_run, st["last_run"] = st.get("last_run"), now
     job_pid = gateway_job_pid()
@@ -213,6 +213,7 @@ def slack_check(now, st, save):
         # that stays down.
         st["since"] = None
         st.pop("restarted_at", None)
+        st.pop("healthy_since", None)
         return
     try:
         with open(os.path.join(HERMES_HOME, "gateway_state.json")) as f:
@@ -231,12 +232,17 @@ def slack_check(now, st, save):
     stamp = lambda t: time.strftime("%H:%M", time.localtime(t))
     if since is None:
         st.pop("restarted_at", None)  # healed; a relapse within RESTART_GAP still only alerts
-        if st.get("suppressed"):
+        if not isinstance(st.get("healthy_since"), (int, float)):
+            st["healthy_since"] = now
+        # Lift the suppression only after SLACK_QUIET of continuous health, so a flapping connection
+        # gets one alert and one "connected again", not one pair per flap.
+        if st.get("suppressed") and now - st["healthy_since"] >= SLACK_QUIET:
             if st.get("alerted"):
                 notify("Slack: July is connected again.")
             st["suppressed"] = st["alerted"] = False
             st.pop("alert_text", None)
         return
+    st.pop("healthy_since", None)
     if st.get("suppressed"):
         if not st.get("alerted") and isinstance(st.get("alert_text"), str):
             st["alerted"] = send(st["alert_text"])  # retried until delivered; never a restart
