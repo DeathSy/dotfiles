@@ -15,9 +15,10 @@
   # into ~/.local and updates itself with `hc update`.
   homebrew.brews = [ "herdr" ];
 
-  # Google Antigravity (agent IDE). Installed with `brew install --cask` on
-  # 2026-11-22, before it was declared. It updates itself (auto_updates).
-  homebrew.casks = [ "antigravity" ];
+  # Google Antigravity CLI (`agy`), a terminal coding agent; not the desktop
+  # app. The cask turns off agy's self-update (use `brew upgrade --cask
+  # antigravity-cli`, not `agy update`), so the activation upgrade updates it.
+  homebrew.casks = [ "antigravity-cli" ];
 
   home-manager.users.ksotis.imports = [
     ../home-manager/ai/hermes.nix
