@@ -13,7 +13,8 @@
   # herdr-core (`hc`, the runtime the Herdr phone/desktop app connects to over
   # SSH) has no formula: it comes from https://releases.herdr.dev/core/install.sh
   # into ~/.local and updates itself with `hc update`.
-  homebrew.brews = [ "herdr" ];
+  # pi (https://pi.dev), a multi-provider coding agent CLI (incl. local models).
+  homebrew.brews = [ "herdr" "pi-coding-agent" ];
 
   # Google Antigravity CLI (`agy`), a terminal coding agent; not the desktop
   # app. The cask turns off agy's self-update (use `brew upgrade --cask

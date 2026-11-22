@@ -32,16 +32,6 @@
 
 		plugins = [
 			{
-				name = "zsh-pnpm";
-				file = "zsh-pnpm.plugin.zsh";
-				src = pkgs.fetchFromGitHub {
-					owner = "nekofar";
-					repo = "zsh-pnpm";
-					rev = "bf5e51c1ee73ff90c73746531a8a775224b7f0df";
-					sha256 = "0ynbxqg66vr1dab4zixl51k26ylj7n5n055spyg3lfrfj5c5dxd6";
-				};
-			}
-			{
 				name = "omz-plugin-bun";
 				file = "bun.plugin.zsh";
 				src = pkgs.fetchFromGitHub {
@@ -77,9 +67,6 @@
 
 		initContent = ''
 			eval "$(/opt/homebrew/bin/brew shellenv)"
-
-      # zsh-pnpm aliases ps to `pnpm run serve`; keep the real ps.
-      unalias ps 2>/dev/null
 
       # Interactive-only replacements; they break Claude Code's Bash tool
       # (CLAUDECODE=1 in its shells).
