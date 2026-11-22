@@ -1,6 +1,6 @@
 { config, lib, pkgs, ... }:
 
-# CLIProxyAPI gateway: Claude Code (and the sol/luna/astra agents) talk to a
+# CLIProxyAPI gateway: Claude Code talks to a
 # CLIProxyAPI on 127.0.0.1:8317 that holds the OAuth logins. It runs only on the
 # host that sets `server.enable` (nixpkgs/nix-darwin/ai-hub.nix, which also
 # declares the Homebrew service); there this writes its config on a fresh

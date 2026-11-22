@@ -83,7 +83,7 @@ MCP entries with `claude mcp remove -s user auto-browser` and
 
 `settings.json` keys the public layer manages: `$schema`, `env.*` (agent
 teams, function hooks, timeouts, context and autocompact limits, telemetry
-off, claude.ai MCP servers off), `permissions.deny`, `skillOverrides`,
+off, claude.ai MCP servers off), `permissions.deny`,
 `hooks`, `enabledPlugins`, `extraKnownMarketplaces`, `effortLevel`,
 `modelSettings`, `tui`, `editorMode`, `skipDangerousModePermissionPrompt`,
 `skipAutoPermissionPrompt`, `skipWorkflowUsageWarning`,
@@ -92,9 +92,6 @@ off, claude.ai MCP servers off), `permissions.deny`, `skillOverrides`,
 With the gateway enabled (every host) it also manages `env.ANTHROPIC_BASE_URL`,
 `env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` and
 `env.ANTHROPIC_AUTH_TOKEN`; the private overlay adds `model`.
-
-The `sol`, `luna` and `astra` agents use model ids that only resolve through
-the CLIProxyAPI gateway.
 
 ## Gateway hosts
 
@@ -123,13 +120,13 @@ still never sleeps) gets no CLIProxyAPI, config,
 management key, OAuth logins or Headroom; it keeps only the client key from
 `pass`. Instead the `org.nix-community.home.cliproxyapi-tunnel` LaunchAgent
 runs Apple's `/usr/bin/ssh -N -L 127.0.0.1:8317:127.0.0.1:8317 <tunnel.host>`,
-so Claude Code, the sol/luna/astra agents and `settings.json` work the same as
+so Claude Code and `settings.json` work the same as
 on the server, the gateway stays bound to the server's `127.0.0.1`, and the
 forward is only reachable from that Mac itself. It runs with
 `BatchMode=yes`, `StrictHostKeyChecking=yes`, `ExitOnForwardFailure=yes`, 15 s
 keepalives and no connection sharing; launchd restarts it at most every 30 s.
 Log: `~/Library/Logs/cliproxyapi-tunnel.log`. There is no fallback: while the
-tunnel or the server is down, Claude Code and the GPT agents on that Mac fail
+tunnel or the server is down, Claude Code on that Mac fails
 to connect.
 
 The private overlay enables the gateway for every host, so it must also set

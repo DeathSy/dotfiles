@@ -20,9 +20,6 @@
     ],
     "deny": []
   },
-  "skillOverrides": {
-    "codex-computer-use": "on"
-  },
   "hooks": {
     "Notification": [
       {
