@@ -276,11 +276,11 @@ rollback:
 6. Hand the session coordination over; it is per Mac. The SessionStart hook
    (`claude/hooks/global-manager-intro.sh`) points each session at the
    `claude-config` session on its own Mac, SendMessage only reaches sessions
-   on the same Mac, and `~/.claude/session-roster.md` is a local file. Ask
-   the old `claude-config` on garage-server to write its open items into the
-   roster, copy it over (`scp -p ~/.claude/session-roster.md
-   garage-hq:.claude/`), then start a `claude-config` session on garage-hq
-   that takes the roster over, keeping only the sessions that moved. Once the
+   on the same Mac, and `~/.claude/session-roster.md` (claude-config's shared
+   notes) is a local file. Ask the old `claude-config` on garage-server to
+   write its open items into those notes, copy them over (`scp -p
+   ~/.claude/session-roster.md garage-hq:.claude/`), then start a
+   `claude-config` session on garage-hq that takes the notes over. Once the
    sessions left on garage-server have wound down, close the old one. Skills
    that drive local apps (the iMessage channel) need those apps signed in and
    granted access on garage-hq first.

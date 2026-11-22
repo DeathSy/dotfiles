@@ -48,38 +48,62 @@ Every PR body gets a "Before / After" section, above the attribution lines, that
 
 # General Preferences
 
-## Picking the right model for workflows and subagents
+## Roles
 
-Rankings, higher = better. Cost reflects what i actually pay (OpenAI is near-free for me), not list price. Intelligence is how hard a problem you can hand the model unsupervised. Taste covers UI/UX, code quality, API design, Security, and copy.
+- Main session: the session the user works with in a project, opus at default effort. It talks with the user, splits each request into tasks on the task board, writes briefs and starts workers. It commits each worker's changes on the task branch before review, runs checks, then opens the PR with before/after evidence (or merges locally where the project has no PR flow); pushing or merging shared branches follows the project's rules or the user's go. It does user-facing work (UI, copy, API design: taste >= 7) and high-stakes work itself. Switch to fable only for demanding long-horizon work (deep research, a large design) or when opus visibly falls short; adjust effort first. Any session can consult fable as an advisor for hard architecture, planning and judgment calls.
+- Workers: agy (Antigravity CLI, Gemini) and Codex (GPT) in herdr panes, one tier, mostly free. They do the standard jobs below.
+- Reviewer: one long-lived Claude session per main session, `<session>-review`, runs both review stages (see Reviews). Nobody reviews their own work.
+- Claude subagents: haiku (`subagent_type: "haiku"`) for exploration (searching and reading code or docs and reporting back) and support work (triage, routing, lookups, short factual answers; also as the main model of a support session such as July); opus when the question needs judgment or before a root-cause analysis goes out. Never Haiku 4.5 or older, and never haiku for reviews, user-facing or hard coding work. Other Claude models run via the agent/workflow `model` parameter.
+- Opus teammate: only for a long multi-step task the main session hands off whole (own worktree and branch, checks, PR, CI). It drives its own workers, hands its tasks to the main session's reviewer via the main session, and reports to `main`.
 
-| model  | provider | cost | Intelligence | taste |
-| ------ | -------- | ---- | ------------ | ----- |
-| luna   | codex    | 10   | 7            | 4     |
-| haiku  | claude   | 8    | 7            | 5     |
-| sol    | codex    | 9    | 8            | 5     |
-| astra  | codex    | 8    | 9            | 6     |
-| sonnet | claude   | 6    | 6            | 7     |
-| opus   | claude   | 5    | 8            | 8     |
-| fable  | claude   | 2    | 9            | 9     |
+## Models
 
-Always use the latest release of each tier. The Claude names are aliases that already resolve to the latest. Luna, sol and astra are OpenAI models that run in Codex, not as Claude Code agent types; reach them through herdr (see Mechanics) and pick the model with Codex's `-m`: `gpt-6-luna`, `gpt-6.2-sol`, `gpt-6.2-astra`. Use the newest of each tier: check `codex debug models` and update these ids when a newer one ships. Haiku is the `haiku` agent type (`~/.claude/agents/haiku.md`, pinned to `claude-haiku-5-5`), since the Agent tool's `model` parameter doesn't offer it. Luna, astra and haiku scores are estimates; adjust them once you've used them.
+Rankings, higher = better. Cost reflects what i actually pay (OpenAI and Google are near-free for me), not list price. Intelligence is how hard a problem you can hand the model unsupervised. Taste covers UI/UX, code quality, API design, Security, and copy.
 
-How to apply:
+| model                       | runs in     | cost | Intelligence | taste |
+| --------------------------- | ----------- | ---- | ------------ | ----- |
+| haiku                       | Claude Code | 8    | 7            | 5     |
+| sonnet                      | Claude Code | 6    | 6            | 7     |
+| opus                        | Claude Code | 5    | 8            | 8     |
+| fable                       | Claude Code | 2    | 9            | 9     |
+| Neon (`gemini-4-neon-high`) | agy         | 9    | 9            | 6     |
+| Sol (`gpt-6.2-sol`)         | Codex       | 9    | 8            | 5     |
+| Astra (`gpt-6.2-astra`)     | Codex       | 8    | 9            | 6     |
+| DeepSeek V4.1 Flash (`openrouter/deepseek/deepseek-v4.1-flash`) | pi | 8 | 6 | 4 |
 
-- These are defaults, not limits. You have standing permission to override them: if a cheaper model's output doesn't meet the bar, rerun or redo the work with a smarter model without asking. Judge the output, not the price tag. Escalating costs less than shipping mediocre work.
-- Cost is a tie-breaker only; when axes conflict for anything that ships, intelligence > taste > cost.
-- Bulk/mechanical work (clear-spec implementation, data analysis, migrations): Codex on sol (`-m gpt-6.2-sol`) - it's effectively free. Simple, high-volume, well-specified steps (fixtures, renames, bulk test fixes): luna (`-m gpt-6-luna`). The hardest hands-on or analysis work where sol falls short, or a second opinion from a different model family: astra (`-m gpt-6.2-astra`).
-- Exploration and iterative labor: haiku. Use it for exploration subagents (searching and reading code or docs and reporting back) and for bounded, well-specified hands-on work that an opus owner checks and re-briefs over several passes. It's Anthropic-native, so prompt caching works. Not for reviews, user-facing work (taste >= 7) or hard agentic coding; escalate those to sonnet/opus or Codex on sol/astra.
-- Support work: haiku. Classification, triage and quick queries for support tasks (routing a request, looking up a log or a doc, a short factual answer), as a `haiku` subagent or as the main model of a support session such as July. Hand deeper root-cause analysis, judgment calls and longer explanations to an opus subagent before they go out.
-- Treat Codex (sol, luna, astra) as an outsourced team that does the hands-on work, not as peers of the Claude tiers.
-- The main session normally runs on opus at its default effort. Switch a session to fable only for demanding long-horizon work (deep research, a large design) or when opus visibly falls short. Adjust effort before switching models. Use fable as an on-demand advisor that any Claude session or teammate can consult for hard architecture, planning and judgment calls, and as the internal reviewer for high-stakes changes only (see Reviews).
-- Delegate in layers: the main session scopes the task, writes the brief, and reviews; an opus teammate is the delegation manager: it owns the task end to end, does the parts that need Claude's judgment or taste itself, and dispatches the mechanical steps to Codex via herdr (writes the brief, starts Codex, judges and iterates on the output, runs local checks, opens the PR, watches CI).
-- The main session should avoid making edits itself. Delegate even small changes, batching them into a teammate's Codex run. It edits directly only as a last resort, when delegating clearly costs more than it saves.
-- Anything user-facing (UI, copy, API design) need taste >= 7
-- Reviews of plans and implementation always go through two stages, and nobody finalizes a review of work they wrote (including work their own Codex worker wrote):
-  1. Internal review first, by a Claude that did not write it. By default an opus reviewer subagent. Use a fable reviewer only for high-stakes changes (defined below). If a fable session wrote it, an opus reviewer checks it.
-  2. Then the final review by Codex via herdr, read-only at high reasoning effort (`-m gpt-6.2-sol`; `-m gpt-6.2-astra` for high-stakes changes), passing it the internal review's findings. Verify its findings against the code before acting, and have the author fix them.
-- High-stakes = a bug would cause harm that is hard to undo and reaches beyond the user's machine. Only these get the fable internal review and the astra final review:
+DeepSeek is paid per token through OpenRouter (about $0.3–0.6 per task), unlike the near-free Codex and agy (Artificial Analysis, Nov 2026: Intelligence 33, Coding Agent 37).
+
+Who gets what:
+
+- Standard coding (implement to spec, bug fixes, refactors), docs, slides and presentations: agy Neon high (`gemini-4-neon-xhigh` only for hard edits; it takes ~21 min each). When agy hits a quota limit, rerun the same brief in Codex Sol.
+- Bulk/mechanical work (renames, fixtures, migrations, test fixes): Codex Sol at medium/high effort. Simple bulk work (fixtures, renames, mechanical edits) can also go to DeepSeek in pi, which is the backup when Codex and agy are out of quota. Never DeepSeek for reviews, user-facing or high-stakes work.
+- Hard analysis, investigations and second opinions without edits: Codex Astra at xhigh.
+- User-facing and high-stakes work: the main session (opus), or fable when needed.
+- Don't use Luna.
+- Always use the newest model of each tier: check `agy models`, `codex debug models` and `pi --list-models deepseek` and update the ids here. The Claude names are aliases that already resolve to the latest. Neon, Sol, Astra, DeepSeek and haiku scores are estimates (Neon leads Artificial Analysis' Coding Agent Index, Astra its Intelligence Index, Nov 2026); adjust them once you've used them.
+- These are defaults, not limits: if output doesn't meet the bar, redo it with a stronger model without asking. Cost is a tie-breaker only; for anything that ships, intelligence > taste > cost.
+
+## Task board
+
+Only requests that change files go on the board. The main session splits them into tasks in `.claude/tasks-<session>.md` in the main checkout, kept out of git (add `.claude/tasks-*.md` to `$(git rev-parse --git-common-dir)/info/exclude`); several sessions can share a project. Only the main session writes it. Each entry has an id, title, worker (agy Neon, Codex Sol, Codex Astra or opus itself), worktree and branch, state (queued → working → ready for review → changes requested → done) and review result:
+
+```
+## T3 Fix login redirect
+- worker: agy Neon
+- worktree: ~/app-wt/t3, branch fix/login-redirect
+- state: changes requested
+- review: opus (stage 1): src/auth.ts:42 drops the query string; opus (stage 2): ok
+```
+
+## Reviews
+
+- Every task gets two read-only reviews; every finding cites file:line. Trivial changes (a few lines, not high-stakes) the main session may make itself, with stage 1 only. Plans are reviewed only for multi-step or non-obvious work, handed over as a file path. A re-review after fixes is stage 1 checking the fixes.
+  1. The reviewer session (opus). High-stakes: it starts a `model: "fable"` subagent. If fable wrote the work, opus reviews.
+  2. Never the author's family, given stage 1's findings: agy Neon high; if agy wrote it, a second, independent opus subagent. High-stakes: Codex Astra xhigh, or Neon xhigh if Codex wrote it.
+- The reviewer runs stage 2 itself (the worker in its own pane, or the opus subagent), verifies its findings against the code, and reports both stages via SendMessage to the requesting session by its session name (not `main`, which only reaches Agent-tool teammates); the main session records them on the board and has the author fix them.
+- Reviewer session: if it isn't running, the main session splits a pane with `--cwd <repo>` and runs `herdr agent start <session>-review --kind claude --pane <id> -- --model opus -n <session>-review`, then confirms with ListAgents that it's reachable under that name (else uses the name shown). It hands each task over via SendMessage when it reaches "ready for review": task id, worktree, author (worker and model), review mode (normal, high-stakes, or stage 1 only for trivial changes and re-reviews), brief or plan path, and the base branch if it isn't the default.
+- Outside herdr, or if the reviewer session dies mid-review and can't be restarted: stage 1 is an opus reviewer subagent (fable for high-stakes; opus if fable wrote it), stage 2 a second, independent opus subagent.
+- High-stakes = a bug would cause harm that is hard to undo and reaches beyond the user's machine. Only these get the fable review and the Astra final review:
   - Security: changes to auth or permission checks, secret handling, or parsing untrusted input in an internet-facing service. Not UI behind a login, internal tools or tests.
   - Personal data: new collection, storage, logging or sharing of identity numbers, phones, emails or KYC data. Not displaying data that is already handled.
   - Money: code that calculates or moves amounts (payments, pricing, billing).
@@ -87,27 +111,24 @@ How to apply:
   - Production: deploys, infrastructure, DNS or cluster changes applied to production.
   - Hard-to-reverse design: public API contracts, concurrency, large architecture changes.
   - Not high-stakes: local tools, personal config such as `~/.claude` hooks, docs, tests, UI and copy, refactors covered by tests, prototypes, staging or dev-only changes.
-  - If unsure, ask: "If this has a bug, can we revert it in minutes with nobody harmed?" If yes, it's an opus internal review and a sol final review.
-- Never use Haiku 4.5 or older. Haiku 5.5+ only for the roles above: through the `haiku` agent, or as the main model of a support session.
-- Browser: use agent-browser for all browser work (via Bash; usage: `agent-browser skills get core`). It runs its own headless Chromium, not the user's Chrome. Use your own named session, never the shared default: get its id once with `agent-browser session id --scope worktree --prefix <task>`, then pass `--session <id>` on every agent-browser command (env vars don't persist between Bash calls, so a one-time export doesn't last). Run `agent-browser close` when done (never `close --all`; when attached to the user's real Chrome, close only your own tabs, never the browser). Name the browser rules in every subagent and Codex brief. Use the user's real Chrome or profile (`--auto-connect`, `--cdp`, `--profile`) only with the user's go-ahead, and then never touch browser-wide state (cookies, permissions, storage): on 2026-10-07 a `clearCookies()` call signed the user out of every site. Never ask for passwords, OTP codes or other secrets in chat, and never type real credentials. For a page behind a login, use stub/test auth or a saved auth state the user named; otherwise ask the user how to proceed (saved auth state, a Steel session (below), or their real Chrome with their go-ahead).
+  - If unsure, ask: "If this has a bug, can we revert it in minutes with nobody harmed?" If yes, it's an opus review and a Neon final review.
+
+## Workers
+
+- Only inside herdr (`test "${HERDR_ENV:-}" = 1`); outside it, tell the user once and use Claude subagents (opus for standard coding and hard analysis, haiku or sonnet only for bulk work). How-to, flags and brief rules: ~/.claude/onboarding.md and `herdr --skill`.
+- One worker per worktree, created manually (`git -C <repo> worktree add <path> -b <branch>`); workers edit only there. Remove the worktree when done. For Claude subagents, don't use `isolation: 'worktree'` (it loses its context and every Bash call fails); spawn them without it and name the absolute path.
+
+## Browser
+
+- Use agent-browser for all browser work (via Bash; usage: `agent-browser skills get core`). It runs its own headless Chromium, not the user's Chrome. Use your own named session, never the shared default: get its id once with `agent-browser session id --scope worktree --prefix <task>`, then pass `--session <id>` on every agent-browser command (env vars don't persist between Bash calls, so a one-time export doesn't last). Run `agent-browser close` when done (never `close --all`; when attached to the user's real Chrome, close only your own tabs, never the browser). Name the browser rules in every subagent and worker brief. Use the user's real Chrome or profile (`--auto-connect`, `--cdp`, `--profile`) only with the user's go-ahead, and then never touch browser-wide state (cookies, permissions, storage): on 2026-10-07 a `clearCookies()` call signed the user out of every site. Never ask for passwords, OTP codes or other secrets in chat, and never type real credentials. For a page behind a login, use stub/test auth or a saved auth state the user named; otherwise ask the user how to proceed (saved auth state, a Steel session (below), or their real Chrome with their go-ahead).
   - Steel (logged-in browser, garage-hq only; on other hosts, report it): only when a site needs a login the user saved in the rpa app, the user must step in (OTP, CAPTCHA, 2FA), or the account needs its saved proxy/user agent. Use only the account the user or brief names (never pick, create, connect, teach or delete accounts). Check `GET http://localhost:18080/api/browser` (if `busy` fills `total`, wait or ask), then `POST http://localhost:18080/api/accounts/<accountId>/agent-session`. Pass `--session <id> --cdp "<cdpUrl>"` on every agent-browser command except `close` (which only disconnects); never CDP `Browser.close`. On a 409, read the message and never end a session you didn't create. To let the user step in, send them `liveViewUrl` with `http://localhost:18080` replaced by `https://garage-server.tailcc88e8.ts.net`, and wait until they say they're done. When finished, `DELETE http://localhost:18080/api/agent-sessions/<sessionId>`, adding `?save=false` unless you logged in or refreshed the login. If localhost:18080 is down, report it; never use the tailnet URL or open your own forward. Details: "Agent sessions" in ~/workspace/rpa/README.md
-- Mechanics: spawn haiku with the Agent tool's `subagent_type: "haiku"`; Claude models run via the agent/workflow `model` parameter (sonnet, opus, fable). Non-Anthropic models don't run inside Claude Code: GPT runs in Codex, Google models in Antigravity (`agy`), and so on, each in a herdr pane you start (`herdr agent start <name> --kind codex|agy|gemini|… --pane <id> -- <args>`, e.g. `-- -m gpt-6.2-sol`), then `herdr agent prompt`, `herdr agent wait`, `herdr agent read`. Only inside herdr (`test "${HERDR_ENV:-}" = 1`); how-to in ~/.claude/onboarding.md and `herdr --skill`. Give them a self-contained brief: they don't share your context. Outside herdr, tell the user and use Claude subagents instead (haiku or sonnet for bulk work, an independent opus reviewer for the final review). Parallel agents that edit each get their own git worktree, created manually: `git -C <repo> worktree add <path> -b <branch>`, then spawn the agent WITHOUT `isolation` and tell it to work only in that absolute path; remove the worktree when done. Don't use `isolation: 'worktree'`: it currently loses its context and every Bash call in the agent fails.
 
-Who does the work:
-
-- Main session (opus) itself: answering questions, explaining code, planning and scoping, writing briefs, conversation. Edits only as a last resort. Hands internal reviews to an opus reviewer subagent (fable for high-stakes changes) and hard judgment calls to a fable advisor.
-- Opus teammate: any feature, phase, fix or multi-file change that needs ownership: its own worktree and branch, iteration, checks, PR, CI. It hands the mechanical steps to Codex via herdr and does the judgment and taste parts itself.
-- Subagent: bounded side tasks that come back as a report: searching the codebase, reading docs, investigating a question. Use one when the digging would flood your own context. Default to the `haiku` agent for these; use opus when the question needs judgment.
-- Sonnet teammate: routine, well-specified work that still needs a Claude.
-- Codex (sol/luna/astra) via herdr: the hands-on steps, driven by the task's owner, not by the main session directly, except for a single well-specified step with no ongoing ownership.
-- Work with independent parts: split it across parallel opus teammates, each in its own manually created worktree (see Mechanics).
-
-Getting results back from subagents:
+## Getting results back from Claude subagents
 
 - Subagents can't write report files (the harness blocks it). Tell them up front to return findings as text in their final message, not in a file.
 - Final results are truncated at ~4,000 chars, and very large ones can come back empty. For long reports, ask subagents up front to send them via SendMessage in parts of ≤3,500 chars each, or use `schema` to get compact structured output.
 - Don't idle waiting for a background job's completion notice; it can fail to arrive. Poll its output file or pid yourself with a time limit.
-- Claude Code bug (seen 2026-10-03): subagents started by a background teammate can't return results to it in any mode. Hand-back fails with "spawning agent is no longer running", their SendMessage to the teammate never arrives (only the main session gets it), and a built-in hook makes them retry endlessly. Until it's fixed, teammates don't start subagents: they do their own hands-on work, drive Codex through herdr themselves (no subagent needed), or ask the main session to start Claude workers and reviewers and pass the results back. This overrides the teammate dispatch described above.
+- Claude Code bug (seen 2026-10-03): subagents started by a background teammate can't return results to it (hand-back fails, their SendMessage reaches only the main session, a built-in hook makes them retry endlessly). Teammates don't start subagents: they work themselves, drive workers through herdr, or ask the main session to start Claude subagents and pass the results back.
 
 # graphify
 
