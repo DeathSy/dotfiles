@@ -11,7 +11,7 @@ new inbox emails for the owner into Apple Reminders. Installed read-only into th
 | `im` | State bookkeeping (`state.json`) and the Reminders wrapper: window chunks, processed keys, run lease, create/complete/update with dedupe, the clipboard-reaction check. |
 | `reminders.js` | JXA for Reminders.app (create, complete, update, open lists). |
 | `im digest` | Run by the no-agent `inbox-digest` job: prints the owner's DM from the event queue (work-list titles, counts for other lists) and drains it. At most once: a Slack outage while Hermes delivers loses that DM; Reminders are the source of truth. |
-| `deadman.py` | Run by launchd every 30 min: DMs the owner once when the enabled job has had no successful cycle for an hour, and once on recovery. |
+| `deadman.py` | Run by launchd every minute: DMs the owner once when the enabled job has had no successful cycle for an hour, and once on recovery. Also the Slack safeguard: one graceful gateway restart after 5 min of unhealthy Socket Mode, then an alert if that doesn't heal it (docs/ai-setup.md). |
 | `SKILL.md` | The cycle's instructions (generic; the owner's profile comes from `config.json`). |
 | `fetch_gmail.py` | Gmail through `gws`: unseen inbox mail of the window, one body, one thread; adds `me_in`, `from_me`, `from_domain` before anything is masked. |
 

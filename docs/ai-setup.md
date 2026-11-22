@@ -438,15 +438,16 @@ spawning a second, unmanaged gateway (`com.nousresearch.hermes.runtime.*`,
 launched through `osascript`). The repo adds around it:
 
 - `hermes-config-check`: our config rules (secrets helper, MCP servers,
-  toolset allowlists, Slack admin gating, approvals, dashboard sign-in, the
-  skills, loopback API server in `.env`). Activation runs it with `--fix` on
+  toolset allowlists, Slack admin gating, the owner's API-posted Slack
+  messages, approvals, dashboard sign-in, the skills, loopback API server in
+  `.env`). Activation runs it with `--fix` on
   every rebuild. launchd runs it every 30 minutes and whenever `config.yaml`
   or `.env` change (`--auto`): it restores the security subset at once (Slack
   gating, approvals, toolset lists, MCP servers, secrets helper, dashboard
   sign-in, `.env`), DMs the owner what it restored, and restarts the gateway
   with `hermes gateway restart` (drains running turns) when a restored
-  setting is read only at gateway start (`slack.*`, `mcp_servers.*`,
-  `secrets.*`, `.env`; toolsets and approvals are re-read per turn). Other
+  setting is read only at gateway start (`slack.*`, `platforms.*`,
+  `mcp_servers.*`, `secrets.*`, `.env`; toolsets and approvals are re-read per turn). Other
   problems are reported by DM when unchanged for 20 minutes (and once when
   they clear): secret-looking keys in `config.yaml`/`.env` (names only), more
   than one gateway process, a gateway not under `ai.hermes.gateway`, any
@@ -561,6 +562,13 @@ default plugins.
   messages from people outside the allowlist are tagged `[unverified]` and
   the model is told not to follow them, which is a prompt-level guard only.
   User scopes cover the monitor's search, history and reactions.
+  Messages the owner posts through another Slack app with their user token
+  (the Claude app: they carry `app_id` and no `client_msg_id`) look like bot
+  messages to Hermes and used to be dropped. The config check therefore
+  keeps `platforms.slack.extra.api_human_users` at the owner's member id
+  (`dotfiles.ai.hermes.ownerSlackId`, private overlay), so the owner's API
+  posts count as human. It covers only the owner; colleagues who post that
+  way are still dropped.
   `SLACK_HOME_CHANNEL` is July's DM with the owner
   (`dotfiles.ai.hermes.slackHomeChannel`).
 - **Dashboard:** with `dotfiles.ai.hermes.dashboardPublicUrl` (private
@@ -684,8 +692,38 @@ default plugins.
   chat's skill index and load on demand; nothing is copied or indexed. Paste it into the app's App Manifest, reinstall, then store the
   tokens and the owner's member id in `pass` (table above) before rebuilding.
 - **Dead-man check:** the `com.ksotis.inbox-monitor-deadman` LaunchAgent
-  (every 30 min) DMs the owner once when the enabled monitor has had no
-  successful cycle for an hour, and once when it recovers.
+  (`hermes/inbox-monitor/deadman.py`, every minute) DMs the owner once when
+  the enabled monitor has had no successful cycle for an hour, and once when
+  it recovers.
+- **Slack safeguard:** the same agent restarts the gateway when Slack stays
+  unhealthy. Hermes records a platform's state in `~/.hermes/gateway_state.json`,
+  but the Slack adapter's own Socket Mode reconnects never reach that file, so
+  the check reads both: a Slack state of retrying, fatal, connecting or
+  disconnected while the gateway runs, and the Socket Mode lines in
+  `~/.hermes/logs/agent.log` since the last gateway start (bad: the adapter's
+  "Socket Mode unhealthy", slack_bolt's "Failed to connect", "Failed to run
+  message listeners", "seems to be already closed"; good: "A new session …
+  has been established", "Socket Mode connected"). Bad lines less than 3
+  minutes apart are one outage, so a connection that comes back and drops
+  again still counts as one. The outage is ongoing while the newest line is
+  a bad one. After 5 minutes it runs one `hermes gateway restart` (drains
+  running turns) and DMs the owner. If Slack still isn't healthy 10 minutes
+  later, or it goes down again within an hour of the last automatic restart,
+  it DMs an alert and doesn't restart again until Slack has recovered (then
+  one "connected again" DM). DMs that fail (Slack or the network down) are
+  retried every minute. State: the `slack` key of
+  `~/.local/state/inbox-monitor/.deadman.json`. The DMs go through July's own
+  bot, so in a real Slack outage they arrive late or not at all.
+  Why: on 2026-11-22 from 22:16 to about 22:22, Slack's routine five-hourly
+  Socket Mode refresh hit a degraded internet link on garage-hq. The
+  `apps.connections.open` connect timed out after 30 s. The inbox MCP's Slack
+  calls, the LLM calls through CLIProxy and Gmail were slow or failing at the
+  same time, and the Wi-Fi data-stall counter rose. Hermes' watchdog
+  rebuilds the Socket Mode handler every 15 s while it reports disconnected,
+  which cuts off slow reconnects; upstream PR NousResearch/hermes-agent#96478
+  (a grace period) was still open at the time. Known Hermes bugs where only a
+  restart helps, such as a reconnect that keeps retrying a closed aiohttp
+  session (#85574, #83662), show up as the same log lines.
 - **Data:** Slack and email text the monitor reads is masked by its MCP
   server (emails, also percent-encoded; Thai phone numbers in the usual
   separators; 13-digit ids; last 4 characters kept) before Hermes sees it.

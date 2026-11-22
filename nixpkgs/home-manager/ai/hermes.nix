@@ -263,6 +263,10 @@ let
     (eq [ "slack" "group_allow_admin_from" ] [ cfg.ownerSlackId ])
     (eq [ "slack" "user_allowed_commands" ] userCommands)
     (eq [ "slack" "group_user_allowed_commands" ] userCommands)
+    # The owner's posts through another Slack app with their user token (the
+    # Claude app: app_id, no client_msg_id) look like bot messages to Hermes and
+    # were dropped; these users' API posts count as human.
+    (eq [ "platforms" "slack" "extra" "api_human_users" ] cfg.ownerSlackId)
   ];
   defaults = lib.mapAttrsToList (k: value: { path = lib.splitString "." k; inherit value; }) ({
     "providers.cliproxy" = {
@@ -333,12 +337,16 @@ in
       case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
     '';
 
+    # Every minute: the inbox monitor's dead-man (DM after an hour without a
+    # successful cycle) and the Slack safeguard (5 min unhealthy -> one graceful
+    # gateway restart and a DM; alert and no more restarts if that doesn't heal it).
     launchd.agents.inbox-monitor-deadman = {
       enable = true;
       config = {
         Label = "com.ksotis.inbox-monitor-deadman";
         ProgramArguments = [ "/usr/bin/python3" "-I" "${inboxMonitor}/deadman.py" ];
-        StartInterval = 1800;
+        EnvironmentVariables = { HERMES_HOME = hermesHome; HERMES_BIN = hermesBin; };
+        StartInterval = 60;
         StandardOutPath = "${home}/Library/Logs/inbox-monitor-deadman.log";
         StandardErrorPath = "${home}/Library/Logs/inbox-monitor-deadman.log";
       };

@@ -13,8 +13,8 @@ dashboard and the apps). This checks only our invariants, from a spec that ai/he
 Modes: no flag changes nothing. --fix (activation, at every rebuild) applies every rule, the defaults,
 .env and the file fixes. --auto (the launchd agent: every 30 min and when config.yaml/.env change) applies
 only the rules marked auto (the security subset) and .env, DMs the owner what it restored, and restarts
-the gateway gracefully when a restored setting is read only at gateway start (slack.*, mcp_servers.*,
-secrets.*, .env). --alert DMs the owner about problems unchanged for 20 minutes (over at least two runs), and once
+the gateway gracefully when a restored setting is read only at gateway start (slack.*, platforms.*,
+mcp_servers.*, secrets.*, .env). --alert DMs the owner about problems unchanged for 20 minutes (over at least two runs), and once
 when they clear. Output names settings, never values.
 
 The resolved-toolset assertion uses Hermes' own resolver (hermes_cli.tools_config) from the installed
@@ -37,7 +37,7 @@ cfg_path, env_path = os.path.join(home, "config.yaml"), os.path.join(home, ".env
 problems, changes = [], []
 restart = set()  # "gateway" / "dashboard": a restored setting is read at process start
 PERSIST = 1200
-START_READ = {"slack", "mcp_servers", "secrets", "unauthorized_dm_behavior"}
+START_READ = {"slack", "platforms", "mcp_servers", "secrets", "unauthorized_dm_behavior"}
 
 
 def fixing(rule=None):
