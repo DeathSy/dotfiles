@@ -11,6 +11,7 @@
 - Focus on checking commands like `yarn typecheck`, `yarn lint` or `pnpm` based one
 - Exception: starting a dev server, local stack or build is allowed only to capture PR before/after evidence (see below); stop it afterwards
 - Never kill processes by pattern (`pkill -f`, `pkill` without `-x`, `killall -m`, `pgrep <pattern> | xargs kill`, `kill -1`/`kill 0`): on 2026-09-29 `pkill -f "cat"` killed 37 of the user's apps. Kill by recorded PID (`$!`, a pidfile) or port owner (`lsof -ti :PORT -sTCP:LISTEN`; without `-sTCP:LISTEN` it also returns clients such as the user's browser). A global hook enforces this
+- When the user asks to install software on a Mac (Homebrew formula or cask, global CLI tool, app, launch agent), declare it in ~/studio/personal/dotfiles instead of only installing it by hand. The repo's CLAUDE.md says which file each kind goes in; a home-manager module meant for one Mac is imported from that host's `nixpkgs/hosts/<host>.nix` (`home-manager.users.ksotis.imports`), not the shared list in flake.nix. Not project dependencies (package.json, pyproject), one-off runs (npx, uvx) or tools inside containers; if it's already declared, say so. Work in a worktree under ~/studio/personal/dotfiles-wt/ (the main checkout is live config) with the usual reviews, then merge it into the main checkout so the user's rebuild picks it up. The user runs the rebuild (it needs sudo); push or open a PR only with their go. Install it by hand as well only if the user wants it right away
 
 ## Containers
 

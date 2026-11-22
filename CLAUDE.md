@@ -49,6 +49,13 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/home-manager/node-globals.nix` - Global npm tools installed into nvm's default Node
 - Individual service configs: `git.nix`, `zsh.nix`, `tmux.nix`, `starship.nix`, etc.
 
+### Where installs go
+
+- Homebrew formulas and casks for every Mac: `nixpkgs/nix-darwin/configuration.nix`; for one Mac: `nixpkgs/hosts/<host>.nix` (lists merge)
+- Global CLI tools: `home.packages` in `nixpkgs/home-manager/home.nix` (nixpkgs); global npm tools in `nixpkgs/home-manager/node-globals.nix`
+- Launch agents: a home-manager module with `launchd.agents` (e.g. `rpa-tunnel.nix`). nix-darwin daemons (`launchd.daemons`, like `never-sleep.nix`) are rare
+- Wiring a home-manager module: shared modules go in `users.ksotis.imports` in `mkHost` in `flake.nix`; host-only modules go in that host file's `home-manager.users.ksotis.imports`. A module that isn't imported does nothing
+
 ### Dotfile Symlinks
 
 Configuration files are symlinked from this repo to `~/.config/` via home-manager:
