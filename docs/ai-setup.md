@@ -702,9 +702,9 @@ default plugins.
   unhealthy. Hermes records a platform's state in `~/.hermes/gateway_state.json`,
   but the Slack adapter's own Socket Mode reconnects never reach that file, so
   the check reads both: a Slack state of retrying, fatal, connecting or
-  disconnected while the gateway runs, and the Socket Mode lines in
+  disconnected, written by the running gateway, and the Socket Mode lines in
   `~/.hermes/logs/agent.log` since the last gateway start (bad: the adapter's
-  "Socket Mode unhealthy", slack_bolt's "Failed to connect", "Failed to run
+  "Socket Mode unhealthy" and "Socket Mode reconnect failed", slack_bolt's "Failed to connect", "Failed to run
   message listeners", "seems to be already closed"; good: "A new session …
   has been established", "Socket Mode connected"). Bad lines less than 3
   minutes apart are one outage, so a connection that comes back and drops
@@ -712,16 +712,20 @@ default plugins.
   a bad one and less than 3 minutes old. Only the running gateway counts:
   when the `ai.hermes.gateway` job has no running process (stopped on
   purpose, or during an update) the check does nothing and never starts it,
-  and a state-file entry counts only if the running gateway wrote it. After
+  and a state-file entry counts only if a process of that job wrote it. After
   5 minutes it runs one `hermes gateway restart` (drains running turns) and
   DMs the owner. The restart is recorded before it runs, so a crash can't
-  lead to a second one. If Slack still isn't healthy 10 minutes
-  later, or it goes down again within an hour of the last automatic restart,
-  it DMs an alert and doesn't restart again until Slack has recovered (then
-  one "connected again" DM). If the restart DM fails (Slack or the network
-  down), it is queued and retried every minute. The alerts are retried too,
-  because they count as sent only once they get through. If the check itself fails 10
-  times in a row, it DMs that once. State: the `slack` key of
+  lead to a second one. The 10-minute verdict window starts when the restart
+  (and its drain) has finished. Once Slack is healthy again, that restart
+  is settled. If Slack still isn't healthy 10 minutes after the restart, or
+  it goes down again for 5 minutes within an hour of the last automatic
+  restart, the check stops restarting until Slack has recovered and DMs an
+  alert. When Slack recovers it sends one "connected again" DM, if the alert
+  got through. Failed DMs are retried every minute (the restart notice is
+  queued, the alert is resent until it gets through). No more restarts
+  happen while they fail, so a network outage longer than an hour still
+  gets only one restart. If the check itself fails 10 times in a row, it DMs
+  that once (retried until delivered). State: the `slack` key of
   `~/.local/state/inbox-monitor/.deadman.json`. The DMs go through July's own
   bot, so in a real Slack outage they arrive late or not at all.
   Why: on 2026-11-22 from 22:16 to about 22:22, Slack's routine five-hourly
