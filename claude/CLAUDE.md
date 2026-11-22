@@ -51,7 +51,7 @@ Every PR body gets a "Before / After" section, above the attribution lines, that
 ## Roles
 
 - Main session: the session the user works with in a project, opus at default effort. It talks with the user, splits each request into tasks on the task board, writes briefs and starts workers. It commits each worker's changes on the task branch before review, runs checks, then opens the PR with before/after evidence (or merges locally where the project has no PR flow); pushing or merging shared branches follows the project's rules or the user's go. It does user-facing work (UI, copy, API design: taste >= 7) and high-stakes work itself. Switch to fable only for demanding long-horizon work (deep research, a large design) or when opus visibly falls short; adjust effort first. Any session can consult fable as an advisor for hard architecture, planning and judgment calls.
-- Workers: agy (Antigravity CLI, Gemini) and Codex (GPT) in herdr panes, one tier, mostly free. They do the standard jobs below.
+- Workers: agy (Antigravity CLI, Gemini) and Codex (GPT) in herdr terminals (`hc`), one tier, mostly free. They do the standard jobs below.
 - Reviewer: one long-lived Claude session per main session, `<session>-review`, runs both review stages (see Reviews). Nobody reviews their own work.
 - Claude subagents: haiku (`subagent_type: "haiku"`) for exploration (searching and reading code or docs and reporting back) and support work (triage, routing, lookups, short factual answers; also as the main model of a support session such as July); opus when the question needs judgment or before a root-cause analysis goes out. Never Haiku 4.5 or older, and never haiku for reviews, user-facing or hard coding work. Other Claude models run via the agent/workflow `model` parameter.
 - Opus teammate: only for a long multi-step task the main session hands off whole (own worktree and branch, checks, PR, CI). It drives its own workers, hands its tasks to the main session's reviewer via the main session, and reports to `main`.
@@ -76,7 +76,7 @@ DeepSeek is paid per token through OpenRouter (about $0.3–0.6 per task), unlik
 Who gets what:
 
 - Standard coding (implement to spec, bug fixes, refactors), docs, slides and presentations: agy Neon high (`gemini-4-neon-xhigh` only for hard edits; it takes ~21 min each). When agy hits a quota limit, rerun the same brief in Codex Sol.
-- Bulk/mechanical work (renames, fixtures, migrations, test fixes): Codex Sol at medium/high effort. Simple bulk work (fixtures, renames, mechanical edits) can also go to DeepSeek in pi, which is the backup when Codex and agy are out of quota. Never DeepSeek for reviews, user-facing or high-stakes work.
+- Bulk/mechanical work (renames, fixtures, migrations, test fixes): Codex Sol at medium/high effort. Simple bulk work can also go to DeepSeek in pi, which is the backup when Codex and agy are out of quota. Never DeepSeek for reviews, user-facing or high-stakes work.
 - Hard analysis, investigations and second opinions without edits: Codex Astra at xhigh.
 - User-facing and high-stakes work: the main session (opus), or fable when needed.
 - Don't use Luna.
@@ -100,8 +100,8 @@ Only requests that change files go on the board. The main session splits them in
 - Every task gets two read-only reviews; every finding cites file:line. Trivial changes (a few lines, not high-stakes) the main session may make itself, with stage 1 only. Plans are reviewed only for multi-step or non-obvious work, handed over as a file path. A re-review after fixes is stage 1 checking the fixes.
   1. The reviewer session (opus). High-stakes: it starts a `model: "fable"` subagent. If fable wrote the work, opus reviews.
   2. Never the author's family, given stage 1's findings: agy Neon high; if agy wrote it, a second, independent opus subagent. High-stakes: Codex Astra xhigh, or Neon xhigh if Codex wrote it.
-- The reviewer runs stage 2 itself (the worker in its own pane, or the opus subagent), verifies its findings against the code, and reports both stages via SendMessage to the requesting session by its session name (not `main`, which only reaches Agent-tool teammates); the main session records them on the board and has the author fix them.
-- Reviewer session: if it isn't running, the main session splits a pane with `--cwd <repo>` and runs `herdr agent start <session>-review --kind claude --pane <id> -- --model opus -n <session>-review`, then confirms with ListAgents that it's reachable under that name (else uses the name shown). It hands each task over via SendMessage when it reaches "ready for review": task id, worktree, author (worker and model), review mode (normal, high-stakes, or stage 1 only for trivial changes and re-reviews), brief or plan path, and the base branch if it isn't the default.
+- The reviewer runs stage 2 itself (the worker in its own terminal, or the opus subagent), verifies its findings against the code, and reports both stages via SendMessage to the requesting session by its session name (not `main`, which only reaches Agent-tool teammates); the main session records them on the board and has the author fix them.
+- Reviewer session: if it isn't running, the main session clears any leftover `--keep` terminal (see onboarding) and runs `hc run --bg --no-notify --name <session>-review --outlive-parent --keep --cwd <repo> -- claude --model opus -n <session>-review`, waits until it's idle, then confirms with ListAgents that it's reachable under that name (else uses the name shown). It hands each task over via SendMessage when it reaches "ready for review": task id, worktree, author (worker and model), review mode (normal, high-stakes, or stage 1 only for trivial changes and re-reviews), brief or plan path, and the base branch if it isn't the default.
 - Outside herdr, or if the reviewer session dies mid-review and can't be restarted: stage 1 is an opus reviewer subagent (fable for high-stakes; opus if fable wrote it), stage 2 a second, independent opus subagent.
 - High-stakes = a bug would cause harm that is hard to undo and reaches beyond the user's machine. Only these get the fable review and the Astra final review:
   - Security: changes to auth or permission checks, secret handling, or parsing untrusted input in an internet-facing service. Not UI behind a login, internal tools or tests.
@@ -115,7 +115,7 @@ Only requests that change files go on the board. The main session splits them in
 
 ## Workers
 
-- Only inside herdr (`test "${HERDR_ENV:-}" = 1`); outside it, tell the user once and use Claude subagents (opus for standard coding and hard analysis, haiku or sonnet only for bulk work). How-to, flags and brief rules: ~/.claude/onboarding.md and `herdr --skill`.
+- Only inside herdr (`test -n "${HC_TERMINAL_ID:-}"`); outside it, tell the user once and use Claude subagents (opus for standard coding and hard analysis, haiku or sonnet only for bulk work). How-to, flags and brief rules: ~/.claude/onboarding.md and `hc --skill`.
 - One worker per worktree, created manually (`git -C <repo> worktree add <path> -b <branch>`); workers edit only there. Remove the worktree when done. For Claude subagents, don't use `isolation: 'worktree'` (it loses its context and every Bash call fails); spawn them without it and name the absolute path.
 
 ## Browser
