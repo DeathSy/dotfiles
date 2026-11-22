@@ -443,7 +443,7 @@ launched through `osascript`). The repo adds around it:
   `.env`). Activation runs it with `--fix` on
   every rebuild. launchd runs it every 30 minutes and whenever `config.yaml`
   or `.env` change (`--auto`): it restores the security subset at once (Slack
-  gating, approvals, toolset lists, MCP servers, secrets helper, dashboard
+  gating, `platforms.slack.extra.api_human_users`, approvals, toolset lists, MCP servers, secrets helper, dashboard
   sign-in, `.env`), DMs the owner what it restored, and restarts the gateway
   with `hermes gateway restart` (drains running turns) when a restored
   setting is read only at gateway start (`slack.*`, `platforms.*`,
@@ -568,7 +568,10 @@ default plugins.
   keeps `platforms.slack.extra.api_human_users` at the owner's member id
   (`dotfiles.ai.hermes.ownerSlackId`, private overlay), so the owner's API
   posts count as human. It covers only the owner; colleagues who post that
-  way are still dropped.
+  way are still dropped. Trust: anything that posts with the owner's user
+  token (Claude app sessions, any other app the owner authorised, or
+  anyone holding that token) is now treated as the owner, who is
+  July's Slack admin (`/approve`, `/deny`).
   `SLACK_HOME_CHANNEL` is July's DM with the owner
   (`dotfiles.ai.hermes.slackHomeChannel`).
 - **Dashboard:** with `dotfiles.ai.hermes.dashboardPublicUrl` (private
@@ -706,12 +709,19 @@ default plugins.
   has been established", "Socket Mode connected"). Bad lines less than 3
   minutes apart are one outage, so a connection that comes back and drops
   again still counts as one. The outage is ongoing while the newest line is
-  a bad one. After 5 minutes it runs one `hermes gateway restart` (drains
-  running turns) and DMs the owner. If Slack still isn't healthy 10 minutes
+  a bad one and less than 3 minutes old. Only the running gateway counts:
+  when the `ai.hermes.gateway` job has no running process (stopped on
+  purpose, or during an update) the check does nothing and never starts it,
+  and a state-file entry counts only if the running gateway wrote it. After
+  5 minutes it runs one `hermes gateway restart` (drains running turns) and
+  DMs the owner. The restart is recorded before it runs, so a crash can't
+  lead to a second one. If Slack still isn't healthy 10 minutes
   later, or it goes down again within an hour of the last automatic restart,
   it DMs an alert and doesn't restart again until Slack has recovered (then
-  one "connected again" DM). DMs that fail (Slack or the network down) are
-  retried every minute. State: the `slack` key of
+  one "connected again" DM). If the restart DM fails (Slack or the network
+  down), it is queued and retried every minute. The alerts are retried too,
+  because they count as sent only once they get through. If the check itself fails 10
+  times in a row, it DMs that once. State: the `slack` key of
   `~/.local/state/inbox-monitor/.deadman.json`. The DMs go through July's own
   bot, so in a real Slack outage they arrive late or not at all.
   Why: on 2026-11-22 from 22:16 to about 22:22, Slack's routine five-hourly

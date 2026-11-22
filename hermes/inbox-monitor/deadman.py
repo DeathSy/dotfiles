@@ -15,13 +15,15 @@ the Slack adapter's own Socket Mode reconnects never reach that file, from its l
 The bot token and owner id come from the login Keychain; the token only travels in an HTTP header, never
 on a command line.
 """
-import datetime, json, os, re, subprocess, time, urllib.request
+import datetime, http.client, json, os, re, subprocess, time, urllib.request
 
 STATE_DIR = os.environ.get("INBOX_STATE_DIR") or os.path.expanduser("~/.local/state/inbox-monitor")
 HERMES_HOME = os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
 MINE = os.path.join(STATE_DIR, ".deadman.json")
 LATE = 3600
 HERMES_BIN = os.environ.get("HERMES_BIN") or os.path.expanduser("~/.local/bin/hermes")
+GATEWAY_LABEL = os.environ.get("HERMES_GATEWAY_LABEL") or "ai.hermes.gateway"
+SLACK_ERRORS = 10     # consecutive failed Slack checks before one DM about the check itself
 SLACK_DOWN = 300      # unhealthy this long -> one graceful gateway restart
 SLACK_HEAL = 600      # still unhealthy this long after the restart -> alert, stop restarting
 SLACK_QUIET = 180     # no bad Socket Mode line for this long ends an episode (flapping stays one episode)
@@ -32,8 +34,11 @@ BAD_STATES = {"retrying", "fatal", "connecting", "disconnected"}
 
 
 def keychain(account):
-    p = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "hermes-agent", "-a", account, "-w"],
-                       capture_output=True, text=True, timeout=10)
+    try:
+        p = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "hermes-agent", "-a", account, "-w"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
     return p.stdout.strip() if p.returncode == 0 else ""
 
 
@@ -49,7 +54,7 @@ def send(text):
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             body = json.load(r)
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, http.client.HTTPException) as e:
         print(f"deadman: Slack request failed: {e.__class__.__name__}")
         return False
     if not body.get("ok"):
@@ -118,7 +123,9 @@ def slack_unhealthy_since(now, events, gateway_state):
     if isinstance(gateway_state, dict) and gateway_state.get("gateway_state") == "running" \
             and pid_alive(gateway_state.get("pid")):
         slack = (gateway_state.get("platforms") or {}).get("slack") or {}
-        if slack.get("state") in BAD_STATES:
+        # Only the running gateway's own record counts (not one left by an earlier process).
+        if slack.get("state") in BAD_STATES and slack.get("writer_pid") == gateway_state.get("pid") \
+                and slack.get("writer_start_time") == gateway_state.get("start_time"):
             t = now
             for key in ("retrying_since", "updated_at"):
                 try:
@@ -143,15 +150,35 @@ def read_tail(path, size=LOG_TAIL):
     return text if end <= size else text.split("\n", 1)[-1]
 
 
-def slack_check(now, st):
-    """One step of the Slack safeguard; `st` is its persisted state (changed in place)."""
+def gateway_job_pid():
+    """pid of the ai.hermes.gateway launchd job, or None when it isn't loaded or running."""
+    try:
+        p = subprocess.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{GATEWAY_LABEL}"],
+                           capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    m = re.search(r"^\tpid = (\d+)$", p.stdout, re.M) if p.returncode == 0 else None
+    return int(m.group(1)) if m else None
+
+
+def slack_check(now, st, save):
+    """One step of the Slack safeguard; `st` is its persisted state (changed in place), `save()` writes it."""
+    last_run, st["last_run"] = st.get("last_run"), now
+    if gateway_job_pid() is None:
+        # Stopped (on purpose, or during an update): not ours to start. config-check reports a gateway
+        # that stays down.
+        st["since"] = None
+        return
     try:
         gw = json.load(open(os.path.join(HERMES_HOME, "gateway_state.json")))
     except (OSError, ValueError):
         gw = None
     since = slack_unhealthy_since(now, slack_events(read_tail(os.path.join(HERMES_HOME, "logs", "agent.log"))), gw)
-    if since is not None and isinstance(st.get("since"), (int, float)):
-        since = min(since, st["since"])  # the log restarts at each gateway start; keep the episode's start
+    # The log restarts at each gateway start; keep the episode's start across runs, unless the last run
+    # is too long ago to know the outage went on in between.
+    if since is not None and isinstance(st.get("since"), (int, float)) \
+            and isinstance(last_run, (int, float)) and now - last_run <= SLACK_QUIET:
+        since = min(since, st["since"])
     st["since"] = since
 
     # DMs that failed (Slack down, network out) are retried on the next runs.
@@ -189,12 +216,18 @@ def slack_check(now, st):
                 "check ~/.hermes/logs/agent.log on garage-hq."):
             st["alerted"] = True
         return
+    # Saved before the restart, so a crash or kill afterwards can't lead to a second one.
+    st["restarted_at"] = st["last_restart"] = now  # the drain counts toward SLACK_HEAL
+    save()
     try:
         r = subprocess.run([HERMES_BIN, "gateway", "restart"], capture_output=True, text=True, timeout=900)
         ok = r.returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
+        if not ok:
+            tail = (r.stderr or r.stdout or "").strip().splitlines()[-1:] or [""]
+            print(f"deadman: hermes gateway restart exited {r.returncode}: {tail[0][:200]}")
+    except (OSError, subprocess.TimeoutExpired) as e:
         ok = False
-    st["restarted_at"] = st["last_restart"] = now  # the drain counts toward SLACK_HEAL
+        print(f"deadman: hermes gateway restart failed: {e.__class__.__name__}")
     notify(f"Slack: July's connection was unhealthy since {stamp(since)}, so I "
            + ("restarted the gateway (`hermes gateway restart`)." if ok else
               "tried `hermes gateway restart`, which FAILED.")
@@ -212,10 +245,17 @@ def main():
         mine = {"alerted": False, "enabled_since": None}
     if not isinstance(mine.get("slack"), dict):
         mine["slack"] = {}
+    slack = mine["slack"]
     try:
-        slack_check(now, mine["slack"])
+        slack_check(now, slack, lambda: save(mine))
+        slack["errors"] = 0
     except Exception as e:  # never let the Slack check stop the monitor check
         print(f"deadman: Slack check failed: {e.__class__.__name__}: {e}")
+        slack["errors"] = (slack.get("errors") if isinstance(slack.get("errors"), int) else 0) + 1
+        if slack["errors"] == SLACK_ERRORS:
+            send(f"Slack safeguard on garage-hq has failed {SLACK_ERRORS} times in a row ({e.__class__.__name__}); "
+                 "it can't restart the gateway until that's fixed. See ~/Library/Logs/inbox-monitor-deadman.log.")
+    save(mine)
 
     # Only a confirmed pause (or a job that was never set up) is quiet; an unreadable jobs.json or a job
     # that disappeared after it was enabled counts as a problem.
@@ -266,6 +306,10 @@ def main():
             if send("Inbox monitor recovered."):
                 mine["alerted"] = False
 
+    save(mine)
+
+
+def save(mine):
     tmp = MINE + ".tmp"
     with open(tmp, "w") as f:
         json.dump(mine, f)

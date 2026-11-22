@@ -266,7 +266,7 @@ let
     # The owner's posts through another Slack app with their user token (the
     # Claude app: app_id, no client_msg_id) look like bot messages to Hermes and
     # were dropped; these users' API posts count as human.
-    (eq [ "platforms" "slack" "extra" "api_human_users" ] cfg.ownerSlackId)
+    (eq [ "platforms" "slack" "extra" "api_human_users" ] [ cfg.ownerSlackId ])
   ];
   defaults = lib.mapAttrsToList (k: value: { path = lib.splitString "." k; inherit value; }) ({
     "providers.cliproxy" = {
