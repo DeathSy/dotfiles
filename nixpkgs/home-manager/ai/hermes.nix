@@ -279,18 +279,19 @@ let
       "pipe, `;`, `&&`, `||`, substitution or redirection; otherwise judge the other parts by the rules above, and"
       "ESCALATE when unsure. ESCALATE if the command sets or unsets HERMES_SESSION_* or HC_* variables (including"
       "env -u). The ESCALATE rules win."
-      # Typing into a task session counts as the owner's own input there (his go), so July's terminal may
-      # reach the sessions only through july-task.
-      "ESCALATE any `hc` command that types into, starts, stops or attaches to a terminal or writes core"
-      "documents (hc send, keys, run, kill, rm, interrupt, attach, connect, put, label, keep, file write/edit,"
-      "exec), and any `herdr` command that changes panes, tabs or workspaces, unless it is one of the single"
-      "`july-task` invocations approved above (july-task runs hc itself)."
     ]))
     (eq [ "approvals" "cron_mode" ] "deny")
     (eq [ "approvals" "single_query_mode" ] "deny")
     (eq [ "approvals" "unattended_mode" ] "deny")
     # Narrowing approvals.approvers lets every requester approve their own commands.
     { path = [ "approvals" "approvers" ]; op = "absent"; auto = true; }
+  ] ++ lib.optionals tasksEnabled [
+    # Typing into a task session counts as the owner's own input there (his go), so July's terminal must not
+    # reach herdr terminals itself: Hermes' deny globs block hc/herdr write commands for every command,
+    # under every approval mode (the approval model only sees commands its danger patterns flag). The
+    # owner's own deny entries are kept.
+    { path = [ "approvals" "deny" ]; op = "contains"; value = (builtins.fromJSON (builtins.readFile ../../../hermes/inbox-monitor/july-deny.json)).deny; auto = true; }
+  ] ++ [
     (eq [ "security" "redact_secrets" ] true)
   ] ++ lib.concatLists (lib.mapAttrsToList (task: model: [
     # Side tasks pinned to the model gateway: `provider: main` resolved to a generic

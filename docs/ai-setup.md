@@ -830,18 +830,44 @@ default plugins.
       anything that only restates an earlier go, is not a go; the brief says
       to ask again after a compaction.
     - What is enforced vs only instructed: nothing technical tells the
-      owner's typing apart from other untagged input in the session. July's
-      own terminal could type into it with plain `hc send`. So the smart
-      approval policy escalates every `hc` command that types into, starts,
-      stops or attaches to a terminal or writes core documents (`send`,
-      `keys`, `run`, `kill`, `rm`, `interrupt`, `attach`, `connect`, `put`,
-      `label`, `keep`, `file write/edit`, `exec`), and every `herdr` command
-      that changes panes, tabs or workspaces. The single `july-task`
-      invocations stay approved, since `july-task` drives hc itself with its
-      own checks. The persona tells July to reach task sessions only through
-      `july-task`. That escalation is a judgment by the approval model, and the
-      merge rule itself is an instruction to the session, so neither is a hard
-      boundary.
+      owner's typing apart from other untagged input in the session, so
+      July's own terminal must not be able to type into it.
+    - That is enforced by Hermes' `approvals.deny` globs from
+      `hermes/inbox-monitor/july-deny.json`. Hermes checks them for every
+      terminal command, under every approval mode, yolo included, and only
+      flagged commands ever reach the approval model, so a smart-policy line
+      would not fire. hermes-config-check keeps the entries (`contains`,
+      auto-restored; the owner's own deny entries stay).
+    - They block `hc send/keys/run/kill/rm/interrupt/attach/connect/put/
+      label/keep/exec`, `hc file write/edit`, `hc machine/server/update` and a
+      bare `hc` (its picker attaches), also with options before the verb
+      (`hc --json send …`). They also block `xargs … hc …`, `herdr
+      pane/tab/workspace/worktree/agent/session/api/…` changes and a bare
+      `herdr`. Read-only `hc ls/get/read/wait/templates` and `herdr status`
+      stay allowed.
+    - Hermes matches the globs against every command word of the line, with
+      the executable's basename and its quoting removed. So absolute paths
+      (`~/.local/bin/hc`, `/opt/homebrew/bin/herdr`), `VAR=… hc`, `env -u …
+      hc`, `command`/`exec`/`nohup`/`timeout`/`sudo` prefixes, `sh -c '…'`,
+      chains (`;`, `&&`, subshells) and quote tricks (`h''c`, `"hc"`) are
+      caught.
+    - Not caught, because the matcher sees the command line, not what other
+      programs run: `$(which hc) send …`, `h=hc; $h send …`, hc called from
+      another interpreter (`python3 -c 'subprocess.run(["hc", …])'`,
+      `osascript … do shell script`), or from a script file July writes and
+      runs. The tests pin these gaps.
+    - `july-task` itself is unaffected: its line is `july-task …`, and it
+      runs hc from its own Python process, which the terminal guard never
+      sees.
+    - So the guard is a strong guard against the plain ways of typing into a
+      session, not a hard boundary against a determined July. The persona also
+      tells July to reach task sessions only through `july-task`. The merge
+      rule itself remains an instruction to the session.
+    - Tested with the real matcher and gate:
+      `hermes/inbox-monitor/tests/test_july_deny.py`. It uses Hermes' own
+      `_match_user_deny_rule` when Hermes is installed. Hermes'
+      `check_dangerous_command` returned `approved: False, user_deny: True`
+      for `hc send nonexistent x`, and allowed `hc ls` and `july-task list`.
     - `owner-go` reads the thread from Slack with the bot token
       (`conversations.replies`). It lists, in full, only replies posted after
       the session's last `done`/`blocked` note whose Slack `user` is the
