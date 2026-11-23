@@ -75,6 +75,19 @@ def main():
                     print(json.dumps({"jsonrpc": "2.0", "id": rid, "error": {
                         "code": -32000, "message": "conflict", "data": {"kind": "conflict"}}}))
                     continue
+                if os.environ.get("FAKE_HC_DOCSET_SNAPSHOT_FROM"):  # the caller's state at write time
+                    shutil.copy(os.environ["FAKE_HC_DOCSET_SNAPSHOT_FROM"], os.environ["FAKE_HC_DOCSET_SNAPSHOT_TO"])
+                if os.environ.get("FAKE_HC_DOCSET_PROBE"):  # is the state lock free, is the terminal gone?
+                    import fcntl
+                    with open(os.environ["FAKE_HC_LOCKFILE"], "a") as lk:
+                        try:
+                            fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            lock = "free"
+                            fcntl.flock(lk, fcntl.LOCK_UN)
+                        except OSError:
+                            lock = "held"
+                    term = [x for x in s["terminals"] if x["address"] == os.environ["FAKE_HC_PROBE_TERMINAL"]]
+                    wj(os.environ["FAKE_HC_DOCSET_PROBE"], {"lock": lock, "terminal": term[0]["state"] if term else "gone"})
                 d["value"], d["version"] = prm["value"], d["version"] + 1
                 s.setdefault("doc_writes", 0)
                 s["doc_writes"] += 1

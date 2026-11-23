@@ -21,6 +21,7 @@ m.INPUT_DIR = env["JT_INPUT_DIR"]
 m.START_WAIT = int(env.get("JT_START_WAIT", "5"))
 m.MAX_PAGES = int(env.get("JT_MAX_PAGES", "100"))
 m.DIALOG_WAIT = int(env.get("JT_DIALOG_WAIT", "3"))
+m.CLAUDE_JSON = env.get("JT_CLAUDE_JSON", m.CLAUDE_JSON)
 FAIL = set(filter(None, env.get("JT_SLACK_FAIL", "").split(",")))
 
 

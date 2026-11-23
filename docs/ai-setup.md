@@ -729,11 +729,14 @@ default plugins.
     posting the start message, and removes one whose message didn't. It also
     removes labelled task terminals whose launch id no task knows once they
     are 10 minutes old. A send during startup is refused until it finishes. The
-    folder a task runs in must be a git repo: for a project that is a folder of
-    repos (saas, bmw), `start` refuses without `--repo <path to the repo>`,
-    for example `--repo billing/mac-exchange`, and the persona tells July to
-    always pass one. That way the repo is always pre-trusted (below). A
-    linked worktree (a `.git` file) counts as a repo.
+    folder a task runs in must resolve (`git rev-parse --show-toplevel`) to a
+    git repo inside the selected project; otherwise `start` refuses before
+    anything is launched. A `.git` entry alone isn't enough (a broken
+    worktree pointer fails), and neither is a project folder inside a bigger
+    repo. For a project that is a folder of repos (saas, bmw) this means
+    `--repo <path to the repo>`, for example `--repo billing/mac-exchange`,
+    and the persona tells July to always pass one. A linked worktree counts as
+    its own repo.
     A `stop` that lands while `start` is still launching
     marks the task stopped, and `start` then removes the new terminal itself.
     Task ids must be `july-<configured project>-<4 hex>`, so a helper such as
@@ -745,11 +748,10 @@ default plugins.
     Folder trust: Claude Code has no supported way to trust a folder for an
     interactive session (only `-p` skips the question), so before the launch
     July runs the owner's own `claude-trust-repo` (claude.nix), the helper his
-    `claude` shell wrapper runs at every start. The helper trusts the
-    enclosing git toplevel, so July resolves that itself (`git rev-parse
-    --show-toplevel`), requires it to be inside the mapped project too, and
-    passes it. A project folder inside a bigger repo never trusts that bigger
-    repo; a folder outside git gets no pre-trust. The helper marks a git repo trusted in
+    `claude` shell wrapper runs at every start. July passes the toplevel it
+    validated above. Afterwards it reads `~/.claude.json` back (read-only),
+    and if any folder other than exactly that toplevel became trusted, the
+    start fails before launch. An already-trusted repo skips the helper. The helper marks a git repo trusted in
     `~/.claude.json` only if its GitHub owner is on
     `dotfiles.ai.claude.trustedRepoOwners`; every mapped repo is under
     appman-agm, which is on that list. It writes with jq and an atomic rename,
@@ -787,7 +789,8 @@ default plugins.
     that looks like it holds a secret is never stored: the state keeps only a
     flag and the message id, and the thread gets a "withheld" note. A session at a dialog for 2
     minutes (status blocked/error) gets a thread note, and the owner gets a DM
-    with the masked screen and `hc attach <task>`. An exit without `done`
+    with a fixed description of the dialog (as at start, never its text) and
+    `hc attach <task>`. An exit without `done`
     marks the task failed and posts the last reply. After 8 h of running the
     owner gets one DM, and a task idle for 24 h is stopped. Only hc's
     `not_found` (exit 3) counts as a terminal gone. Any other hc failure, such
@@ -858,31 +861,44 @@ default plugins.
     `~/.local/state/herdr-core/default/docs.json`): spaces, then tabs, then a
     tree of blocks that each name a terminal. Parent terminals play no part,
     so the task stays independent of the owner's sessions.
-    - When the session is running, `july-task` finds the project's space: the
-      space named after the project if there is one, else one with a terminal
-      labelled `where="<project> / …"`, else one with a terminal running under
-      the project root. A space that merely holds a terminal working in
-      another project loses to the named one. The space's own `folder` is
-      stale and not used. It
-      appends one tab with one block for the task's terminal, and labels the
-      terminal like the app does: `herdr.space`, `herdr.tab`, `where="<project>
-      / <task id>"`, which is also what the app then writes. The tab id goes
-      into the task state.
+    - When the session is running, `july-task` records the new tab's and
+      block's ids in the task first, with state `adding`, and only then writes
+      the document. Every tab July writes is known by id; nothing is ever
+      found or deleted by name.
+    - It finds the project's space: the space named after the project if there
+      is one, else one with a terminal labelled `where="<project> / …"`, else
+      one with a terminal running under the project root. A space that merely
+      holds a terminal working in another project loses to the named one. The
+      space's own `folder` is stale and not used.
+    - It appends one tab with one block for the task's terminal, and labels
+      the terminal like the app does: `herdr.space`, `herdr.tab`,
+      `where="<project> / <task id>"`, which is also what the app then writes.
+      Label values come only from ids that pass a strict charset check; a space
+      id that fails it means no tab. The space id goes into the task state
+      (state `added`).
     - Writes are version-checked: when the app wrote in between, the CLI reads
-      again and retries (5 times).
-    - It never creates spaces and never touches other tabs or blocks. If there
-      is no matching space, the document is missing or its shape is
-      unexpected, or anything fails while adding the tab (any error, not just
-      expected ones), it writes nothing, logs it, and sets only the `where`
-      label. The running task is never failed by this. The monitor logs each
-      distinct document problem once, not every minute.
-    - Cleanup (stop, or the monitor) removes exactly that tab, and only while
-      it still holds just the task's block and terminal. A tab changed by hand
-      is left alone, with a log line. If every retry loses the race, or hc is
-      down, the tab stays recorded with `cleanup_pending`, and the monitor
-      tries again each minute.
-    - The monitor also removes orphan tabs: tabs named like a task id that no
-      task knows, with a single block whose terminal is gone.
+      again and retries (5 times). If hc was unreachable, so it's unknown
+      whether a write landed, the task stays `adding`. The next try first looks
+      for the tab's id in the document, so it confirms the tab instead of
+      writing it twice.
+    - It never creates spaces and never touches other tabs or blocks. A missing
+      or odd document, a race lost on every retry, or malformed data means no
+      tab: only the `where` label, and the running task is never failed by this.
+      Each distinct document problem is logged once, not every minute.
+    - Cleanup (stop, the monitor's 24 h cleanup, an idle stop) kills the
+      session's terminals first, under the state lock. It only marks the tab
+      for removal. All document work runs afterwards, outside the lock,
+      within a 60 s budget, so `stop` stays fast and never holds other commands
+      up.
+    - Removal deletes the recorded tab only in the recorded space, only with
+      the task's name, and only with exactly the one-row, one-block layout July
+      wrote (the app may add a `size` to the block). A tab that was moved,
+      renamed or split, or has extra nodes or keys, is left alone and logged;
+      that counts as settled.
+    - A missing or unreadable document, a lost race or hc being down keeps the
+      tab recorded for removal, and the monitor tries again every minute. The
+      task record leaves the state only once its terminals and its tab are
+      gone.
     - Checked live on 2026-11-23 with a pcs task: the tab appeared in the pcs
       workspace, the app relabelled the terminal `pcs / <task id>`, and after
       the stop the pcs space was identical to before.

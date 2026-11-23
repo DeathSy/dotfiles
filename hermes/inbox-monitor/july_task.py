@@ -35,7 +35,8 @@ CONFIG_PATH = os.path.join(HERE, "july-task.json")
 STATE_DIR = os.path.join(HOME, ".local/state/july-tasks")
 HC = os.path.join(HOME, ".local/bin/hc")
 CLAUDE_PROJECTS = os.path.join(HOME, ".claude/projects")
-INPUT_DIR = os.path.join(HOME, ".cache/july-task-input")  # where July writes task text; read files are removed
+INPUT_DIR = os.path.join(HOME, ".cache/july-task-input")
+CLAUDE_JSON = os.path.join(HOME, ".claude.json")  # where July writes task text; read files are removed
 START_WAIT = 120           # Hermes' terminal tool gives a command 180 s
 DIALOG_WAIT = 10           # a dialog at start is watched this long (within START_WAIT) before the start fails
 
@@ -415,10 +416,12 @@ def remove_terminals(task):
 
 
 def cleanup(task):
-    """remove_terminals and the task's tab in the Herdr app, remembering failures for the monitor's retry."""
-    tab_ok = remove_tab(task)
+    """Kill and remove the task's terminals now (the session must stop first); its Herdr app tab is only
+    marked for removal here and removed afterwards by settle_tabs(), outside the state lock."""
     gone, failed = remove_terminals(task)
-    task["cleanup_pending"] = bool(failed) or not tab_ok
+    task["cleanup_pending"] = bool(failed)
+    if task.get("ui_tab"):
+        task["ui_tab"]["remove"] = True
     return gone, failed
 
 
@@ -426,28 +429,46 @@ def cleanup(task):
 # The owner's Herdr app (on another Mac) keeps its workspaces in the core as the opaque document
 # "herdr-app": {spaces: [{id, name, folder, tabs: [{id, name, root: {type: "row", id, children: [{type:
 # "block", id, content: {terminal}}]}}]}]}. A task gets ONE NEW TAB in the space of its project, holding only
-# its terminal, and loses it again at cleanup. Only that tab is ever added or removed; spaces are never
-# created and other tabs and blocks never touched. Writes are version-checked (doc.set fails with
-# "conflict" when the app wrote in between) and retried on a fresh read. Any shape this code doesn't expect
-# means: do nothing, log it, and fall back to the `where` label alone.
+# its terminal, and loses it again at cleanup.
+# - The tab and block ids are recorded in the task (ui_tab, state "adding") BEFORE the document is written,
+#   so every tab July ever writes is known by id; nothing is ever found or deleted by name.
+# - Removal deletes only that recorded tab, only in the recorded space, only with the task's name and
+#   exactly the one-row, one-block layout July wrote (the app may add a size to the block). Anything else
+#   (moved, renamed, split, extra nodes) is left alone and logged.
+# - All document work runs in settle_tabs(), outside the state lock and after the terminals are killed,
+#   within a time budget; unfinished work stays recorded and the monitor retries it.
+# - Writes are version-checked (doc.set fails with "conflict" when the app wrote in between) and retried
+#   on a fresh read. Spaces are never created; other tabs and blocks are never touched.
 
 APP_DOC = "herdr-app"
 DOC_RETRIES = 5
-TABS = True  # the owner's choice (2026-11-23): task tabs in the Herdr app
+TAB_BUDGET = 60            # seconds of document work per settle_tabs() call
+TABS = True                # the owner's choice (2026-11-23): task tabs in the Herdr app
+ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")   # ids and names that may go into hc labels
+RPC_KINDS = {"conflict", "invalid_params", "machine_unknown", "unavailable", "needs_update", "internal",
+             "not_found"}
 
 
 class DocConflict(Fail):
     pass
 
 
+class DocBusy(Fail):
+    """The app kept writing its document: every retry lost the race."""
+
+
+class DocOdd(Fail):
+    """The document is missing or not in the expected shape: nothing is changed."""
+
+
 def doc_call(method, params):
     """One JSON-RPC call over `hc connect` (hello first). Raises HcDown if hc is unreachable, DocConflict on a
-    version conflict, Fail on any other error."""
+    version conflict, Fail("<method>: <category>") on any other error (never the server's own text)."""
     lines = [json.dumps({"jsonrpc": "2.0", "id": 1, "method": "hello", "params": {}}),
              json.dumps({"jsonrpc": "2.0", "id": 2, "method": method, "params": params})]
     try:
         p = subprocess.run([HC, "connect"], input="\n".join(lines) + "\n", capture_output=True, text=True,
-                           timeout=30, env={k: v for k, v in os.environ.items() if not k.startswith("HC_")})
+                           timeout=15, env={k: v for k, v in os.environ.items() if not k.startswith("HC_")})
     except (OSError, subprocess.TimeoutExpired) as e:
         raise HcDown(f"hc connect: {e.__class__.__name__}")
     for line in p.stdout.splitlines():
@@ -458,11 +479,13 @@ def doc_call(method, params):
         if isinstance(d, dict) and d.get("id") == 2:
             err = d.get("error")
             if err:
-                kind = (err.get("data") or {}).get("kind") if isinstance(err, dict) else None
+                data = err.get("data") if isinstance(err, dict) else None
+                kind = data.get("kind") if isinstance(data, dict) else None
                 if kind == "conflict":
                     raise DocConflict(f"{method}: conflict")
-                raise Fail(f"{method}: {kind or err}")
-            return d.get("result") or {}
+                raise Fail(f"{method}: {kind if kind in RPC_KINDS else 'rpc error'}")
+            res = d.get("result")
+            return res if isinstance(res, dict) else {}
     raise HcDown(f"hc connect: no answer to {method} (exit {p.returncode})")
 
 
@@ -485,52 +508,51 @@ def blocks(node):
         return []
     if node.get("type") == "block":
         return [node]
-    return [b for c in node.get("children") or [] for b in blocks(c)]
+    kids = node.get("children")
+    return [b for c in kids for b in blocks(c)] if isinstance(kids, list) else []
 
 
 def find_space(value, project):
     """The space showing the project: the space named after it, else one whose terminal carries the app's
-    `where` label "<project> / …", else one with a terminal running in a folder under the project's root. (The space's own `folder` is stale: it is where the space
-    was opened.) Returns (space, display name) or (None, None)."""
+    `where` label "<project> / …", else one with a terminal running in a folder under the project's root.
+    (The space's own `folder` is stale: it is where the space was opened.) Returns (space, display name) or
+    (None, None)."""
     root = os.path.realpath(os.path.expanduser(CFG["projects"][project]))
-    by_where, by_cwd = None, None
     named = [sp for sp in value["spaces"] if sp.get("name") == project]
     if named:  # a space the owner named after the project wins over terminals that merely run there
         return named[0], project
+    by_where, by_cwd = None, None
     for sp in value["spaces"]:
         for tb in sp["tabs"]:
             for b in blocks(tb["root"]):
-                addr = (b.get("content") or {}).get("terminal")
+                content = b.get("content")
+                addr = content.get("terminal") if isinstance(content, dict) else None
                 g = hc_get(addr) if isinstance(addr, str) and re.fullmatch(r"t[0-9a-z]+", addr) else None
                 if not g or g.get("state") != "live":
                     continue
-                where = ((g.get("labels") or {}).get("where") or "").split(" / ")[0]
-                cwd = (g.get("foreground") or {}).get("cwd") or g.get("cwd") or ""
+                labels = g.get("labels") if isinstance(g.get("labels"), dict) else {}
+                where = str(labels.get("where") or "").split(" / ")[0]
+                fg = g.get("foreground") if isinstance(g.get("foreground"), dict) else {}
+                cwd = fg.get("cwd") or g.get("cwd") or ""
                 if where == project and not by_where:
                     by_where = (sp, where)
-                elif cwd and not by_cwd and os.path.commonpath([os.path.realpath(cwd), root]) == root:
-                    by_cwd = (sp, where or project)
+                elif isinstance(cwd, str) and cwd.startswith("/") and not by_cwd \
+                        and os.path.commonpath([os.path.realpath(cwd), root]) == root:
+                    by_cwd = (sp, project)
     return by_where or by_cwd or (None, None)
 
 
-class DocBusy(Fail):
-    """The app kept writing its document: every retry lost the race."""
-
-
-def edit_doc(change, warn=None):
+def edit_doc(change):
     """Read the app's document, apply change(value) -> new value or None (no write), write it back with the
-    version it was read at; on a conflict read again and retry. Returns the written value or None; raises
-    DocBusy when every retry lost the race. warn(msg) reports a missing or odd document (default: log)."""
-    warn = warn or log
+    version it was read at; on a conflict read again and retry. Returns the written value or None. Raises
+    DocOdd for a missing or odd document and DocBusy when every retry lost the race."""
     for _ in range(DOC_RETRIES):
         cur = doc_call("doc.get", {"name": APP_DOC})
         value = cur.get("value")
         if value is None:
-            warn("no Herdr app document yet; no tab")
-            return None
+            raise DocOdd("no Herdr app document yet")
         if not doc_shape_ok(value):
-            warn("Herdr app document has an unexpected shape; left alone")
-            return None
+            raise DocOdd("the Herdr app document has an unexpected shape")
         new = change(json.loads(json.dumps(value)))
         if new is None:
             return None
@@ -539,106 +561,155 @@ def edit_doc(change, warn=None):
             return new
         except DocConflict:
             continue
-    raise DocBusy(f"Herdr app document kept changing; gave up after {DOC_RETRIES} tries")
+    raise DocBusy(f"the Herdr app document kept changing; gave up after {DOC_RETRIES} tries")
 
 
-def add_tab(task):
-    """A new tab for the task in its project's space, plus the labels the app sets; falls back to the `where`
-    label alone when there is no such space or anything is off. Best effort: never fails the task."""
-    where = f"{task['project']} / {task['id']}"
+def plan_tab(task):
+    """Under the state lock: record the ids of the tab July is about to write (the write itself happens in
+    settle_tabs, outside the lock)."""
     if TABS and task.get("address") and not task.get("ui_tab"):
-        tab_id, block_id = "tb" + secrets.token_hex(16), "pd" + secrets.token_hex(16)
-        found = {}
-
-        def change(value):
-            sp, display = find_space(value, task["project"])
-            if not sp:
-                return None
-            sp["tabs"].append({"id": tab_id, "name": task["id"], "root": {
-                "type": "row", "id": tab_id, "children": [
-                    {"type": "block", "id": block_id, "content": {"terminal": task["address"]}}]}})
-            found.update(space=sp["id"], where=f"{display} / {task['id']}")  # the app's form: space / tab name
-            return value
-        try:
-            if edit_doc(change):
-                task["ui_tab"] = {"space": found["space"], "tab": tab_id, "block": block_id}
-                where = found["where"]
-            else:
-                log(f"{task['id']}: no Herdr app tab (no {task['project']} space, or the document was off)")
-        except Exception as e:  # best effort: a running, announced task must never fail here
-            log(f"{task['id']}: Herdr app tab not added ({e.__class__.__name__}: {e}); label only")
-            task.pop("ui_tab", None)
-    labels = [f"where={where}"]
-    if task.get("ui_tab"):
-        labels += [f"herdr.space={task['ui_tab']['space']}", f"herdr.tab={task['ui_tab']['tab']}"]
-    try:
-        hc("label", task["address"], *labels)
-    except Fail as e:
-        log(f"{task['id']}: labels not set: {e}")
+        task["ui_tab"] = {"tab": "tb" + secrets.token_hex(16), "block": "pd" + secrets.token_hex(16),
+                          "state": "adding", "since": now()}
+    elif not TABS and task.get("address"):
+        set_labels(task, None, None)
 
 
-def remove_tab(task):
-    """Remove the task's own tab: only the recorded tab id, and only while it still holds just the task's
-    block and terminal. Returns False only when it should be retried (hc or the core unavailable)."""
-    ui = task.get("ui_tab")
-    if not ui:
-        return True
+def expected_tab(tid, ui, addr):
+    """The exact tab July writes."""
+    return {"id": ui["tab"], "name": tid, "root": {"type": "row", "id": ui["tab"], "children": [
+        {"type": "block", "id": ui["block"], "content": {"terminal": addr}}]}}
+
+
+def is_our_tab(tb, tid, ui, addr):
+    """The tab is still exactly what July wrote (the app may only add a size to its block)."""
+    if not isinstance(tb, dict) or set(tb) - {"id", "name", "root"} or tb.get("id") != ui["tab"] \
+            or tb.get("name") != tid:
+        return False
+    root = tb.get("root")
+    if not isinstance(root, dict) or set(root) - {"type", "id", "children"} or root.get("type") != "row" \
+            or root.get("id") != ui["tab"] or not isinstance(root.get("children"), list) or len(root["children"]) != 1:
+        return False
+    b = root["children"][0]
+    return isinstance(b, dict) and not set(b) - {"type", "id", "content", "size"} and b.get("type") == "block" \
+        and b.get("id") == ui["block"] and b.get("content") == {"terminal": addr}
+
+
+def tab_add(tid, ui, addr, project):
+    """Write the recorded tab into the project's space (or find it there from an earlier, unconfirmed
+    write). Returns ("added", space id, display) or ("none", None, None)."""
+    found = {}
+
+    def change(value):
+        for sp in value["spaces"]:
+            for tb in sp["tabs"]:
+                if tb.get("id") == ui["tab"]:  # an earlier write landed
+                    found.update(space=sp["id"], display=project)
+                    return None
+        sp, display = find_space(value, project)
+        if not sp or not ID_RE.match(sp["id"]):
+            return None
+        sp["tabs"].append(expected_tab(tid, ui, addr))
+        found.update(space=sp["id"], display=display)
+        return value
+    edit_doc(change)
+    if found:
+        return "added", found["space"], found["display"]
+    return "none", None, None
+
+
+def tab_remove(tid, ui, addr):
+    """Delete the recorded tab if it is still exactly ours, in the recorded space. Returns "removed",
+    "gone" (not there) or "left" (changed by hand: left alone)."""
+    outcome = []
 
     def change(value):
         for sp in value["spaces"]:
             for tb in list(sp["tabs"]):
                 if tb.get("id") != ui["tab"]:
                     continue
-                bs = blocks(tb["root"])
-                if len(bs) == 1 and bs[0].get("id") == ui["block"] and \
-                        (bs[0].get("content") or {}).get("terminal") == task.get("address"):
-                    sp["tabs"].remove(tb)
-                    return value
-                log(f"{task['id']}: its Herdr app tab was changed by hand; left alone")
-                return None
-        return None  # already gone
-    try:
-        edit_doc(change)
-    except (HcDown, DocBusy) as e:  # kept in ui_tab; cleanup_pending makes the monitor try again
-        log(f"{task['id']}: Herdr app tab not removed yet: {e}")
-        return False
-    except Exception as e:
-        log(f"{task['id']}: Herdr app tab not removed: {e.__class__.__name__}: {e}")
-    task.pop("ui_tab", None)
-    return True
-
-
-def monitor_warn(st):
-    """A warn() for the monitor: each distinct document warning is logged once, not every minute."""
-    def warn(msg):
-        if st.get("doc_warning") != msg:
-            st["doc_warning"] = msg
-            log(msg)
-    return warn
-
-
-def remove_orphan_tabs(st):
-    """Tabs named like a task that no task knows and whose terminal is gone (a launcher that died between
-    adding the tab and saving it). Only such tabs with a single block."""
-    known = set(st["tasks"])
-
-    def change(value):
-        st.pop("doc_warning", None)  # the document is fine again: a later problem is logged anew
-        changed = False
-        for sp in value["spaces"]:
-            for tb in list(sp["tabs"]):
-                name, bs = tb.get("name") or "", blocks(tb["root"])
-                if not task_name_ok(name) or name in known or len(bs) != 1:
-                    continue
-                addr = (bs[0].get("content") or {}).get("terminal")
-                g = hc_get(addr) if isinstance(addr, str) and re.fullmatch(r"t[0-9a-z]+", addr) else None
-                if g and g.get("state") == "live":
-                    continue
+                if (ui.get("space") and sp["id"] != ui["space"]) or not is_our_tab(tb, tid, ui, addr):
+                    outcome.append("left")
+                    return None
                 sp["tabs"].remove(tb)
-                changed = True
-                log(f"removed orphan Herdr app tab {name}")
-        return value if changed else None
-    edit_doc(change, warn=monitor_warn(st))
+                outcome.append("removed")
+                return value
+        outcome.append("gone")
+        return None
+    edit_doc(change)
+    return outcome[-1] if outcome else "gone"
+
+
+def set_labels(task, space, display):
+    """The labels the app itself sets, from validated values only; `where` alone without a tab."""
+    tid = task["id"]
+    disp = label(display or task["project"], 40)
+    labels = [f"where={disp} / {tid}"]
+    if space and ID_RE.match(space) and ID_RE.match(task["ui_tab"]["tab"]):
+        labels += [f"herdr.space={space}", f"herdr.tab={task['ui_tab']['tab']}"]
+    try:
+        hc("label", task["address"], *labels)
+    except Exception as e:
+        log(f"{tid}: labels not set ({e.__class__.__name__})")
+
+
+def settle_tabs(only=None):
+    """Do the recorded tab work (add, confirm, remove) OUTSIDE the state lock and within TAB_BUDGET, then
+    record the outcomes. Work that hits a busy, missing or odd document, or an unreachable hc, stays recorded
+    and is retried later; each distinct document problem is logged once."""
+    if not TABS:
+        return
+    with locked() as st:
+        jobs = [(t["id"], dict(t["ui_tab"]), t.get("address"), t["project"])
+                for t in st["tasks"].values()
+                if isinstance(t.get("ui_tab"), dict) and (only is None or t["id"] in only)]
+    deadline, results, problem = now() + TAB_BUDGET, {}, None
+    for tid, ui, addr, project in jobs:
+        if now() >= deadline:
+            break
+        adding = not ui.get("remove") and ui.get("state") == "adding" and addr
+        try:
+            if ui.get("remove"):
+                results[tid] = ("removal", tab_remove(tid, ui, addr), None, None)
+            elif adding:
+                results[tid] = ("add",) + tab_add(tid, ui, addr, project)
+        except (DocOdd, DocBusy) as e:
+            problem = str(e)
+            if adding:  # nothing was written: label only (a removal stays recorded and is retried)
+                results[tid] = ("add", "none", None, None)
+        except HcDown as e:  # unknown whether a write landed: keep it recorded; the next try checks first
+            problem = str(e)
+        except Fail as e:
+            problem = f"tab work for {tid}: {e}"
+        except Exception as e:  # malformed data: nothing written for an add; a removal stays recorded
+            problem = f"tab work for {tid}: {e.__class__.__name__}"
+            if adding:
+                results[tid] = ("add", "none", None, None)
+    with locked() as st:
+        if problem and st.get("doc_warning") != problem:
+            log(problem)
+        st["doc_warning"] = problem
+        for tid, (kind, outcome, space, display) in results.items():
+            t = st["tasks"].get(tid)
+            ui = t.get("ui_tab") if t else None
+            if not isinstance(ui, dict) or ui.get("tab") != jobs_tab(jobs, tid):
+                continue
+            if kind == "removal":
+                if outcome == "left":
+                    log(f"{tid}: its Herdr app tab was moved or changed by hand; left alone")
+                t.pop("ui_tab", None)
+            elif ui.get("remove"):
+                continue  # stopped meanwhile: the next settle removes it
+            elif outcome == "added":
+                ui.update(state="added", space=space)
+                set_labels(t, space, display)
+            else:
+                t.pop("ui_tab", None)
+                log(f"{tid}: no Herdr app tab (no {t['project']} space); label only")
+                set_labels(t, None, None)
+
+
+def jobs_tab(jobs, tid):
+    return next(ui["tab"] for i, ui, _a, _p in jobs if i == tid)
 
 
 # ── the Claude transcript (exact replies, read incrementally) ─────────────────
@@ -840,9 +911,11 @@ def cmd_start(a):
         cwd = os.path.realpath(os.path.join(root, *parts))
         if os.path.commonpath([cwd, root]) != root or cwd == root or not os.path.isdir(cwd):
             raise Fail(f"no folder {a.repo} in {root}")
-    if not os.path.exists(os.path.join(cwd, ".git")):  # a worktree's .git is a file
-        raise Fail(f"{cwd.replace(HOME, '~')} isn't a git repo: {project} is a folder of repos, so pass "
-                   "--repo <path to the repo inside it> (e.g. --repo billing/mac-exchange)")
+    top = git_toplevel(cwd)  # must resolve, and to a repo inside this project
+    if not top or os.path.commonpath([os.path.realpath(top), root]) != root:
+        raise Fail(f"{cwd.replace(HOME, '~')} isn't in a git repo inside {project}"
+                   + (": it's a folder of repos, so pass --repo <path to the repo inside it> (e.g. --repo "
+                      "billing/mac-exchange)" if not top else ""))
     text = read_text(a, "task")
     if not text:
         raise Fail("the task text is empty (write it to a file and pass --file)")
@@ -858,14 +931,14 @@ def cmd_start(a):
                 break
         else:
             raise Fail("could not find a free terminal name")
-        task = {"id": name, "launch": uuid.uuid4().hex, "project": project, "cwd": cwd,
+        task = {"id": name, "launch": uuid.uuid4().hex, "project": project, "cwd": cwd, "repo": top,
                 "session_id": str(uuid.uuid4()), "address": None, "requester": ctx["actor"],
                 "requester_name": ctx["actor_name"], "channel": ctx["channel"], "thread_ts": ctx["thread_ts"],
                 "task": text, "state": "starting", "started_at": now(), "ended_at": None, "last_post_at": 0,
                 "notes": {}}
         st["tasks"][name] = task
-    pre_trust(task["cwd"])
     try:
+        pre_trust(top)
         r = hc_json("run", "--bg", "--no-notify", "--no-parent", "--outlive-parent", "--name", task["id"],
                     "--cwd", task["cwd"], "--label", LABEL, "--label", f"july-launch={task['launch']}", "--",
                     CFG["claude"], "--model", "opus", "--permission-mode", "auto", "-n", task["id"],
@@ -899,9 +972,10 @@ def cmd_start(a):
             cur["state"] = "running"
             count = len(running(st))
             announce(st, cur)
-            add_tab(cur)
+            plan_tab(cur)
         elif state not in ("running",) and cur:  # stopped or failed meanwhile: don't leave the session behind
             cleanup(cur)
+    settle_tabs(only={task["id"]})  # the Herdr app tab, outside the lock
     if state != "starting":
         raise Fail(f"the task changed while starting ({state}); see july-task list")
     out({"started": task["id"], "terminal": task["address"], "cwd": task["cwd"], "requester": ctx["actor_name"],
@@ -932,32 +1006,50 @@ def dialog_kind(screen):
     return "an unknown dialog"
 
 
-def in_mapped_project(path):
-    roots = [os.path.realpath(os.path.expanduser(r)) for r in CFG["projects"].values()]
-    path = os.path.realpath(path)
-    return any(os.path.commonpath([path, r]) == r for r in roots)
-
-
-def pre_trust(cwd):
-    """Trust the repo before Claude starts, with the owner's own claude-trust-repo (dotfiles claude.nix): it
-    marks a git repo trusted in ~/.claude.json only when its GitHub owner is on his trusted list, the same
-    thing his `claude` shell wrapper does at every start. Claude Code has no supported flag for trusting a
-    folder in an interactive session, and July never presses keys in a trust dialog. Best effort."""
-    if not CFG.get("trust_repo") or not in_mapped_project(cwd):
-        return
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("HC_", "CLAUDECODE", "GIT_"))}
+def git_toplevel(path):
+    """The git toplevel of path as git prints it (what claude-trust-repo keys ~/.claude.json by), or ""."""
     try:
-        # claude-trust-repo trusts the enclosing git toplevel: resolve it here and require it to be inside the
-        # mapped project too, so a project folder inside a bigger repo never trusts that bigger repo.
-        p = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], capture_output=True, text=True,
-                           timeout=20, env=env)
-        top = os.path.realpath(p.stdout.strip()) if p.returncode == 0 and p.stdout.strip() else ""
-        if not top or not in_mapped_project(top):
-            log(f"no pre-trust for {cwd}: " + ("not in a git repo" if not top else "its repo is outside the project"))
-            return
-        subprocess.run([CFG["trust_repo"], top], capture_output=True, timeout=20, env=env)
+        p = subprocess.run(["git", "-C", path, "rev-parse", "--show-toplevel"], capture_output=True, text=True,
+                           timeout=20, env={k: v for k, v in os.environ.items() if not k.startswith(("HC_", "GIT_"))})
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
+def trusted_projects():
+    """The project paths ~/.claude.json marks as trusted (read only)."""
+    try:
+        with open(os.path.realpath(CLAUDE_JSON)) as f:
+            projects = json.load(f).get("projects") or {}
+    except (OSError, ValueError, AttributeError):
+        return set()
+    return {k for k, v in projects.items() if isinstance(v, dict) and v.get("hasTrustDialogAccepted") is True}
+
+
+def pre_trust(top):
+    """Trust the task's repo before Claude starts, with the owner's own claude-trust-repo (dotfiles claude.nix;
+    his `claude` shell wrapper runs it at every start): it marks a git repo trusted in ~/.claude.json only
+    when its GitHub owner is on his trusted list. Claude Code has no supported flag for trusting a folder in
+    an interactive session, and July never presses keys in a trust dialog.
+    top is the toplevel cmd_start validated (inside the mapped project). The helper resolves the toplevel
+    again from it; afterwards ~/.claude.json is read back, and if anything other than exactly top became
+    trusted, the start fails. A repo the helper declines stays untrusted and its trust question fails the
+    start later."""
+    if not CFG.get("trust_repo"):
+        return
+    before = trusted_projects()
+    if top in before:
+        return
+    try:
+        subprocess.run([CFG["trust_repo"], top], capture_output=True, timeout=20,
+                       env={k: v for k, v in os.environ.items() if not k.startswith(("HC_", "CLAUDECODE", "GIT_"))})
     except (OSError, subprocess.TimeoutExpired) as e:
-        log(f"claude-trust-repo failed for {cwd}: {e.__class__.__name__}")
+        log(f"claude-trust-repo failed ({e.__class__.__name__})")
+        return
+    unexpected = trusted_projects() - before - {top}
+    if unexpected:
+        raise Fail("claude-trust-repo trusted another folder than the task's repo: "
+                   + ", ".join(sorted(u.replace(HOME, "~") for u in unexpected)) + "; Kittipong has to check it")
 
 
 def wait_ready(task):
@@ -1069,11 +1161,13 @@ def cmd_stop(a):
     with locked() as st:
         t = task_here(st, ctx, a.task_name)
         may_steer(ctx, t)
-        gone, failed = cleanup(t)
+        gone, failed = cleanup(t)  # the terminals first: the session stops now
         who = ctx["actor_name"] if ctx["platform"] == "slack" else "Kittipong"
         finish(st, t, "stopped", f"Stopped `{t['id']}` (asked by {who}). Its terminals are closed; any git "
                                  "worktree or branch it made is left as it is.")
-        out({"stopped": t["id"], "removed_terminals": gone, "not_removed_yet": failed})
+        tid = t["id"]
+    settle_tabs(only={tid})  # then its Herdr app tab, outside the lock (unfinished work: the monitor retries)
+    out({"stopped": tid, "removed_terminals": gone, "not_removed_yet": failed})
 
 
 # ── commands: the session ─────────────────────────────────────────────────────
@@ -1178,13 +1272,12 @@ def check(st, t):
     s, since = status_of(g), (g.get("status_ms") or 0) / 1000
     if s in ("blocked", "error"):
         if now() - since >= BLOCKED_NOTICE:
-            raw = hc("read", t["address"], "--lines", "0", check=False).stdout
-            screen = "" if SECRET_RE.search(raw) else \
-                "\n".join(l.rstrip() for l in mask(raw).splitlines() if l.strip())[-1200:]
+            p = hc("read", t["address"], "--lines", "0", check=False)
+            kind = dialog_kind(p.stdout) if p.returncode == 0 else "a dialog hc couldn't read"
             note_once(st, t, f"blocked-{int(since)}",
                       f"`{t['id']}` is waiting at a dialog that only Kittipong can answer; it's paused until then.",
-                      f"`{t['id']}` ({label(t['requester_name'])}) is {s} at a dialog. Attach with "
-                      f"`hc attach {t['id']}`." + (f"\n```{screen.replace('```', '')}```" if screen else ""))
+                      f"`{t['id']}` ({label(t['requester_name'])}) is {s} at {kind}. Attach with "
+                      f"`hc attach {t['id']}`.")  # never the screen text: it could hold a device code
         return
     read_transcript(t)
     tv = t.get("tx") or {}
@@ -1223,7 +1316,7 @@ def check_starting(st, t):
     if root_ok(t, g) and g.get("state") == "live" and transcript(t):
         t["state"] = "running"
         announce(st, t)
-        add_tab(t)
+        plan_tab(t)
         return
     cleanup(t)
     finish(st, t, "failed", f"`{t['id']}` didn't finish starting, so I removed it. Try again.")
@@ -1261,7 +1354,7 @@ def cmd_monitor(a):
                     cleanup(t)
                 if t["state"] in ("done", "failed", "stopped") and now() - (t.get("ended_at") or 0) >= KEEP_FINISHED:
                     cleanup(t)
-                    if not t.get("cleanup_pending"):
+                    if not t.get("cleanup_pending") and not t.get("ui_tab"):  # its tab gone too
                         st["history"] = (st["history"] + [{k: t.get(k) for k in (
                             "id", "project", "requester_name", "state", "started_at", "ended_at")}])[-HISTORY:]
                         del st["tasks"][t["id"]]
@@ -1272,10 +1365,12 @@ def cmd_monitor(a):
                 log(f"monitor: {t.get('id')}: {e.__class__.__name__}: {e}")
         try:
             remove_orphans(st)
-            if TABS:
-                remove_orphan_tabs(st)
         except Exception as e:
             log(f"monitor: orphans: {e.__class__.__name__}: {e}")
+    try:
+        settle_tabs()  # Herdr app tab work, outside the lock
+    except Exception as e:
+        log(f"monitor: tabs: {e.__class__.__name__}")
 
 
 def out(v):

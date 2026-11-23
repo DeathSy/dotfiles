@@ -59,6 +59,7 @@ class Base(unittest.TestCase):
         self.env = {"PATH": "/usr/bin:/bin", "HOME": self.d, "JT_CONFIG": self.cfg, "JT_STATE_DIR": self.state_dir,
                     "JT_HC": hc, "JT_PROJECTS": self.projects, "JT_INPUT_DIR": self.input_dir,
                     "JT_SLACK_LOG": self.slack_log, "JT_START_WAIT": "5", "FAKE_HC_STATE": self.hc_state,
+                    "JT_CLAUDE_JSON": os.path.join(self.d, "claude.json"),
                     "FAKE_HC_TRANSCRIPTS": self.projects}
 
     def tearDown(self):
@@ -512,13 +513,35 @@ class InputTests(Base):
         self.run_cli("list")
         self.assertEqual(os.stat(self.input_dir).st_mode & 0o777, 0o700)
 
-    def test_nit_worktree_gitfile_is_a_repo(self):
-        wt = os.path.join(self.repo, "wt")
-        os.makedirs(wt)
-        with open(os.path.join(wt, ".git"), "w") as f:
-            f.write("gitdir: /somewhere/.git/worktrees/wt\n")
+    def test_b1_a_linked_worktree_starts_a_broken_pointer_does_not(self):
+        g = ["git", "-C", self.repo, "-c", "user.email=t@t", "-c", "user.name=t"]
+        subprocess.run(g + ["commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        subprocess.run(g + ["worktree", "add", "-q", os.path.join(self.repo, "wt")], check=True)
         rc, body, _ = self.run_cli("start", "pcs", "--repo", "wt", "--", "x", slack={"actor": OWNER})
         self.assertEqual(rc, 0, body)
+        self.assertEqual(list(self.tasks().values())[0]["repo"], os.path.realpath(os.path.join(self.repo, "wt")))
+        broken = os.path.join(self.d, "proj2", "broken")
+        os.makedirs(broken)
+        with open(os.path.join(broken, ".git"), "w") as f:
+            f.write("gitdir: /nowhere/.git/worktrees/x\n")
+        cfg = rj(self.cfg)
+        cfg["projects"]["other"] = os.path.dirname(broken)
+        wj(self.cfg, cfg)
+        rc, body, _ = self.run_cli("start", "other", "--repo", "broken", "--", "x",
+                                   slack={"actor": OWNER, "thread": "1795400005.000001"})
+        self.assertEqual(rc, 1)  # a .git entry alone isn't enough: the toplevel must resolve
+        self.assertIn("isn't in a git repo", body["error"])
+
+    def test_b1_a_project_inside_a_bigger_repo_is_refused(self):
+        inner = os.path.join(self.repo, "inner")
+        os.makedirs(inner)
+        cfg = rj(self.cfg)
+        cfg["projects"]["inner"] = inner
+        wj(self.cfg, cfg)
+        rc, body, _ = self.run_cli("start", "inner", "--", "x", slack={"actor": OWNER})
+        self.assertEqual(rc, 1)  # its toplevel (self.repo) is outside the project
+        self.assertIn("isn't in a git repo inside inner", body["error"])
+        self.assertEqual(self.hc()["terminals"], [])
 
     def test_a_folder_of_repos_needs_repo(self):
         folder = os.path.join(self.d, "many")
@@ -550,10 +573,17 @@ class StartDialogTests(Base):
         super().setUp()
         self.trust_log = os.path.join(self.d, "trust.log")
         script = os.path.join(self.d, "claude-trust-repo")
-        with open(script, "w") as f:  # records its argument and whether any terminal existed yet
-            f.write(f"#!/bin/sh\nn=$(/usr/bin/python3 -c 'import json,os; p=\"{self.hc_state}\"; "
-                    f"print(len(json.load(open(p))[\"terminals\"]) if os.path.exists(p) else 0)')\n"
-                    f"echo \"$1 terminals=$n\" >> {self.trust_log}\n")
+        self.claude_json = os.path.join(self.d, "claude.json")
+        wj(self.claude_json, {"projects": {}})
+        with open(script, "w") as f:  # records its argument and terminal count, then trusts $TRUST_KEY or $1
+            f.write(f"""#!/usr/bin/python3 -I
+import json, os, sys
+n = len(json.load(open("{self.hc_state}"))["terminals"]) if os.path.exists("{self.hc_state}") else 0
+open("{self.trust_log}", "a").write(sys.argv[1] + " terminals=" + str(n) + "\\n")
+d = json.load(open("{self.claude_json}"))
+d["projects"][os.environ.get("TRUST_KEY") or sys.argv[1]] = {{"hasTrustDialogAccepted": True}}
+json.dump(d, open("{self.claude_json}", "w"))
+""")
         os.chmod(script, 0o755)
         cfg = rj(self.cfg)
         cfg["trust_repo"] = script
@@ -601,34 +631,26 @@ class StartDialogTests(Base):
         self.assertEqual(rc, 1)
         self.assertLess(time.time() - t0, 15)
 
-    def test_pre_trust_passes_the_repo_toplevel_from_a_subfolder(self):
+    def test_b2_pre_trust_gets_the_validated_toplevel_and_is_checked(self):
         sub = os.path.join(self.repo, "services", "api")
         os.makedirs(sub)
         rc, body, _ = self.run_cli("start", "pcs", "--repo", "services/api", "--", "x", slack={"actor": OWNER})
-        self.assertEqual(rc, 1)  # services/api isn't a repo of its own, so --repo is refused
-        m = load_module()
-        m.CFG.update(projects={"pcs": self.repo}, trust_repo=os.path.join(self.d, "claude-trust-repo"))
-        m.pre_trust(sub)
+        self.assertEqual(rc, 0, body)  # a folder inside the repo: the repo's toplevel is pre-trusted
         with open(self.trust_log) as f:
             self.assertEqual(f.read().split()[0], os.path.realpath(self.repo))
+        self.assertIn(os.path.realpath(self.repo), rj(self.claude_json)["projects"])
 
-    def test_no_pre_trust_when_the_repo_is_bigger_than_the_project(self):
-        inner = os.path.join(self.repo, "inner-project")
-        os.makedirs(inner)
-        m = load_module()
-        m.CFG.update(projects={"inner": inner}, trust_repo=os.path.join(self.d, "claude-trust-repo"))
-        m.pre_trust(inner)  # its git toplevel is self.repo, outside the mapped root
-        self.assertFalse(os.path.exists(self.trust_log))
-        plain = os.path.join(self.d, "plain")
-        os.makedirs(plain)
-        m.CFG.update(projects={"plain": plain})
-        m.pre_trust(plain)  # not a git repo
-        self.assertFalse(os.path.exists(self.trust_log))
+    def test_b2_a_helper_that_trusts_another_folder_fails_the_start(self):
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER},
+                                   extra={"TRUST_KEY": "/Users/someone/elsewhere"})
+        self.assertEqual(rc, 1)
+        self.assertIn("trusted another folder", body["error"])
+        self.assertEqual(self.hc()["terminals"], [])  # never launched
 
-    def test_pre_trust_only_inside_a_mapped_project(self):
-        m = load_module()
-        m.CFG.update(projects={"pcs": self.repo}, trust_repo=os.path.join(self.d, "claude-trust-repo"))
-        m.pre_trust(self.d)  # outside the project
+    def test_b2_an_already_trusted_repo_skips_the_helper(self):
+        wj(self.claude_json, {"projects": {os.path.realpath(self.repo): {"hasTrustDialogAccepted": True}}})
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
         self.assertFalse(os.path.exists(self.trust_log))
 
     def test_hc_errors_never_carry_raw_output(self):
@@ -687,7 +709,7 @@ class AppTabTests(Base):
     def start(self):
         rc, body, err = self.run_cli("start", "pcs", "--", "read the README", slack={"actor": OWNER})
         self.assertEqual(rc, 0, body)
-        return body["terminal"], list(self.tasks().values())[0], err
+        return body["terminal"], self.tasks()[body["started"]], err
 
     def test_start_adds_one_tab_in_the_projects_space(self):
         addr, task, _ = self.start()
@@ -699,7 +721,8 @@ class AppTabTests(Base):
         new = tabs[1]
         self.assertEqual((new["name"], new["root"]["type"], new["root"]["id"]), (task["id"], "row", new["id"]))
         self.assertEqual([b["content"] for b in new["root"]["children"]], [{"terminal": addr}])
-        self.assertEqual(task["ui_tab"], {"space": "spPCS", "tab": new["id"], "block": new["root"]["children"][0]["id"]})
+        self.assertEqual({k: task["ui_tab"][k] for k in ("space", "tab", "block", "state")},
+                         {"space": "spPCS", "tab": new["id"], "block": new["root"]["children"][0]["id"], "state": "added"})
         labels = self.terminal(addr)["labels"]
         self.assertEqual((labels["herdr.space"], labels["herdr.tab"], labels["where"]), ("spPCS", new["id"], f"pcs / {task['id']}"))
         self.assertEqual((labels["july-task"], labels["july-launch"]), ("1", task["launch"]))  # ownership labels kept
@@ -795,8 +818,8 @@ class AppTabTests(Base):
         rc, body, err = self.run_cli("stop", slack={"actor": OWNER})
         self.assertEqual(rc, 0, body)
         t = self.tasks()[task["id"]]
-        self.assertTrue(t["cleanup_pending"])
-        self.assertEqual(t["ui_tab"], task["ui_tab"])
+        self.assertTrue(t["ui_tab"]["remove"])  # still recorded: the monitor retries
+        self.assertEqual(t["ui_tab"]["tab"], task["ui_tab"]["tab"])
         s = self.hc()
         s["doc_conflicts"] = 0
         wj(self.hc_state, s)
@@ -805,25 +828,118 @@ class AppTabTests(Base):
         self.assertEqual([tb["id"] for tb in self.app_doc()["value"]["spaces"][1]["tabs"]], ["tbPCS1"])
 
     def test_a_missing_document_is_logged_once_by_the_monitor(self):
+        addr, task, _ = self.start()
         s = self.hc()
         s.pop("docs")
         wj(self.hc_state, s)
-        errs = [self.run_cli("monitor")[2] for _ in range(3)]
+        errs = [self.run_cli("stop", slack={"actor": OWNER})[2]] + [self.run_cli("monitor")[2] for _ in range(3)]
         self.assertEqual(sum(e.count("no Herdr app document") for e in errs), 1)
+        self.assertTrue(self.tasks()[task["id"]]["ui_tab"]["remove"])  # kept for a later try
 
-    def test_monitor_removes_orphan_task_tabs_only(self):
-        live = self.add_root("july-pcs-aaa1")
-        self.add_task(tid="july-pcs-aaa1", address=live)
+    def test_b3_ids_are_recorded_before_the_document_is_written(self):
+        snap = os.path.join(self.d, "at-docset.json")
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER}, extra={
+            "FAKE_HC_DOCSET_SNAPSHOT_FROM": os.path.join(self.state_dir, "tasks.json"), "FAKE_HC_DOCSET_SNAPSHOT_TO": snap})
+        self.assertEqual(rc, 0, body)
+        during = list(rj(snap)["tasks"].values())[0]["ui_tab"]
+        self.assertEqual(during["state"], "adding")
+        written = [tb for tb in self.app_doc()["value"]["spaces"][1]["tabs"] if tb["id"] == during["tab"]]
+        self.assertEqual(len(written), 1)
+
+    def test_b3_an_unconfirmed_write_is_confirmed_not_duplicated(self):
+        a = self.add_root("july-pcs-aaa1")
+        ui = {"tab": "tbAAA1", "block": "pdAAA1", "state": "adding", "since": time.time()}
+        self.add_task(tid="july-pcs-aaa1", address=a, ui_tab=ui)
+        doc = json.loads(json.dumps(self.doc))
+        doc["spaces"][1]["tabs"].append({"id": "tbAAA1", "name": "july-pcs-aaa1", "root": {"type": "row", "id": "tbAAA1",
+                                         "children": [{"type": "block", "id": "pdAAA1", "content": {"terminal": a}}]}})
+        self.set_doc(doc)
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-aaa1"]["ui_tab"]["state"], "added")
+        self.assertEqual([tb["id"] for tb in self.app_doc()["value"]["spaces"][1]["tabs"]].count("tbAAA1"), 1)
+
+    def test_b3_tabs_are_never_deleted_by_name(self):
         doc = json.loads(json.dumps(self.doc))
         mk = lambda name, term: {"id": "tb" + name, "name": name, "root": {"type": "row", "id": "tb" + name, "children": [
             {"type": "block", "id": "pd" + name, "content": {"terminal": term}}]}}
-        doc["spaces"][1]["tabs"] += [mk("july-pcs-dead", "t999"), mk("july-pcs-aaa1", live),
-                                    mk("july-pcs-bbb2", self.t_pcs), mk("my-notes", "t998")]
+        doc["spaces"][1]["tabs"] += [mk("july-pcs-dead", "t999"), mk("july-pcs-bad1", 5)]
         self.set_doc(doc)
-        rc, body, err = self.run_cli("monitor")
-        self.assertEqual(rc, 0, err)
-        names = [tb["name"] for tb in self.app_doc()["value"]["spaces"][1]["tabs"]]
-        self.assertEqual(names, ["", "july-pcs-aaa1", "july-pcs-bbb2", "my-notes"])
+        self.add_task(tid="july-pcs-aaa1", address=self.add_root("july-pcs-aaa1"))
+        self.run_cli("monitor")
+        self.assertEqual(self.app_doc()["value"], doc)
+
+    def stop_with(self, mutate):
+        addr, task, _ = self.start()
+        s = self.hc()
+        sp = s["docs"]["herdr-app"]["value"]["spaces"]
+        mutate(sp, task["ui_tab"]["tab"])
+        wj(self.hc_state, s)
+        rc, body, err = self.run_cli("stop", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
+        return task, err
+
+    def test_b4_moved_renamed_or_extended_tabs_are_left_alone(self):
+        cases = {
+            "moved": lambda sp, tab: sp[0]["tabs"].append(sp[1]["tabs"].pop()),
+            "renamed": lambda sp, tab: sp[1]["tabs"][1].update(name="mine now"),
+            "extra node": lambda sp, tab: sp[1]["tabs"][1]["root"]["children"].append({"type": "row", "children": []}),
+            "extra key": lambda sp, tab: sp[1]["tabs"][1]["root"].update(note="x"),
+        }
+        for name, mutate in cases.items():
+            task, err = self.stop_with(mutate)
+            ids = [tb["id"] for sp in self.app_doc()["value"]["spaces"] for tb in sp["tabs"]]
+            self.assertIn(task["ui_tab"]["tab"], ids, name)
+            self.assertIn("left alone", err, name)
+            self.assertNotIn("ui_tab", self.tasks()[task["id"]], name)  # a definite outcome: no retries
+            self.set_doc(self.doc)
+
+    def test_b4_a_size_the_app_added_still_counts_as_ours(self):
+        task, err = self.stop_with(lambda sp, tab: sp[1]["tabs"][1]["root"]["children"][0].update(size={"weight": 1.0}))
+        self.assertEqual(self.app_doc()["value"], self.doc)
+
+    def test_s2_stop_kills_first_and_edits_the_document_outside_the_lock(self):
+        addr, task, _ = self.start()
+        probe = os.path.join(self.d, "probe.json")
+        rc, body, _ = self.run_cli("stop", slack={"actor": OWNER}, extra={
+            "FAKE_HC_DOCSET_PROBE": probe, "FAKE_HC_LOCKFILE": os.path.join(self.state_dir, ".lock"),
+            "FAKE_HC_PROBE_TERMINAL": addr})
+        self.assertEqual(rc, 0, body)
+        p = rj(probe)
+        self.assertEqual((p["lock"], p["terminal"]), ("free", "gone"))
+
+    def test_s3_a_bad_space_id_means_no_tab_and_safe_labels(self):
+        doc = json.loads(json.dumps(self.doc))
+        doc["spaces"][1]["id"] = "sp\u0000evil"
+        self.set_doc(doc)
+        addr, task, err = self.start()
+        self.assertNotIn("ui_tab", task)
+        self.assertEqual(self.app_doc()["value"], doc)
+        labels = self.terminal(addr)["labels"]
+        self.assertNotIn("herdr.space", labels)
+        self.assertEqual(labels["where"], f"pcs / {task['id']}")
+
+    def test_s3_an_unreadable_document_keeps_the_tab_recorded(self):
+        addr, task, _ = self.start()
+        good = self.app_doc()["value"]
+        self.set_doc({"spaces": "broken"})
+        self.run_cli("stop", slack={"actor": OWNER})
+        self.assertTrue(self.tasks()[task["id"]]["ui_tab"]["remove"])
+        self.set_doc(good)
+        self.run_cli("monitor")
+        self.assertNotIn("ui_tab", self.tasks()[task["id"]])
+        self.assertEqual(self.app_doc()["value"], self.doc)
+
+    def test_s1_rpc_errors_are_categories_only(self):
+        m = load_module()
+        fake = os.path.join(self.d, "rpc-hc")
+        with open(fake, "w") as f:
+            f.write("#!/bin/sh\ncat >/dev/null\necho '{\"id\": 2, \"error\": {\"code\": -1, \"message\": \"token=SECRETVALUE\", "
+                    "\"data\": {\"detail\": \"SECRETVALUE\"}}}'\n")
+        os.chmod(fake, 0o755)
+        m.HC = fake
+        with self.assertRaises(m.Fail) as e:
+            m.doc_call("doc.get", {"name": "herdr-app"})
+        self.assertEqual(str(e.exception), "doc.get: rpc error")
 
 
 class RelayTests(Base):
