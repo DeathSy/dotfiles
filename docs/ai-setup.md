@@ -841,7 +841,9 @@ default plugins.
     - They block `hc send/keys/run/kill/rm/interrupt/attach/connect/put/
       label/keep/exec`, `hc file write/edit`, `hc machine/server/update` and a
       bare `hc` (its picker attaches), also with options before the verb
-      (`hc --json send …`). They also block `xargs … hc …`, `herdr
+      (`hc --json send …`). The same applies to `herdr-core`, the binary
+      `~/.local/bin/hc` links to. They also block `xargs`, `find -exec`/`-execdir`,
+      `noglob` and `watch` wrapped around hc, herdr or herdr-core, `herdr
       pane/tab/workspace/worktree/agent/session/api/…` changes and a bare
       `herdr`. Read-only `hc ls/get/read/wait/templates` and `herdr status`
       stay allowed.
@@ -852,10 +854,16 @@ default plugins.
       chains (`;`, `&&`, subshells) and quote tricks (`h''c`, `"hc"`) are
       caught.
     - Not caught, because the matcher sees the command line, not what other
-      programs run: `$(which hc) send …`, `h=hc; $h send …`, hc called from
-      another interpreter (`python3 -c 'subprocess.run(["hc", …])'`,
-      `osascript … do shell script`), or from a script file July writes and
-      runs. The tests pin these gaps.
+      programs run: `$(which hc) send …` and `` `which hc` send …``,
+      `h=hc; $h send …`, `parallel hc send ::: …`, hc called from another
+      interpreter (`python3 -c 'subprocess.run(["hc", …])'`, `perl -e
+      'system(…)'`, `osascript … do shell script`), or from a script file
+      July writes and runs. The tests pin these gaps.
+    - Side effect, deliberate: July's own skill
+      `~/.hermes/skills/appman/appman-workspace/references/claude-session-lookup.md`
+      tells it to message the owner's other Claude sessions with `hc send`
+      (after a clear yes). The deny rules block that now, too. Read-only `hc
+      ls/get/read` from that skill still work.
     - `july-task` itself is unaffected: its line is `july-task …`, and it
       runs hc from its own Python process, which the terminal guard never
       sees.

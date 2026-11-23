@@ -23,6 +23,10 @@ BLOCKED = [
     "hc keep july-x", "hc exec ls", "hc file write /x", "hc file edit /x --old a --new b",
     "xargs hc send july-x < f", "/opt/homebrew/bin/herdr tab close 1", "herdr pane split",
     "herdr --session main tab close", "herdr",
+    "herdr-core send x go", "/Users/me/.local/share/herdr-core/current/Contents/MacOS/herdr-core send x go",
+    "herdr-core --json keys x enter", "herdr-core",
+    "find . -name x -exec hc send july-x go \\;", "find . -execdir herdr-core send x go \\;",
+    "noglob hc send july-x go", "watch -n 5 hc send july-x go", "xargs -n1 herdr tab close",
 ]
 ALLOWED = [
     "hc ls", "hc get july-x", "hc read july-x --lines 20", "hc --json read july-x", "hc wait july-x", "hc templates",
@@ -30,7 +34,8 @@ ALLOWED = [
     'echo "hc send is just text"', 'grep -r "hc send" docs',
 ]
 # Known gaps (documented): the matcher sees command words, not what other programs run.
-NOT_CAUGHT = ["$(which hc) send july-x go", "h=hc; $h send july-x go",
+NOT_CAUGHT = ["$(which hc) send july-x go", "h=hc; $h send july-x go", "`which hc` send july-x go",
+              "parallel hc send ::: july-x", "perl -e 'system(\"hc send x y\")'",
               "python3 -c 'import subprocess; subprocess.run([\"hc\",\"send\",\"x\",\"y\"])'",
               "osascript -e 'do shell script \"hc send x y\"'"]
 
@@ -49,6 +54,11 @@ class RuleList(unittest.TestCase):
         for v in ("pane", "tab", "workspace"):
             self.assertIn(f"herdr {v}*", RULES)
         self.assertIn("hc", RULES)  # bare hc: the picker, which attaches
+        for v in ("send", "keys", "run", "kill", "attach"):
+            self.assertIn(f"herdr-core {v}*", RULES)  # ~/.local/bin/hc is a link to herdr-core
+        for w in ("xargs", "*-exec", "noglob", "watch"):
+            for exe in ("hc", "herdr", "herdr-core"):
+                self.assertIn(f"{w}*{exe} *", RULES)
         self.assertTrue(all(isinstance(r, str) and r == r.strip() and r for r in RULES))
 
     def test_plain_forms(self):
