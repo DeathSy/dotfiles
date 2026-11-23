@@ -1122,7 +1122,7 @@ class LifecycleTests(Base):
             self.assertEqual(rc, 1, (cmd, ctx))
             self.assertIn("taken", body["error"])
         self.assertEqual(self.terminal(a)["inbox"], [])
-        self.assertTrue(self.tasks()["july-pcs-ab12"]["takeover_at"])
+        self.assertTrue(self.tasks()["july-pcs-ab12"]["tx"]["last_human"])
         rc, body, _ = self.run_cli("send", "owner here", slack={"actor": OWNER})
         self.assertEqual(rc, 0, body)
 

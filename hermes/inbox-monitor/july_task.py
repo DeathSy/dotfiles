@@ -691,8 +691,16 @@ def settle_tabs(only=None, budget=TAB_BUDGET):
         return
     os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
     with open(os.path.join(STATE_DIR, ".tabs.lock"), "a") as tab_lock:
-        fcntl.flock(tab_lock, fcntl.LOCK_EX)  # one settle at a time: an add and a remove never interleave
-        _settle_tabs(only, budget)
+        start = now()  # one settle at a time (an add and a remove never interleave), waiting at most budget
+        while True:
+            try:
+                fcntl.flock(tab_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if now() - start >= budget:
+                    return  # another settle is busy; the work stays recorded and the monitor retries it
+                time.sleep(0.5)
+        _settle_tabs(only, budget - (now() - start))
 
 
 def _settle_tabs(only, budget):
@@ -1206,9 +1214,7 @@ def taken_over(t):
         read_transcript(t)
     except (OSError, ValueError):
         pass
-    tv = t.get("tx") or {}
-    if tv.get("last_human") and not t.get("takeover_at"):
-        t["takeover_at"] = tv["last_human"]
+    tv = t.get("tx") or {}  # persisted with the task; takeover_at itself is left to the monitor's check()
     return bool(t.get("takeover_at") or tv.get("last_human") or t["state"] == "takeover")
 
 
