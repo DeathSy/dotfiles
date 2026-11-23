@@ -524,99 +524,99 @@ class InputTests(Base):
 
 TRUST_VARIANT = """ Quick safety check: Is this a project you created or one you trust?
  ⚠ This folder pre-approves 15 tool permissions in .claude/settings.local.json
- ❯ 1. No, exit
-   2. Yes, I trust this folder
-"""
-TRUST_PARTIAL = """ Quick safety check: Is this a project you created or one you trust?
+ ❯ No, exit
+   Yes, I trust this folder
 """
 
 
 class StartDialogTests(Base):
-    def start(self, screens, unblock=True, wait="3", extra=None):
+    """July pre-trusts with the owner's claude-trust-repo and never presses keys in a dialog."""
+
+    def setUp(self):
+        super().setUp()
+        self.trust_log = os.path.join(self.d, "trust.log")
+        script = os.path.join(self.d, "claude-trust-repo")
+        with open(script, "w") as f:  # records its argument and whether any terminal existed yet
+            f.write(f"#!/bin/sh\nn=$(/usr/bin/python3 -c 'import json,os; p=\"{self.hc_state}\"; "
+                    f"print(len(json.load(open(p))[\"terminals\"]) if os.path.exists(p) else 0)')\n"
+                    f"echo \"$1 terminals=$n\" >> {self.trust_log}\n")
+        os.chmod(script, 0o755)
+        cfg = rj(self.cfg)
+        cfg["trust_repo"] = script
+        wj(self.cfg, cfg)
+
+    def start(self, screen, extra=None, wait="2"):
         path = os.path.join(self.d, "screens.json")
-        wj(path, screens)
-        extra = dict(extra or {}, FAKE_HC_RUN_STATUS="blocked", FAKE_HC_SCREENS=path, JT_DIALOG_WAIT=wait)
-        if unblock:
-            extra["FAKE_HC_KEYS_UNBLOCK"] = "1"
+        wj(path, [screen])
+        env = dict(extra or {}, FAKE_HC_RUN_STATUS="blocked", FAKE_HC_SCREENS=path, JT_DIALOG_WAIT=wait)
         t0 = time.time()
-        rc, body, err = self.run_cli("start", "pcs", "--", "read the README", slack={"actor": OWNER}, extra=extra)
+        rc, body, err = self.run_cli("start", "pcs", "--", "read the README", slack={"actor": OWNER}, extra=env)
         return rc, body, time.time() - t0
 
-    def keys_sent(self):
-        return [k for t in self.hc()["terminals"] for k in t["keys"]]
-
-    def test_trust_variant_answered_after_the_screen_finishes_drawing(self):
-        # hc reports blocked while only the first line is drawn; the choices appear a read later.
-        rc, body, _ = self.start([TRUST_PARTIAL, TRUST_PARTIAL, TRUST_VARIANT])
+    def test_pre_trust_runs_before_the_terminal_starts(self):
+        rc, body, _ = self.run_cli("start", "pcs", "--", "read the README", slack={"actor": OWNER})
         self.assertEqual(rc, 0, body)
-        self.assertEqual(self.keys_sent(), [["down"], ["enter"]])  # one at a time, enter only once on "Yes"
+        with open(self.trust_log) as f:
+            self.assertEqual(f.read().split(), [os.path.realpath(self.repo), "terminals=0"])
 
-    def test_trust_cursor_that_doesnt_move_is_never_confirmed(self):
-        rc, body, _ = self.start([TRUST_VARIANT], extra={"FAKE_HC_STUCK_KEYS": "1"})
+    def test_a_dialog_is_never_answered_and_the_error_is_a_fixed_description(self):
+        for screen, kind in [(TRUST_VARIANT, "folder-trust question"),
+                             (" Log in to continue\n Your device code: WDJB-MJHT\n", "a login/auth dialog"),
+                             (" New MCP server found in .mcp.json\n ❯ Use it\n", "an MCP approval dialog"),
+                             (" Something new\n ❯ Yes\n", "an unknown dialog")]:
+            rc, body, elapsed = self.start(screen)
+            self.assertEqual(rc, 1)
+            self.assertIn(kind, body["error"])
+            self.assertNotIn("WDJB", body["error"])  # no screen text, ever
+            self.assertGreaterEqual(elapsed, 2)
+            self.assertEqual(self.hc()["terminals"], [])  # cleaned up; and no keys were ever sent:
+            self.assertNotIn("keys", json.dumps(self.slack_calls()))
+
+    def test_no_keys_are_ever_sent(self):
+        rc, body, _ = self.start(TRUST_VARIANT, extra={"FAKE_HC_KEYS_LOG": os.path.join(self.d, "keys.log")})
         self.assertEqual(rc, 1)
-        self.assertIn("didn't move", body["error"])  # enter is pressed only once "Yes" is highlighted
-        self.assertEqual(self.hc()["terminals"], [])  # and the stuck session is removed
+        self.assertFalse(os.path.exists(os.path.join(self.d, "keys.log")))
 
-    def test_unknown_dialog_fails_after_rereading_and_names_it(self):
-        rc, body, elapsed = self.start([" Allow this MCP server to run?\n ❯ Yes\n   No\n"], wait="2")
-        self.assertEqual(rc, 1)
-        self.assertIn("Allow this MCP server to run?", body["error"])
-        self.assertGreaterEqual(elapsed, 2)
-        self.assertEqual(self.keys_sent(), [])
-        self.assertEqual(self.hc()["terminals"], [])  # the failed start is cleaned up
-
-    def test_trust_screen_with_yes_highlighted_is_not_answered(self):
-        rc, body, _ = self.start([" Do you trust the files in this folder?\n   1. No, exit\n ❯ 2. Yes, I trust this folder\n"],
-                                 wait="1")
-        self.assertEqual(rc, 1)
-        self.assertEqual(self.keys_sent(), [])
-
-    def test_trust_screen_outside_a_mapped_project_is_not_answered(self):
-        cfg = rj(self.cfg)
-        cfg["projects"]["pcs"] = os.path.join(self.d, "elsewhere")
-        os.makedirs(cfg["projects"]["pcs"])
-        wj(self.cfg, cfg)
-        m = load_module()
-        m.CFG.update(projects={"pcs": cfg["projects"]["pcs"]})
-        self.assertFalse(m.in_mapped_project(self.repo))
-        self.assertTrue(m.in_mapped_project(os.path.join(cfg["projects"]["pcs"])))
-
-    def test_error_screen_head_is_masked(self):
-        m = load_module()
-        head = m.screen_head("╭────╮\n│ Login as bob@example.com? │\n│ call 0812345678 │\n│ third line │\n╰────╯")
-        self.assertEqual(head, "Login as ***.com? / call ***5678")
-
-    def test_screen_head_withholds_secrets_and_masks_before_label(self):
-        m = load_module()
-        self.assertEqual(m.screen_head("Paste token xoxb-123456789012-abcdefabcdef here\nok"),
-                         "(screen not shown: it looked like it held a secret)")
-        self.assertEqual(m.screen_head("Sign in as first_last@example.com\nnext"), "Sign in as ***.com / next")
+    def test_a_blocked_status_that_clears_is_not_a_dialog(self):
+        rc, body, _ = self.start(" settling…\n", extra={"FAKE_HC_UNBLOCK_AFTER": "3"}, wait="5")
+        self.assertEqual(rc, 0, body)
 
     def test_dialog_wait_is_bounded_by_the_start_wait(self):
-        path = os.path.join(self.d, "screens.json")
-        wj(path, [" Some unknown dialog\n ❯ Yes\n"])
         t0 = time.time()
-        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER}, extra={
-            "FAKE_HC_RUN_STATUS": "blocked", "FAKE_HC_SCREENS": path, "JT_DIALOG_WAIT": "30", "JT_START_WAIT": "3"})
+        rc, body, _ = self.start(" Some unknown dialog\n", extra={"JT_START_WAIT": "3"}, wait="30")
         self.assertEqual(rc, 1)
         self.assertLess(time.time() - t0, 15)
+
+    def test_pre_trust_only_inside_a_mapped_project(self):
+        m = load_module()
+        m.CFG.update(projects={"pcs": self.repo}, trust_repo=os.path.join(self.d, "claude-trust-repo"))
+        m.pre_trust(self.d)  # outside the project
+        self.assertFalse(os.path.exists(self.trust_log))
+
+    def test_hc_errors_never_carry_raw_output(self):
+        m = load_module()
+        fake = os.path.join(self.d, "bad-hc")
+        with open(fake, "w") as f:
+            f.write("#!/bin/sh\necho 'screen text: device code WDJB-MJHT'\nexit 1\n")
+        os.chmod(fake, 0o755)
+        m.HC = fake
+        with self.assertRaises(m.Fail) as e:
+            m.hc("read", "t1", "--lines", "0")
+        self.assertEqual(str(e.exception), "hc read: failed (exit 1)")
 
     def test_brief_keeps_the_merge_gate_over_repo_permissions(self):
         m = load_module()
         m.CFG.update(owner=OWNER)
         b = m.brief({"id": "july-pcs-ab12", "project": "pcs", "cwd": "/x", "requester": OWNER, "launch": "L",
                      "requester_name": "K"}, "x")
-        self.assertIn("pre-approves", b)
         self.assertIn("owner-go is still required", b)
 
-    def test_trust_matcher(self):
+    def test_dialog_kinds(self):
         m = load_module()
-        self.assertTrue(m.trust_screen(TRUST_VARIANT))
-        self.assertTrue(m.trust_screen(" Do you trust the files in this folder?\n ❯ 1. No, exit\n   2. Yes, I trust this folder"))
-        self.assertFalse(m.trust_screen(TRUST_PARTIAL))
-        self.assertFalse(m.trust_screen(" ❯ 1. Yes, I trust this folder\n   2. No, exit"))
-        self.assertTrue(m.yes_highlighted("   No, exit\n ❯ Yes, I trust this folder"))
-        self.assertFalse(m.yes_highlighted(TRUST_VARIANT))
+        self.assertIn("folder-trust", m.dialog_kind(TRUST_VARIANT))
+        self.assertIn("folder-trust", m.dialog_kind(" Do you trust the files in this folder?\n ❯ 1. Yes, proceed"))
+        self.assertEqual(m.dialog_kind(" Please sign in with your browser"), "a login/auth dialog")
+        self.assertEqual(m.dialog_kind(" foo"), "an unknown dialog")
 
 
 class AppTabTests(Base):

@@ -37,8 +37,7 @@ HC = os.path.join(HOME, ".local/bin/hc")
 CLAUDE_PROJECTS = os.path.join(HOME, ".claude/projects")
 INPUT_DIR = os.path.join(HOME, ".cache/july-task-input")  # where July writes task text; read files are removed
 START_WAIT = 120           # Hermes' terminal tool gives a command 180 s
-DIALOG_WAIT = 10           # a dialog at start is re-read this long before it counts as unknown (hc reports
-                           # blocked before the screen has finished drawing)
+DIALOG_WAIT = 10           # a dialog at start is watched this long (within START_WAIT) before the start fails
 
 MAX_RUNNING = 3            # running tasks at once
 RELAY_IDLE = 180           # a turn that ended without a post is relayed after this long idle
@@ -317,7 +316,13 @@ def hc(*args, timeout=60, check=True):
     except OSError as e:
         raise HcDown(f"hc {args[0]}: {e.__class__.__name__}")
     if check and p.returncode != 0:
-        raise Fail(f"hc {args[0]}: {(p.stderr or p.stdout).strip()[-300:] or f'exit {p.returncode}'}")
+        # Only hc's error kind, never its raw output (a failed read could carry screen text).
+        kind = None
+        try:
+            kind = (json.loads(p.stdout or p.stderr or "{}").get("error") or {}).get("kind")
+        except (ValueError, AttributeError):
+            pass
+        raise Fail(f"hc {args[0]}: {kind or 'failed'} (exit {p.returncode})")
     return p
 
 
@@ -837,6 +842,7 @@ def cmd_start(a):
                 "task": text, "state": "starting", "started_at": now(), "ended_at": None, "last_post_at": 0,
                 "notes": {}}
         st["tasks"][name] = task
+    pre_trust(task["cwd"])
     try:
         r = hc_json("run", "--bg", "--no-notify", "--no-parent", "--outlive-parent", "--name", task["id"],
                     "--cwd", task["cwd"], "--label", LABEL, "--label", f"july-launch={task['launch']}", "--",
@@ -891,44 +897,17 @@ def announce(st, task):
                     f"{clean(text[:150], 400)}{'…' if len(text) > 150 else ''}" + (f" ({link})" if link else ""))
 
 
-def trust_screen(screen):
-    """Claude Code's folder-trust question, in either form ("Do you trust the files in this folder?" or
-    "Quick safety check: Is this a project you created or one you trust?", which may also list the
-    permissions .claude/settings.local.json pre-approves): both choices drawn, "No, exit" above
-    "Yes, I trust this folder" and highlighted (the cursor on it)."""
-    no, yes = screen.find("No, exit"), screen.find("Yes, I trust this folder")
-    return 0 <= no < yes and bool(re.search(r"[❯>]\s*(?:1\.\s*)?No, exit", screen))
-
-
-def yes_highlighted(screen):
-    return bool(re.search(r"[❯>]\s*(?:2\.\s*)?Yes, I trust this folder", screen))
-
-
-def answer_trust(address, deadline):
-    """Move to "Yes, I trust this folder", check the cursor is really there, then confirm. Claude's dialog
-    drops keys sent as one burst or while it is still settling (seen 2026-11-23), so `down` is pressed one at
-    a time, only while "No, exit" is highlighted, until the cursor is on "Yes"; enter only then."""
-    for _ in range(12):
-        if now() >= deadline:
-            return False
-        screen = hc("read", address, "--lines", "0").stdout
-        if yes_highlighted(screen):
-            hc("keys", address, "enter")
-            return True
-        if trust_screen(screen):
-            hc("keys", address, "down")
-        time.sleep(1)
-    return False
-
-
-def screen_head(screen, n=2):
-    """The first n non-empty lines of a screen, without box drawing, masked and inert, for an error. Nothing
-    from a screen that looks like it holds a secret; masking runs before label() changes any characters."""
-    if SECRET_RE.search(screen):
-        return "(screen not shown: it looked like it held a secret)"
-    lines = [" ".join(re.sub(r"[\x00-\x1f\x7f<>\[\]`|│╭╮╰╯─┌┐└┘├┤═║]+", " ", mask(l)).split())[:120]
-             for l in screen.splitlines()]
-    return " / ".join([l for l in lines if l][:n])[:300] or "(empty screen)"
+def dialog_kind(screen):
+    """A fixed description of a dialog, never its text (a login dialog can show a device code)."""
+    if "Yes, I trust this folder" in screen or "Do you trust the files in this folder" in screen \
+            or "Is this a project you created or one you trust" in screen:
+        return ("Claude's folder-trust question: this repo isn't trusted yet and claude-trust-repo didn't trust "
+                "it (its GitHub owner isn't on the trusted list, or it isn't a git repo)")
+    if re.search(r"(?i)\b(log ?in|sign ?in|authenticat|device code|oauth|api key)", screen):
+        return "a login/auth dialog"
+    if re.search(r"(?i)\bMCP\b", screen):
+        return "an MCP approval dialog"
+    return "an unknown dialog"
 
 
 def in_mapped_project(path):
@@ -937,37 +916,44 @@ def in_mapped_project(path):
     return any(os.path.commonpath([path, r]) == r for r in roots)
 
 
+def pre_trust(cwd):
+    """Trust the repo before Claude starts, with the owner's own claude-trust-repo (dotfiles claude.nix): it
+    marks a git repo trusted in ~/.claude.json only when its GitHub owner is on his trusted list, the same
+    thing his `claude` shell wrapper does at every start. Claude Code has no supported flag for trusting a
+    folder in an interactive session, and July never presses keys in a trust dialog. Best effort."""
+    if not CFG.get("trust_repo") or not in_mapped_project(cwd):
+        return
+    try:
+        subprocess.run([CFG["trust_repo"], cwd], capture_output=True, timeout=20,
+                       env={k: v for k, v in os.environ.items() if not k.startswith(("HC_", "CLAUDECODE"))})
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log(f"claude-trust-repo failed for {cwd}: {e.__class__.__name__}")
+
+
 def wait_ready(task):
     deadline = now() + START_WAIT
-    trusted = False
     while now() < deadline:
-        w = hc_json("wait", task["address"], "--timeout", "20", timeout=60)
+        w = hc_json("wait", task["address"], "--timeout", str(max(1, min(20, int(deadline - now())))), timeout=60)
         g = hc_get(task["address"]) or {}
         if g.get("state") != "live":
             raise Fail(f"claude exited at start (exit {g.get('exit_code')})")
         st = status_of(g)
         if st == "blocked":
-            # hc can report blocked before the dialog is fully drawn: re-read it for a while before deciding.
-            until, screen, answered = min(now() + DIALOG_WAIT, deadline), "", False
-            while True:
-                screen = hc("read", task["address"], "--lines", "0").stdout
-                if not trusted and trust_screen(screen) and in_mapped_project(task["cwd"]):
-                    trusted = True
-                    if not answer_trust(task["address"], deadline):
-                        raise Fail("the trust screen didn't move to \"Yes, I trust this folder\"; Kittipong has to "
-                                   f"look (hc attach {task['id']})")
-                    answered = True
-                    break
-                g = hc_get(task["address"]) or {}
-                if g.get("state") != "live" or status_of(g) != "blocked" or now() >= until:
-                    break
+            # hc can report blocked for a moment while the screen settles: look again for a while (within the
+            # start budget) before deciding. July never answers a dialog itself.
+            until = min(now() + DIALOG_WAIT, deadline)
+            while now() < until:
                 time.sleep(1)
-            if answered or (g.get("state") == "live" and status_of(g) != "blocked"):
-                continue
+                g = hc_get(task["address"]) or {}
+                if g.get("state") != "live" or status_of(g) != "blocked":
+                    break
             if g.get("state") != "live":
                 raise Fail(f"claude exited at start (exit {g.get('exit_code')})")
-            raise Fail(f"it stopped at a dialog at start ({screen_head(screen)}); Kittipong has to look "
-                       f"(hc attach {task['id']})")
+            if status_of(g) == "blocked":
+                p = hc("read", task["address"], "--lines", "0", check=False)
+                kind = dialog_kind(p.stdout) if p.returncode == 0 else "a dialog hc couldn't read"
+                raise Fail(f"it stopped at a dialog at start ({kind}); Kittipong has to look (hc attach {task['id']})")
+            continue
         if transcript(task):
             return  # the first message reached the session
         if w.get("reason") == "timeout" and st in ("idle", "done"):

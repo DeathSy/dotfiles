@@ -20,7 +20,7 @@ when they clear. Output names settings, never values.
 The resolved-toolset assertion uses Hermes' own resolver (hermes_cli.tools_config) from the installed
 checkout: no chat platform may resolve to the monitor's inbox MCP server.
 """
-import argparse, copy, hashlib, importlib.util, json, os, re, stat, subprocess, sys, time
+import argparse, copy, fcntl, hashlib, importlib.util, json, os, re, stat, subprocess, sys, tempfile, time
 
 import yaml
 
@@ -33,6 +33,11 @@ ap.add_argument("--quiet", action="store_true", help="print only problems and ch
 a = ap.parse_args()
 spec = json.load(open(a.spec))
 home = spec["hermes_home"]
+# One run at a time (activation's --fix and launchd's --auto can start together): they read, change and write
+# the same files.
+os.makedirs(os.path.dirname(spec["state_file"]), exist_ok=True)
+_lock = open(os.path.join(os.path.dirname(spec["state_file"]), ".config-check.lock"), "a")
+fcntl.flock(_lock, fcntl.LOCK_EX)
 cfg_path, env_path = os.path.join(home, "config.yaml"), os.path.join(home, ".env")
 problems, changes = [], []
 restart = set()  # "gateway" / "dashboard": a restored setting is read at process start
@@ -73,12 +78,17 @@ def drop(doc, path):
         parent.pop(path[-1], None)
 
 
+def private_tmp(path, data):
+    """A unique 0600 temp file next to path holding data (str or bytes); returns its name."""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", prefix="." + os.path.basename(path) + ".")
+    with os.fdopen(fd, "wb") as f:
+        f.write(data.encode() if isinstance(data, str) else data)
+    os.chmod(tmp, 0o600)
+    return tmp
+
+
 def write_private(path, text):
-    tmp = path + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
-    os.replace(tmp, path)
+    os.replace(private_tmp(path, text), path)
 
 
 def run(argv, timeout=20):
@@ -225,40 +235,60 @@ if os.path.exists(managed):
 soul = spec.get("soul")
 if soul:
     # The persona follows the overlay without clobbering local edits: --fix installs the overlay's SOUL.md
-    # when the live file is missing, or is still exactly the copy it installed last (its hash is kept in
-    # .soul-installed next to the state file). A live file that matches neither has been edited here: it is
-    # left alone, with a note to merge by hand.
+    # when the live file is missing, or is still exactly the copy it installed last (the sha256 of its bytes
+    # is kept in .soul-installed next to the state file). A live file that matches neither has been edited
+    # here: it is left alone, with a note to merge by hand. The live file is hashed again right before the
+    # rename, so an edit saved during this run is not overwritten (only a save in the instant between that
+    # check and the rename could still be), and a missing file is seeded with link(), which never replaces.
     live_soul, mark = os.path.join(home, "SOUL.md"), os.path.join(os.path.dirname(spec["state_file"]), ".soul-installed")
-    sha = lambda text: hashlib.sha256(text.encode()).hexdigest()
-    with open(soul) as f:
+    sha = lambda data: hashlib.sha256(data).hexdigest()
+    with open(soul, "rb") as f:
         want_soul = f.read()
     try:
-        installed = open(mark).read().strip()
+        with open(mark) as f:
+            installed = f.read().strip()
     except OSError:
         installed = ""
-    if not os.path.exists(live_soul):
+
+    def live_bytes():
+        try:
+            with open(live_soul, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            return None
+
+    live_data = live_bytes()
+    if live_data is None:
         if a.fix:
-            write_private(live_soul, want_soul)
-            write_private(mark, sha(want_soul))
-            changes.append("SOUL.md seeded")
+            tmp = private_tmp(live_soul, want_soul)
+            try:
+                os.link(tmp, live_soul)  # fails if a SOUL.md appeared meanwhile
+                write_private(mark, sha(want_soul))
+                changes.append("SOUL.md seeded")
+            except FileExistsError:
+                say("note: ~/.hermes/SOUL.md appeared during this run; left alone")
+            finally:
+                os.unlink(tmp)
         else:
             problems.append("~/.hermes/SOUL.md is missing (--fix seeds the persona)")
-    else:
-        with open(live_soul) as f:
-            live_text = f.read()
-        if live_text == want_soul:
-            if a.fix and installed != sha(want_soul):
-                write_private(mark, sha(want_soul))
-        elif installed and sha(live_text) == installed:
-            if a.fix:
-                write_private(live_soul, want_soul)
+    elif live_data == want_soul:
+        if a.fix and installed != sha(want_soul):
+            write_private(mark, sha(want_soul))
+    elif installed and sha(live_data) == installed:
+        if a.fix:
+            tmp = private_tmp(live_soul, want_soul)
+            if live_bytes() == live_data:
+                os.replace(tmp, live_soul)
                 write_private(mark, sha(want_soul))
                 changes.append("SOUL.md updated from the overlay")
             else:
-                say("note: ~/.hermes/SOUL.md is an older overlay version (--fix updates it)")
+                os.unlink(tmp)
+                say("note: ~/.hermes/SOUL.md changed during this run; left alone")
         else:
-            say(f"note: ~/.hermes/SOUL.md has local edits, so the overlay's version was not installed; "
-                f"compare (diff ~/.hermes/SOUL.md {soul}) and merge by hand")
+            say("note: ~/.hermes/SOUL.md is an older overlay version (--fix updates it)")
+    else:
+        say(f"note: ~/.hermes/SOUL.md has local edits, so the overlay's version was not installed; "
+            f"compare (diff ~/.hermes/SOUL.md {soul}) and merge by hand")
 
 # ── resolved toolsets (Hermes' own resolver) ───────────────────────────────
 RESOLVE = r"""

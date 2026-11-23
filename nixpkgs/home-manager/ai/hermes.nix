@@ -133,6 +133,8 @@ let
     owner = cfg.ownerSlackId;
     colleagues = cfg.colleagueSlackIds;
     claude = "${home}/.local/bin/claude";  # Claude Code's own stable link; absolute, so never an hc template
+    # The owner's repo-trust helper (claude.nix): trusts a repo only if its GitHub owner is on his list.
+    trust_repo = "/etc/profiles/per-user/${config.home.username}/bin/claude-trust-repo";
   });
   # The script reads july-task.json from its own (read-only) folder: no config
   # override, and no test hooks through the environment.

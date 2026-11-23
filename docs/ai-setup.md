@@ -660,8 +660,14 @@ default plugins.
   --fix` at each rebuild installs it when the live file is missing or is
   still exactly the copy it installed last, whose hash is kept in
   `~/.local/state/inbox-monitor/.soul-installed`. A live file edited by hand
-  is never overwritten: `hermes-config-check` (without `--quiet`) notes it so
-  you can merge by hand. A live file seeded before the hash was kept, or
+  is left alone: `hermes-config-check` (without `--quiet`) notes it so you
+  can merge by hand. Hashes are over the file's bytes. The live file is
+  hashed again right before the rename, so an edit saved during a run
+  survives; only a save in the instant between that check and the rename
+  could be lost. A missing file is seeded with `link()`, which never
+  replaces one. Runs take a lock, so activation's `--fix` and launchd's
+  `--auto` don't interleave, and temp files have unique names. Tests:
+  `/usr/bin/python3 -I -B nixpkgs/home-manager/ai/tests/test_hermes_config_check_soul.py`. A live file seeded before the hash was kept, or
   copied in by hand, counts as edited until it equals the overlay once: copy
   the overlay over it (`install -m 600 <store SOUL.md> ~/.hermes/SOUL.md`)
   after checking the diff, and the next rebuild records its hash. The
@@ -732,17 +738,26 @@ default plugins.
     The brief holds the task and the rules: follow `~/.claude/CLAUDE.md`, report
     through `july-task`, never post secrets, and stop at "PR opened and reviews
     reported" (owner's decision, 2026-11-23).
-    If Claude's trust screen appears, it is answered (`down enter`) only when
-    "No, exit" is highlighted above "Yes, I trust this folder", and only in a
-    mapped project. Both forms count: "Do you trust the files in this
-    folder?" and "Quick safety check: Is this a project you created or one you
-    trust?". The second may also list the permissions the repo's
-    `.claude/settings.local.json` pre-approves. hc can report `blocked` before
-    the dialog has finished drawing, so a dialog at start is re-read for up to
-    10 s before it counts as unknown. Seen on 2026-11-23: a first start in an
-    untrusted saas subrepo failed on the half-drawn screen. Any other dialog
-    fails the start, and the error names it with the first two screen lines
-    (masked). July then posts
+    Folder trust: Claude Code has no supported way to trust a folder for an
+    interactive session (only `-p` skips the question), so before the launch
+    July runs the owner's own `claude-trust-repo <cwd>` (claude.nix), the
+    helper his `claude` shell wrapper runs at every start. It does this only
+    for folders in a mapped project. The helper marks a git repo trusted in
+    `~/.claude.json` only if its GitHub owner is on
+    `dotfiles.ai.claude.trustedRepoOwners`; every mapped repo is under
+    appman-agm, which is on that list. It writes with jq and an atomic rename,
+    as the wrapper always has, so the race with a running Claude Code saving
+    the same file is the one the owner already accepts. Checked 2026-11-23:
+    a subrepo whose `.claude/settings.local.json` pre-approves permissions
+    started straight to idle after it. July never presses keys in a dialog.
+    (Until 2026-11-23 it answered the trust screen with `down`/`enter`, which
+    raced the screen's redraws and dropped keys.) A dialog that stays up for
+    10 s (within the 120 s start budget) fails the start with a fixed
+    description: "Claude's folder-trust question" (repo not trusted, e.g. an
+    owner outside the list or not a git repo), "a login/auth dialog", "an MCP
+    approval dialog" or "an unknown dialog". Never its text, which could hold
+    a device code. hc errors carry only hc's error kind and exit code, never
+    its output. July then posts
     a start message in the thread. When a colleague started the task, the owner
     gets a one-line DM.
   - **Reporting:** the session posts as July into its own thread with
@@ -879,8 +894,8 @@ default plugins.
     one confirmed task per thread, at most 3 running, the owner's DM for every
     colleague task, dialogs that only the owner can answer, and every action
     visible in the thread and in the herdr terminal (`hc attach <task>`).
-    Trusting a repo at start (the trust screen, answered for mapped projects)
-    also loads that repo's `.claude/settings*.json`. Its allow rules, such as
+    Trusting a repo at start (`claude-trust-repo`, for mapped projects) also
+    loads that repo's `.claude/settings*.json`. Its allow rules, such as
     `Bash(git push:*)`, then run without the auto-mode classifier, and its
     hooks run as the owner. A colleague can thus reach whatever a mapped
     repo's committed settings pre-approve. The brief says such permissions

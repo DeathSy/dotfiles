@@ -122,7 +122,14 @@ def main():
                                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())}) + "\n")
         out({"address": t["address"], "name": t["name"], "state": "live"})
     if cmd == "get":
-        out(find(s, rest[0]))
+        t = find(s, rest[0])
+        after = os.environ.get("FAKE_HC_UNBLOCK_AFTER")  # a blocked status that clears after n gets
+        if after and t["status"] and t["status"].get("state") == "blocked":
+            t["gets"] = t.get("gets", 0) + 1
+            if t["gets"] >= int(after):
+                t["status"]["state"] = "idle"
+            save(s)
+        out(t)
     if cmd == "ls":
         want = [r.split("=", 1) for j, r in enumerate(rest) if j and rest[j - 1] == "--label"]
         ts = [t for t in s["terminals"] if ("--all" in rest or t["state"] == "live")
@@ -148,6 +155,9 @@ def main():
                 t["labels"].pop(k, None)
     elif cmd == "keys":
         t["keys"].append(rest[1:])
+        if os.environ.get("FAKE_HC_KEYS_LOG"):
+            with open(os.environ["FAKE_HC_KEYS_LOG"], "a") as f:
+                f.write(json.dumps(rest) + "\n")
         if "down" in rest[1:] and os.environ.get("FAKE_HC_STUCK_KEYS") != "1":
             t["moved"] = True  # the cursor moves to the next choice (applied to every later screen)
         if "enter" in rest[1:] and os.environ.get("FAKE_HC_KEYS_UNBLOCK") == "1" and t["status"] and t.get("moved"):
