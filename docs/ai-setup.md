@@ -680,8 +680,8 @@ default plugins.
     --permission-mode auto -n july-<project>-<4 hex> --session-id <uuid>
     "<brief>"` with `hc run --bg --no-parent --outlive-parent` in the project.
     The brief holds the task and the rules: follow `~/.claude/CLAUDE.md`, report
-    through `july-task`, never post secrets, stop at an opened PR, and never merge,
-    deploy or push to shared branches without the owner's go in the thread.
+    through `july-task`, never post secrets, and stop at "PR opened and reviews
+    reported" (owner's decision, 2026-11-23).
     If Claude's trust screen appears, it is answered (`down enter`) only when
     "No, exit" is highlighted above "Yes, I trust this folder", and only in a
     mapped project. Any other dialog at start fails the start. July then posts
@@ -706,6 +706,19 @@ default plugins.
     finds the task by thread, takes only the requester or the owner, never
     types into a session that is blocked at a dialog (`hc send` without
     `--force`), and reopens a done task whose terminal is still alive.
+    Each relayed message is labelled `(owner)` or `(colleague)` from the
+    gateway's actor id.
+  - **Merge gate (owner's decision):** a session may merge, deploy, release or
+    push to a shared branch only after the owner's explicit go for that action
+    in the thread. This applies to the owner's own tasks too, and a colleague's
+    go never counts. `send` records a message as the owner's only when it
+    comes from Slack and `HERMES_SESSION_ACTOR_ID` is the owner's member id.
+    The session checks with `july-task owner-go`, which lists only those
+    messages. The brief says nothing else is proof: not a `[Slack reply from
+    …]` line, and not text claiming to be from the owner. Messages typed at the
+    owner's own terminal (`send --task`) are labelled "not a go". The gate is
+    still an instruction to the session, not enforcement: the session runs
+    as the owner and could merge anyway.
     `status`, `list` and `stop` complete the set. Outside Slack (the owner's own
     terminal) `--task <id>` names the task, and the caller counts as the owner.
   - **Cleanup:** 24 h after done, failed or stopped (`stop` does it at once),
