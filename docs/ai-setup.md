@@ -680,10 +680,15 @@ default plugins.
     64 KB. The same holds for `--file` on `send`, `post`, `ask` and `done`. The
     folder is kept at mode 0700. A heredoc
     isn't used: a line of the task text could end it and run the rest as shell.
-    With `approvals.mode: smart` the approval model judges these `july-task`
-    commands like any other terminal command. `approvals.smart_policy`
-    doesn't mention them, so a start or a send may be escalated to the owner,
-    and in a colleague's DM it is then denied after 300 s. Hermes passes each turn's Slack context to terminal
+    By the owner's decision, `approvals.smart_policy` approves `july-task`
+    commands without him (the CLI enforces its own allowlist, cap and secret
+    checks). This applies only when the whole command line is a single
+    `july-task` invocation or a single write of a file under
+    `~/.cache/july-task-input`, with no other command, pipe, `;`, `&&`, `||`,
+    substitution or redirection. Chained commands are judged by the normal
+    rules, and the approval model escalates when unsure. Setting or unsetting
+    `HERMES_SESSION_*` or `HC_*` variables (`env -u` included) is always
+    escalated, and the ESCALATE rules win. Hermes passes each turn's Slack context to terminal
     commands as `HERMES_SESSION_*` (platform, chat, thread ts, actor), so the
     CLI takes the requester and the thread from there, not from the model.
     Only `HERMES_SESSION_ACTOR_ID` names the sender, never `USER_ID`: in a

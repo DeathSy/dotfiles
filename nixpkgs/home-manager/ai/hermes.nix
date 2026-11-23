@@ -266,11 +266,17 @@ let
     (eq [ "approvals" "mode" ] "smart")
     (eq [ "approvals" "smart_policy" ] (lib.concatStringsSep " " [
       "Approve read-only code and docs exploration (reading, searching, listing, git log/diff/show)."
-      "Also approve the `july-task` CLI (start, send, status, list, stop, post, ask, done, owner-go) and writing its input files under ~/.cache/july-task-input: it enforces its own allowlist, cap and secret checks."
       "ESCALATE, never approve: sending data off this machine (curl/wget with a body or upload, scp, rsync, nc, webhooks);"
       "reading secrets (security find-generic-password, pass show, ~/.ssh, .env files, cloud credentials);"
       "package or tool installs; git push, merge or tag; and anything that changes a cluster, cloud or database"
       "(kubectl apply/delete/edit/scale/patch/exec/rollout, helm, terraform apply, aws/gcloud writes, SQL writes)."
+      # The owner's decision: July's task CLI runs without him (it enforces its own allowlist, cap and
+      # secret checks), but only as a single, unchained invocation.
+      "For July's task CLI: approve it only when the WHOLE command line is a single `july-task` invocation (start, send, status, list, stop,"
+      "post, ask, done, owner-go), or a single write of a file under ~/.cache/july-task-input, with no other command,"
+      "pipe, `;`, `&&`, `||`, substitution or redirection; otherwise judge the other parts by the rules above, and"
+      "ESCALATE when unsure. ESCALATE if the command sets or unsets HERMES_SESSION_* or HC_* variables (including"
+      "env -u). The ESCALATE rules win."
     ]))
     (eq [ "approvals" "cron_mode" ] "deny")
     (eq [ "approvals" "single_query_mode" ] "deny")
