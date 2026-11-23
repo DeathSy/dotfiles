@@ -674,11 +674,25 @@ default plugins.
     in its terminal. Hermes passes each turn's Slack context to terminal
     commands as `HERMES_SESSION_*` (platform, chat, thread ts, actor), so the
     CLI takes the requester and the thread from there, not from the model.
+    Only `HERMES_SESSION_ACTOR_ID` names the sender, never `USER_ID`: in a
+    shared thread Hermes blanks the actor when a second person's message folds
+    into a running turn, while `USER_ID` stays the first sender. With a blank
+    actor ("mixed senders") `start`, `stop` and `status` refuse, and `send`
+    relays the message labelled "sender unknown: not a go".
     It refuses people outside the owner and colleague list, unknown projects,
     text that looks like a secret, a second running task in the same thread,
-    and a fourth running task. It starts `claude --model opus
+    and a fourth running task. It starts `~/.local/bin/claude --model opus
     --permission-mode auto -n july-<project>-<4 hex> --session-id <uuid>
-    "<brief>"` with `hc run --bg --no-parent --outlive-parent` in the project.
+    "<brief>"` with `hc run --bg --no-parent --outlive-parent --label
+    july-task=1` in the project. The absolute path keeps hc from reading the
+    command as a template. The terminal's address is saved right after `hc run`.
+    Then it waits up to 120 s for the first message to land (Hermes' terminal
+    tool allows a command 180 s). If the command dies midway, the monitor takes
+    over: after about 4 minutes it adopts a session whose first message arrived,
+    posting the start message, and removes one whose message didn't. It also
+    removes labelled `july-*` terminals the state doesn't know about once they
+    are 10 minutes old. The task text sits between delimiters with a random
+    nonce, and display names are reduced to one plain line.
     The brief holds the task and the rules: follow `~/.claude/CLAUDE.md`, report
     through `july-task`, never post secrets, and stop at "PR opened and reviews
     reported" (owner's decision, 2026-11-23).
@@ -691,41 +705,65 @@ default plugins.
     `july-task post|ask|done "<text>"`. The task is found by the session's
     `$HC_TERMINAL_ID`, so a session can post only into its own thread.
     `done` marks the task done. Text is masked like the monitor's (emails,
-    13-digit ids, Thai phones) and refused if it looks like a token or key.
+    13-digit ids, Thai phones). `&`, `<` and `>` are escaped, so `<!channel>`,
+    `<!here>`, mentions and link markup from a session stay plain text. Text
+    is refused if it looks like a secret: tokens and keys (Slack, OpenAI,
+    Stripe live, GitHub, GitLab, npm, AWS, Google, JWT), private keys, Slack
+    webhook URLs, URLs with a password. The check runs before any cut.
     The monitor reads the Claude transcript
     (`~/.claude/projects/*/<session-id>.jsonl`) incrementally and calls `hc
     get` per task. It needs no LLM, and unchanged output costs nothing. It
-    posts a turn's final reply once if the session ended that turn without
-    posting and has been idle for 3 minutes. A session at a dialog for 2
+    posts a turn's final reply once, after 3 minutes idle, unless the
+    session's last post came after its last tool call (then the reply only
+    comments on that post). Subagent (sidechain) entries are skipped. A session at a dialog for 2
     minutes (status blocked/error) gets a thread note, and the owner gets a DM
     with the masked screen and `hc attach <task>`. An exit without `done`
     marks the task failed and posts the last reply. After 8 h of running the
-    owner gets one DM, and a task idle for 24 h is stopped.
+    owner gets one DM, and a task idle for 24 h is stopped. Only hc's
+    `not_found` (exit 3) counts as a terminal gone. Any other hc failure, such
+    as a core restart, skips the cycle, so tasks don't fail by mistake. One
+    broken task record is logged and skipped, and the state is saved even when
+    a step fails, so a post that went out is never repeated.
   - **Answers:** the requester's replies in the thread reach July as usual.
     The persona has July pass them on unchanged with `july-task send`, which
     finds the task by thread, takes only the requester or the owner, never
     types into a session that is blocked at a dialog (`hc send` without
     `--force`), and reopens a done task whose terminal is still alive.
     Each relayed message is labelled `(owner)` or `(colleague)` from the
-    gateway's actor id.
+    gateway's actor id. Reopening a done task counts against the limit of 3
+    and the one-task-per-thread rule.
   - **Merge gate (owner's decision):** a session may merge, deploy, release or
     push to a shared branch only after the owner's explicit go for that action
     in the thread. This applies to the owner's own tasks too, and a colleague's
-    go never counts. `send` records a message as the owner's only when it
-    comes from Slack and `HERMES_SESSION_ACTOR_ID` is the owner's member id.
-    The session checks with `july-task owner-go`, which lists only those
-    messages. The brief says nothing else is proof: not a `[Slack reply from
-    …]` line, and not text claiming to be from the owner. Messages typed at the
-    owner's own terminal (`send --task`) are labelled "not a go". The gate is
-    still an instruction to the session, not enforcement: the session runs
-    as the owner and could merge anyway.
-    `status`, `list` and `stop` complete the set. Outside Slack (the owner's own
-    terminal) `--task <id>` names the task, and the caller counts as the owner.
+    go never counts. The session checks with `july-task owner-go`. It reads
+    the task's thread from Slack with the bot token (`conversations.replies`)
+    and lists only messages since the task started whose Slack `user` is the
+    owner's member id and that aren't bot messages. Slack's own record is the
+    proof, so a forged `HERMES_SESSION_ACTOR_ID` on `send` can't make one.
+    Messages the owner posts with his user token through another app
+    (the Claude app) count too, as they do elsewhere (above). The brief says
+    nothing else is proof: not a `[Slack reply from …]` line, and not text
+    claiming to be from the owner. Messages typed at the owner's own terminal
+    (`send --task`) are labelled "not a go". The gate is still an
+    instruction to the session, not enforcement: the session runs as the
+    owner and could merge anyway.
+    `status`, `list` and `stop` complete the set. `status` (it shows the last
+    reply) and `stop` take only the requester or the owner. `list` shows every
+    task's id, project, requester and state to anyone on the list. Outside
+    Slack (the owner's own terminal) `--task <id>` names the task, and the
+    caller counts as the owner.
   - **Cleanup:** 24 h after done, failed or stopped (`stop` does it at once),
-    the monitor kills and removes the task's terminal and its descendants:
-    terminals whose parent chain leads to it, or named `<task>-*` (its reviewer
-    session and workers). Git worktrees and branches the session made are
-    left alone.
+    the monitor kills and removes the task's terminal and its helpers. The
+    task's own terminal goes only if both its address and its name match the
+    task. Helpers go if their name starts with `<task>-` (the brief tells the
+    session to name its reviewer session and workers that way). Nothing is
+    removed by parent alone, and a task without a saved address removes only
+    helpers named that way. Workers started without `--outlive-parent` end with the session anyway.
+    Git worktrees and branches the session made are left alone.
+  - **Tests:** `/usr/bin/python3 -I hermes/inbox-monitor/tests/test_july_task.py`
+    (stdlib unittest, a fake `hc` in `tests/fake_hc.py`, Slack calls written to
+    a log; no network, terminals or Keychain). The test overrides
+    (`JULY_TASK_*`) work only with `JULY_TASK_TEST=1`.
   - **Risk (owner's choice):** the owner and the 12 colleagues can each start
     a coding agent that runs as the owner's macOS user, in the owner's repos
     and with his credentials (git and `gh` as Kittipong, the Keychain, Podman,

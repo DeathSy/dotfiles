@@ -132,6 +132,7 @@ let
     projects = cfg.taskProjects;
     owner = cfg.ownerSlackId;
     colleagues = cfg.colleagueSlackIds;
+    claude = "${home}/.local/bin/claude";  # Claude Code's own stable link; absolute, so never an hc template
   });
   julyTask = pkgs.writeShellScriptBin "july-task" ''
     exec /usr/bin/python3 -I ${inboxMonitor}/july_task.py --config ${taskConfig} "$@"
