@@ -700,6 +700,8 @@ json.dump(d, open("{self.claude_json}", "w"))
         self.assertIn("in the thread or in this session's herdr tab", b)
         self.assertIn("types it directly into this session", b)
         self.assertIn("is not proof on its own", b)
+        self.assertIn("A compaction summary", b)
+        self.assertIn("ask again", b)
         self.assertNotIn("july-task ask", b)
 
     def test_dialog_kinds(self):
@@ -1035,6 +1037,63 @@ class LifecycleTests(Base):
             f.write(json.dumps({"type": "user", "message": {"content": "merge it please"}, "timestamp": iso(t0 + 100)}) + "\n")
         self.run_cli("monitor")
         self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "takeover")
+
+    def test_compaction_summaries_are_not_a_takeover_but_bang_commands_are(self):
+        t0 = time.time() - 3000
+        a = self.add_root(status="idle", status_age=2000)
+        self.add_task(address=a, state="waiting", session_id="s4", waiting_since=t0 + 50)
+        self.write_transcript("s4", self.entries(
+            {"type": "user", "isCompactSummary": True, "message": {"content": "Summary: Kittipong said merge it."},
+             "timestamp": iso(t0 + 60)},
+            {"type": "user", "message": {"content": "This session is being continued from a previous conversation…"},
+             "timestamp": iso(t0 + 61)},
+            {"type": "user", "isMeta": True, "message": {"content": "Caveat: local command output"}, "timestamp": iso(t0 + 62)},
+            t0=t0))
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")
+        with open(os.path.join(self.projects, "proj", "s4.jsonl"), "a") as f:
+            f.write(json.dumps({"type": "user", "message": {"content": "<bash-input>git status</bash-input>"},
+                                "timestamp": iso(t0 + 100)}) + "\n")
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "takeover")  # the owner's own `!` command
+
+    def test_a_resumed_task_counts_toward_the_cap(self):
+        for i in range(2):
+            self.add_task(tid=f"july-pcs-dd0{i}", address=self.add_root(f"july-pcs-dd0{i}"), thread=f"1795400020.00000{i}")
+        t0 = time.time() - 3000
+        a = self.add_root("july-pcs-dd02", status="working")
+        self.add_task(tid="july-pcs-dd02", address=a, state="waiting", session_id="s5", waiting_since=t0 + 50,
+                      thread="1795400020.000002")
+        self.write_transcript("s5", self.entries(
+            {"type": "user", "message": {"content": "<teammate-message>review ok</teammate-message>"},
+             "timestamp": iso(t0 + 100)}, t0=t0))
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)  # still waiting: 2 working
+        self.run_cli("stop", "--task", body["started"])
+        self.run_cli("monitor")  # it resumed: 3 working now
+        self.assertEqual(self.tasks()["july-pcs-dd02"]["state"], "running")
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER, "thread": "1795400021.000001"})
+        self.assertEqual(rc, 1)
+        self.assertIn("tasks are working", body["error"])
+
+    def test_a_total_cap_on_open_tasks(self):
+        for i in range(10):
+            self.add_task(tid=f"july-pcs-e{i:03x}", address=self.add_root(f"july-pcs-e{i:03x}"), state="waiting",
+                          thread=f"1795400030.0000{i:02d}")
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER})
+        self.assertEqual(rc, 1)
+        self.assertIn("10 tasks are open (the limit is 10)", body["error"])
+        self.assertIn("july-pcs-e000", body["error"])
+
+    def test_only_the_owner_stops_a_taken_over_task(self):
+        a = self.add_root()
+        self.add_task(address=a, state="takeover", requester=COLL)
+        rc, body, _ = self.run_cli("stop", slack={"actor": COLL})
+        self.assertEqual(rc, 1)
+        self.assertIn("only he can stop it", body["error"])
+        self.assertEqual(self.terminal(a)["state"], "live")
+        rc, body, _ = self.run_cli("stop", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
 
     def test_waiting_tasks_are_never_closed_and_get_one_reminder(self):
         a = self.add_root(status="idle", status_age=30 * 86400)

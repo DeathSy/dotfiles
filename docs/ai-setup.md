@@ -800,23 +800,48 @@ default plugins.
     `running` again. `stop` or a closed terminal ends it (`stopped`,
     `closed`, `failed`).
     - Only `starting` and `running` count toward the limit of 3, so tasks
-      waiting for takeover don't block new ones. One task per thread still
-      holds while a task is alive in any state.
+      waiting for takeover don't block new ones. Taken-over tasks don't count
+      either: the owner drives them. A waiting task that resumes on its own
+      (its reviewer reported back) counts again. It can't be paused, so the
+      count can briefly exceed 3, and new starts are refused until it's under.
+      A second limit covers open tasks in any state (10): each idle one keeps
+      a Claude session open, so a start beyond it is refused with the idle
+      ones listed for `stop`. One task per thread still holds while a task is
+      alive in any state.
     - Takeover is read from the Claude transcript: an input after the brief
       that doesn't come from July (`[Slack reply from …]`), hc workers
       (`<hc …>`) or teammates or tools (`<teammate-message>`, `<task-notification>`,
       `<system-reminder>`, `<local-command…>`, `<command-…>`) counts as the
-      owner. hc has no attach or keystroke signal, so this is a heuristic, and
-      it only decides what July relays (nothing during a takeover). It never
-      decides what gets closed.
+      owner. So do his `!` shell commands (`<bash-input>`/`<bash-stdout>`
+      entries). Compaction summaries (`isCompactSummary`, or text starting
+      "This session is being continued…") and `isMeta` entries don't count.
+      hc has no attach or keystroke signal, so this is a heuristic, and it
+      only decides what July relays (nothing during a takeover) and who may
+      stop the task: once taken over, only the owner can. It never decides
+      what gets closed.
   - **Decisions and the merge gate, from herdr or Slack (owner's decision):**
     the session never merges, deploys, releases or pushes to a shared branch on
     its own. That holds also for the owner's own tasks, and whatever the
     repo's `.claude/settings*.json` pre-approves. It stops at "PR opened and
     reviews done", posts that once with `done`, and waits.
-    - A decision or a merge go counts when the owner types it directly into
-      the session in its herdr tab (only he has access there), or when
-      `july-task owner-go` lists his Slack reply saying it.
+    - A decision or a merge go counts when the owner types it into the session
+      in its herdr tab as a new message of his own, or when `july-task
+      owner-go` lists his Slack reply saying it. A compaction summary, or
+      anything that only restates an earlier go, is not a go; the brief says
+      to ask again after a compaction.
+    - What is enforced vs only instructed: nothing technical tells the
+      owner's typing apart from other untagged input in the session. July's
+      own terminal could type into it with plain `hc send`. So the smart
+      approval policy escalates every `hc` command that types into, starts,
+      stops or attaches to a terminal or writes core documents (`send`,
+      `keys`, `run`, `kill`, `rm`, `interrupt`, `attach`, `connect`, `put`,
+      `label`, `keep`, `file write/edit`, `exec`), and every `herdr` command
+      that changes panes, tabs or workspaces. The single `july-task`
+      invocations stay approved, since `july-task` drives hc itself with its
+      own checks. The persona tells July to reach task sessions only through
+      `july-task`. That escalation is a judgment by the approval model, and the
+      merge rule itself is an instruction to the session, so neither is a hard
+      boundary.
     - `owner-go` reads the thread from Slack with the bot token
       (`conversations.replies`). It lists, in full, only replies posted after
       the session's last `done`/`blocked` note whose Slack `user` is the
