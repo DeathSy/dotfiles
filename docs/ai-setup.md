@@ -674,8 +674,11 @@ default plugins.
   - **Start:** after the requester confirms the project and the exact task
     text, July writes the text with its file tool to a new file in
     `~/.cache/july-task-input/` and runs `july-task start <project> [--repo
-    <dir>] --file <file>` in its terminal. The CLI reads the file (it must be
-    the caller's own regular file, at most 64 KB) and removes it. A heredoc
+    <dir>] --file <file>` in its terminal. The CLI reads the file and removes it.
+    The file must sit inside that folder (real path checked), be opened
+    without following a link, and be the caller's own regular file of at most
+    64 KB. The same holds for `--file` on `send`, `post`, `ask` and `done`. The
+    folder is kept at mode 0700. A heredoc
     isn't used: a line of the task text could end it and run the rest as shell.
     With `approvals.mode: smart` the approval model judges these `july-task`
     commands like any other terminal command. `approvals.smart_policy`
@@ -749,7 +752,10 @@ default plugins.
     a step fails, so a post that went out is never repeated. Thread messages
     and owner DMs that Slack refuses go into an outbox in the state. The
     monitor retries them every minute for a day, so a final reply, failure or
-    alert isn't lost to a Slack hiccup.
+    alert isn't lost to a Slack hiccup. Permanent errors (`channel_not_found`,
+    `is_archived`, `not_in_channel`, `msg_too_long`, …) are dropped with a log
+    line instead. The retry doesn't hold the state lock over the network: a
+    crash can repeat a message but not lose it.
   - **Answers:** the requester's replies in the thread reach July as usual.
     The persona has July pass them on unchanged with `july-task send`, which
     finds the task by thread, takes only the requester or the owner, and types
@@ -767,7 +773,8 @@ default plugins.
     go never counts. The session asks for the go with `july-task ask` (its
     timestamp is recorded) and checks with `july-task owner-go`. That reads
     the whole thread from Slack with the bot token (`conversations.replies`).
-    If it can't read every page (more than 100), it fails and assumes no go.
+    If it can't read every page (more than 100, or `has_more` without a
+    cursor), it fails and assumes no go.
     It lists, in full, only replies posted after the latest `ask` whose Slack
     `user` is the owner's member id: not edited, no `bot_id`, no `app_id`,
     plain messages or ones also sent to the channel (`thread_broadcast`). Slack's own

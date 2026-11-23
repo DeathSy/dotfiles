@@ -4,7 +4,8 @@ the JT_* environment of THIS runner, then calls its main(). The installed script
 
 JT_CONFIG, JT_STATE_DIR, JT_HC, JT_PROJECTS (Claude transcripts), JT_INPUT_DIR, JT_START_WAIT, JT_MAX_PAGES;
 JT_SLACK_LOG (every Slack call is appended as JSON), JT_SLACK_REPLIES (conversations.replies answers: one
-response, or a list of pages chained by cursor), JT_SLACK_FAIL (comma-separated methods that fail).
+response, or a list of pages chained by cursor), JT_SLACK_FAIL (comma-separated methods that fail) and
+JT_SLACK_FAIL_ERROR (the Slack error they fail with).
 """
 import importlib.util, json, os, sys
 
@@ -26,7 +27,7 @@ def transport(method, params):
     with open(env["JT_SLACK_LOG"], "a") as f:
         f.write(json.dumps({"method": method, **params}, ensure_ascii=False) + "\n")
     if method in FAIL:
-        raise m.Fail(f"Slack {method}: test failure")
+        raise m.Fail(f"Slack {method}: {env.get('JT_SLACK_FAIL_ERROR', 'test failure')}")
     if method == "conversations.replies":
         if not env.get("JT_SLACK_REPLIES"):
             return {"ok": True, "messages": []}

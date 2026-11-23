@@ -25,8 +25,8 @@ store; there is no override). State: ~/.local/state/july-tasks/tasks.json (0600)
 comes from the login Keychain and only travels in a header. Tests (tests/run_cli.py) swap the module's
 globals from outside; nothing in here reads test settings from the environment.
 """
-import argparse, datetime, fcntl, glob, json, os, re, secrets, subprocess, sys, tempfile, time, urllib.parse, \
-    urllib.request, uuid
+import argparse, datetime, fcntl, glob, json, os, re, secrets, stat, subprocess, sys, tempfile, time, \
+    urllib.parse, urllib.request, uuid
 from contextlib import contextmanager
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -246,32 +246,55 @@ def deliver(st, text, task=None):
     monitor retries the outbox every minute for a day."""
     if task is None and not CFG.get("owner"):
         return
-    msg = {"kind": "thread" if task else "dm", "channel": task["channel"] if task else CFG["owner"],
-           "thread_ts": task["thread_ts"] if task else None, "text": text, "since": now(), "tries": 0}
-    if not send_msg(msg):
+    msg = {"id": uuid.uuid4().hex, "kind": "thread" if task else "dm",
+           "channel": task["channel"] if task else CFG["owner"], "thread_ts": task["thread_ts"] if task else None,
+           "text": text, "since": now(), "tries": 0}
+    if send_msg(msg) == "retry":
         st["outbox"].append(msg)
 
 
+# Slack errors that no retry can fix: the message is dropped with a log line instead of queued.
+PERMANENT = {"channel_not_found", "is_archived", "not_in_channel", "msg_too_long", "no_text", "thread_not_found",
+             "cannot_reply_to_message", "account_inactive", "user_not_found", "invalid_arguments", "restricted_action",
+             "message_limit_exceeded", "invalid_blocks"}
+
+
 def send_msg(msg):
+    """'sent', 'retry' (queue it) or 'drop' (a permanent Slack error)."""
     try:
         slack("chat.postMessage", channel=msg["channel"], thread_ts=msg.get("thread_ts"), text=msg["text"],
               unfurl_links=False, unfurl_media=False)
-        return True
+        return "sent"
     except Fail as e:
         msg["tries"] = msg.get("tries", 0) + 1
         msg["error"] = str(e)[:200]
+        if str(e).rsplit(": ", 1)[-1].strip() in PERMANENT:
+            log(f"Slack {msg['kind']} dropped, can't be delivered ({e})")
+            return "drop"
         log(f"Slack {msg['kind']} not delivered ({e}); queued")
-        return False
+        return "retry"
 
 
-def flush_outbox(st):
-    keep = []
-    for msg in st["outbox"]:
+def flush_outbox():
+    """Retry the outbox without holding the state lock over the network: copy the entries out, send, then
+    remove the ones that were sent or dropped (a crash in between can only repeat a message, not lose it)."""
+    with locked() as st:
+        for m in st["outbox"]:
+            m.setdefault("id", uuid.uuid4().hex)
+        pending = [dict(m) for m in st["outbox"]]
+    if not pending:
+        return
+    done, updated = set(), {}
+    for msg in pending:
         if now() - msg.get("since", 0) > OUTBOX_MAX_AGE:
             log(f"dropping a {msg.get('kind')} message undelivered for a day: {msg.get('error')}")
-        elif not send_msg(msg):
-            keep.append(msg)
-    st["outbox"] = keep
+            done.add(msg["id"])
+        elif send_msg(msg) == "retry":
+            updated[msg["id"]] = msg
+        else:
+            done.add(msg["id"])
+    with locked() as st:
+        st["outbox"] = [updated.get(m["id"], m) for m in st["outbox"] if m["id"] not in done]
 
 
 def permalink(task):
@@ -555,17 +578,22 @@ def read_text(a, field):
     """The text from --file (written by July's file tool; removed after reading when it is in INPUT_DIR),
     else the arguments. Never a heredoc: a line in the text could end it and run as shell."""
     if a.file:
+        base = os.path.realpath(INPUT_DIR)
         path = os.path.abspath(os.path.expanduser(a.file))
+        folder = os.path.realpath(os.path.dirname(path))  # the last component itself is opened with O_NOFOLLOW
+        if os.path.commonpath([folder, base]) != base:
+            raise Fail(f"--file must be inside {INPUT_DIR.replace(HOME, '~')}")
+        path = os.path.join(folder, os.path.basename(path))
         try:
-            info = os.lstat(path)
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
-            raise Fail(f"no file {a.file}")
-        if not os.path.isfile(path) or os.path.islink(path) or info.st_uid != os.getuid() or info.st_size > 65536:
-            raise Fail("--file must be your own regular file (not a link), at most 64 KB")
-        with open(path, encoding="utf-8", errors="replace") as f:
+            raise Fail(f"can't open {a.file} (missing, or a link)")
+        with os.fdopen(fd, encoding="utf-8", errors="replace") as f:
+            info = os.fstat(f.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_size > 65536:
+                raise Fail("--file must be your own regular file (not a link), at most 64 KB")
             text = f.read().strip()
-        if os.path.dirname(os.path.realpath(path)) == os.path.realpath(INPUT_DIR):
-            os.remove(path)
+        os.remove(path)
         return text
     return " ".join(getattr(a, field) or []).strip()
 
@@ -826,6 +854,8 @@ def cmd_owner_go(a):
         msgs += [m for m in r.get("messages", []) if isinstance(m, dict)]
         cursor = (r.get("response_metadata") or {}).get("next_cursor")
         if not cursor:
+            if r.get("has_more"):  # more replies but no way to fetch them: incomplete
+                raise Fail("Slack says the thread has more replies but gave no cursor; can't verify a go (none assumed)")
             break
     else:
         raise Fail(f"the thread has more than {MAX_PAGES} pages of replies; can't verify a go (none assumed)")
@@ -935,13 +965,13 @@ def remove_orphans(st):
 
 
 def cmd_monitor(a):
+    flush_outbox()
     with locked() as st:
         try:
             hc_json("ls")
         except Fail as e:
             log(f"monitor: hc unavailable, skipping this cycle: {e}")
             return
-        flush_outbox(st)
         for t in list(st["tasks"].values()):
             try:
                 if t["state"] == "running":
@@ -1003,6 +1033,7 @@ def main(argv=None, config=None):
         setattr(a, field, [*getattr(a, field), *extra])
     try:
         os.makedirs(INPUT_DIR, mode=0o700, exist_ok=True)  # where July's file tool writes task text
+        os.chmod(INPUT_DIR, 0o700)
         load_config(config or CONFIG_PATH)
         if a.cmd in ("post", "ask", "done"):
             cmd_post(a, a.cmd)
