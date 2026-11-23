@@ -239,7 +239,9 @@ let
     (eq [ "slack" "unauthorized_dm_behavior" ] "ignore")
     (eq [ "slack" "require_mention" ] true)
     (eq [ "slack" "free_response_channels" ] "")
-    (eq [ "approvals" "mode" ] "manual")
+    # The owner chose smart approvals (2026-11-23): an auxiliary model approves low-risk
+    # commands (code exploration), denies clearly dangerous ones and escalates the rest to the owner.
+    (eq [ "approvals" "mode" ] "smart")
     (eq [ "approvals" "cron_mode" ] "deny")
     (eq [ "approvals" "single_query_mode" ] "deny")
     (eq [ "approvals" "unattended_mode" ] "deny")
@@ -253,6 +255,7 @@ let
     (eq [ "auxiliary" task "model" ] model)
   ]) {
     title_generation = haiku;
+    approval = sonnet;
     compression = sonnet;
     vision = sonnet;
     background_review = sonnet;

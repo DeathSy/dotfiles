@@ -522,7 +522,10 @@ default plugins.
   for Slack, terminal and files included, on the local backend as the owner's
   macOS user, by the owner's choice. A chat turn can therefore read the
   Keychain items above, change files and send data anywhere; approvals
-  (`approvals.mode: manual`) are a heuristic for dangerous commands, not a
+  (`approvals.mode: smart`, the owner's choice on 2026-11-23 so colleagues'
+  code exploration doesn't wait for him: the `auxiliary.approval` model, Sonnet
+  via the gateway, approves low-risk commands, denies clearly dangerous ones and
+  escalates the rest to the owner) are a heuristic for dangerous commands, not a
   boundary. The guards that remain: only `SLACK_ALLOWED_USERS` (the owner and
   the listed colleagues) is answered and other DMs are ignored; cron jobs never
   auto-approve; chat is offered only the `personal` MCP server, not the
