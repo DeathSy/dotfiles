@@ -829,6 +829,33 @@ default plugins.
     terminals. Orphans are labelled task terminals whose launch id no task
     knows, removed after 10 minutes with their helpers.
     Git worktrees and branches the session made are left alone.
+  - **Tab in the Herdr app (owner's choice, 2026-11-23):** each task shows up
+    as a new tab, named after the task, in its project's workspace in the
+    owner's Herdr app on garage. The app keeps its layout in the core as the
+    document `herdr-app` (`doc.get`/`doc.set` over `hc connect`; on disk in
+    `~/.local/state/herdr-core/default/docs.json`): spaces, then tabs, then a
+    tree of blocks that each name a terminal. Parent terminals play no part,
+    so the task stays independent of the owner's sessions.
+    - When the session is running, `july-task` finds the project's space, the
+      one with a terminal labelled `where="<project> / …"` or running under
+      the project root. The space's own `folder` is stale and not used. It
+      appends one tab with one block for the task's terminal, and labels the
+      terminal like the app does: `herdr.space`, `herdr.tab`, `where="<project>
+      / <task id>"`, which is also what the app then writes. The tab id goes
+      into the task state.
+    - Writes are version-checked: when the app wrote in between, the CLI reads
+      again and retries (5 times).
+    - It never creates spaces and never touches other tabs or blocks. If there
+      is no matching space, or the document's shape is unexpected, it writes
+      nothing, logs it, and sets only the `where` label.
+    - Cleanup (stop, or the monitor) removes exactly that tab, and only while
+      it still holds just the task's block and terminal. A tab changed by hand
+      is left alone, with a log line.
+    - The monitor also removes orphan tabs: tabs named like a task id that no
+      task knows, with a single block whose terminal is gone.
+    - Checked live on 2026-11-23 with a pcs task: the tab appeared in the pcs
+      workspace, the app relabelled the terminal `pcs / <task id>`, and after
+      the stop the pcs space was identical to before.
   - **Tests:** `/usr/bin/python3 -I hermes/inbox-monitor/tests/test_july_task.py`
     (stdlib unittest, a fake `hc` in `tests/fake_hc.py`; no network,
     terminals or Keychain). The harness `tests/run_cli.py` loads the module

@@ -410,10 +410,208 @@ def remove_terminals(task):
 
 
 def cleanup(task):
-    """remove_terminals, remembering failures for the monitor's retry."""
+    """remove_terminals and the task's tab in the Herdr app, remembering failures for the monitor's retry."""
+    tab_ok = remove_tab(task)
     gone, failed = remove_terminals(task)
-    task["cleanup_pending"] = bool(failed)
+    task["cleanup_pending"] = bool(failed) or not tab_ok
     return gone, failed
+
+
+# ── the task's tab in the Herdr app (its layout doc "herdr-app" in the core) ──
+# The owner's Herdr app (on another Mac) keeps its workspaces in the core as the opaque document
+# "herdr-app": {spaces: [{id, name, folder, tabs: [{id, name, root: {type: "row", id, children: [{type:
+# "block", id, content: {terminal}}]}}]}]}. A task gets ONE NEW TAB in the space of its project, holding only
+# its terminal, and loses it again at cleanup. Only that tab is ever added or removed; spaces are never
+# created and other tabs and blocks never touched. Writes are version-checked (doc.set fails with
+# "conflict" when the app wrote in between) and retried on a fresh read. Any shape this code doesn't expect
+# means: do nothing, log it, and fall back to the `where` label alone.
+
+APP_DOC = "herdr-app"
+DOC_RETRIES = 5
+TABS = True  # the owner's choice (2026-11-23): task tabs in the Herdr app
+
+
+class DocConflict(Fail):
+    pass
+
+
+def doc_call(method, params):
+    """One JSON-RPC call over `hc connect` (hello first). Raises HcDown if hc is unreachable, DocConflict on a
+    version conflict, Fail on any other error."""
+    lines = [json.dumps({"jsonrpc": "2.0", "id": 1, "method": "hello", "params": {}}),
+             json.dumps({"jsonrpc": "2.0", "id": 2, "method": method, "params": params})]
+    try:
+        p = subprocess.run([HC, "connect"], input="\n".join(lines) + "\n", capture_output=True, text=True,
+                           timeout=30, env={k: v for k, v in os.environ.items() if not k.startswith("HC_")})
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise HcDown(f"hc connect: {e.__class__.__name__}")
+    for line in p.stdout.splitlines():
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get("id") == 2:
+            err = d.get("error")
+            if err:
+                kind = (err.get("data") or {}).get("kind") if isinstance(err, dict) else None
+                if kind == "conflict":
+                    raise DocConflict(f"{method}: conflict")
+                raise Fail(f"{method}: {kind or err}")
+            return d.get("result") or {}
+    raise HcDown(f"hc connect: no answer to {method} (exit {p.returncode})")
+
+
+def doc_shape_ok(value):
+    """The parts of the app's document this code reads or writes look as expected."""
+    if not isinstance(value, dict) or not isinstance(value.get("spaces"), list):
+        return False
+    for sp in value["spaces"]:
+        if not isinstance(sp, dict) or not isinstance(sp.get("id"), str) or not isinstance(sp.get("tabs"), list):
+            return False
+        for tb in sp["tabs"]:
+            if not isinstance(tb, dict) or not isinstance(tb.get("id"), str) or not isinstance(tb.get("root"), dict):
+                return False
+    return True
+
+
+def blocks(node):
+    """The terminal blocks in a tab's layout tree."""
+    if not isinstance(node, dict):
+        return []
+    if node.get("type") == "block":
+        return [node]
+    return [b for c in node.get("children") or [] for b in blocks(c)]
+
+
+def find_space(value, project):
+    """The space showing the project: one of its terminals carries the app's `where` label "<project> / …",
+    or runs in a folder under the project's root. (The space's own `folder` is stale: it is where the space
+    was opened.) Returns (space, display name) or (None, None)."""
+    root = os.path.realpath(os.path.expanduser(CFG["projects"][project]))
+    by_where, by_cwd = None, None
+    for sp in value["spaces"]:
+        for tb in sp["tabs"]:
+            for b in blocks(tb["root"]):
+                addr = (b.get("content") or {}).get("terminal")
+                g = hc_get(addr) if isinstance(addr, str) and re.fullmatch(r"t[0-9a-z]+", addr) else None
+                if not g or g.get("state") != "live":
+                    continue
+                where = ((g.get("labels") or {}).get("where") or "").split(" / ")[0]
+                cwd = (g.get("foreground") or {}).get("cwd") or g.get("cwd") or ""
+                if where == project and not by_where:
+                    by_where = (sp, where)
+                elif cwd and not by_cwd and os.path.commonpath([os.path.realpath(cwd), root]) == root:
+                    by_cwd = (sp, where or project)
+    return by_where or by_cwd or (None, None)
+
+
+def edit_doc(change):
+    """Read the app's document, apply change(value) -> new value or None (no write), write it back with the
+    version it was read at; on a conflict read again and retry. Returns change's last result or None."""
+    for _ in range(DOC_RETRIES):
+        cur = doc_call("doc.get", {"name": APP_DOC})
+        value = cur.get("value")
+        if not doc_shape_ok(value):
+            log(f"Herdr app document has an unexpected shape; left alone")
+            return None
+        new = change(json.loads(json.dumps(value)))
+        if new is None:
+            return None
+        try:
+            doc_call("doc.set", {"name": APP_DOC, "value": new, "version": cur.get("version", 0)})
+            return new
+        except DocConflict:
+            continue
+    log(f"Herdr app document kept changing; gave up after {DOC_RETRIES} tries")
+    return None
+
+
+def add_tab(task):
+    """A new tab for the task in its project's space, plus the labels the app sets; falls back to the `where`
+    label alone when there is no such space or anything is off. Best effort: never fails the task."""
+    where = f"{task['project']} / {task['id']}"
+    if TABS and task.get("address") and not task.get("ui_tab"):
+        tab_id, block_id = "tb" + secrets.token_hex(16), "pd" + secrets.token_hex(16)
+        found = {}
+
+        def change(value):
+            sp, display = find_space(value, task["project"])
+            if not sp:
+                return None
+            sp["tabs"].append({"id": tab_id, "name": task["id"], "root": {
+                "type": "row", "id": tab_id, "children": [
+                    {"type": "block", "id": block_id, "content": {"terminal": task["address"]}}]}})
+            found.update(space=sp["id"], where=f"{display} / {task['id']}")  # the app's form: space / tab name
+            return value
+        try:
+            if edit_doc(change):
+                task["ui_tab"] = {"space": found["space"], "tab": tab_id, "block": block_id}
+                where = found["where"]
+            else:
+                log(f"{task['id']}: no Herdr app tab (no {task['project']} space, or the document was off)")
+        except Fail as e:
+            log(f"{task['id']}: Herdr app tab not added: {e}")
+    labels = [f"where={where}"]
+    if task.get("ui_tab"):
+        labels += [f"herdr.space={task['ui_tab']['space']}", f"herdr.tab={task['ui_tab']['tab']}"]
+    try:
+        hc("label", task["address"], *labels)
+    except Fail as e:
+        log(f"{task['id']}: labels not set: {e}")
+
+
+def remove_tab(task):
+    """Remove the task's own tab: only the recorded tab id, and only while it still holds just the task's
+    block and terminal. Returns False only when it should be retried (hc or the core unavailable)."""
+    ui = task.get("ui_tab")
+    if not ui:
+        return True
+
+    def change(value):
+        for sp in value["spaces"]:
+            for tb in list(sp["tabs"]):
+                if tb.get("id") != ui["tab"]:
+                    continue
+                bs = blocks(tb["root"])
+                if len(bs) == 1 and bs[0].get("id") == ui["block"] and \
+                        (bs[0].get("content") or {}).get("terminal") == task.get("address"):
+                    sp["tabs"].remove(tb)
+                    return value
+                log(f"{task['id']}: its Herdr app tab was changed by hand; left alone")
+                return None
+        return None  # already gone
+    try:
+        edit_doc(change)
+    except HcDown as e:
+        log(f"{task['id']}: Herdr app tab not removed yet: {e}")
+        return False
+    except Fail as e:
+        log(f"{task['id']}: Herdr app tab not removed: {e}")
+    task.pop("ui_tab", None)
+    return True
+
+
+def remove_orphan_tabs(st):
+    """Tabs named like a task that no task knows and whose terminal is gone (a launcher that died between
+    adding the tab and saving it). Only such tabs with a single block."""
+    known = set(st["tasks"])
+
+    def change(value):
+        changed = False
+        for sp in value["spaces"]:
+            for tb in list(sp["tabs"]):
+                name, bs = tb.get("name") or "", blocks(tb["root"])
+                if not task_name_ok(name) or name in known or len(bs) != 1:
+                    continue
+                addr = (bs[0].get("content") or {}).get("terminal")
+                g = hc_get(addr) if isinstance(addr, str) and re.fullmatch(r"t[0-9a-z]+", addr) else None
+                if g and g.get("state") == "live":
+                    continue
+                sp["tabs"].remove(tb)
+                changed = True
+                log(f"removed orphan Herdr app tab {name}")
+        return value if changed else None
+    edit_doc(change)
 
 
 # ── the Claude transcript (exact replies, read incrementally) ─────────────────
@@ -673,6 +871,7 @@ def cmd_start(a):
             cur["state"] = "running"
             count = len(running(st))
             announce(st, cur)
+            add_tab(cur)
         elif state not in ("running",) and cur:  # stopped or failed meanwhile: don't leave the session behind
             cleanup(cur)
     if state != "starting":
@@ -1008,6 +1207,7 @@ def check_starting(st, t):
     if root_ok(t, g) and g.get("state") == "live" and transcript(t):
         t["state"] = "running"
         announce(st, t)
+        add_tab(t)
         return
     cleanup(t)
     finish(st, t, "failed", f"`{t['id']}` didn't finish starting, so I removed it. Try again.")
@@ -1056,6 +1256,8 @@ def cmd_monitor(a):
                 log(f"monitor: {t.get('id')}: {e.__class__.__name__}: {e}")
         try:
             remove_orphans(st)
+            if TABS:
+                remove_orphan_tabs(st)
         except Exception as e:
             log(f"monitor: orphans: {e.__class__.__name__}: {e}")
 

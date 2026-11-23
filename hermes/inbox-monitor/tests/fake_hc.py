@@ -7,7 +7,9 @@ the real hc. FAKE_HC_DOWN=1 makes every command fail as if the core were unavail
 it copies $FAKE_HC_SNAPSHOT_FROM to $FAKE_HC_SNAPSHOT_TO (to see the task state during a start).
 FAKE_HC_RUN_STATUS sets a new claude terminal's status (e.g. blocked), FAKE_HC_SCREENS (a JSON list) gives
 successive `read` screens, FAKE_HC_KEYS_UNBLOCK=1 makes `enter` (after a `down`) clear a blocked status, and FAKE_HC_STUCK_KEYS=1
-makes `down` move nothing.
+makes `down` move nothing. `connect` serves doc.get/doc.set from state["docs"] (version-checked);
+state["doc_conflicts"] = n makes the next n doc.set calls lose a race to "the app" (which appends tab
+tbAPPWROTE to the first space).
 """
 import json, os, re, shutil, sys, time
 
@@ -51,6 +53,37 @@ def main():
     if os.environ.get("FAKE_HC_DOWN") == "1":
         out({"error": {"kind": "unavailable", "message": "core restarting"}}, 1)
     s = load()
+    if cmd == "connect":  # JSON-RPC lines: hello, doc.get, doc.set (version-checked)
+        docs = s.setdefault("docs", {})
+        for line in sys.stdin:
+            req = json.loads(line)
+            m, prm, rid = req["method"], req.get("params") or {}, req.get("id")
+            if m == "hello":
+                res = {"generation": 1}
+            elif m == "doc.get":
+                d = docs.get(prm["name"], {"value": None, "version": 0})
+                res = {"value": d["value"], "version": d["version"]}
+            elif m == "doc.set":
+                d = docs.setdefault(prm["name"], {"value": None, "version": 0})
+                if s.get("doc_conflicts", 0) > 0:  # the app writes in between
+                    s["doc_conflicts"] -= 1
+                    if isinstance(d["value"], dict) and d["value"].get("spaces"):
+                        d["value"]["spaces"][0]["tabs"].append({"id": "tbAPPWROTE", "name": "", "root": {
+                            "type": "row", "id": "tbAPPWROTE", "children": []}})
+                    d["version"] += 1
+                if prm["version"] != d["version"]:
+                    print(json.dumps({"jsonrpc": "2.0", "id": rid, "error": {
+                        "code": -32000, "message": "conflict", "data": {"kind": "conflict"}}}))
+                    continue
+                d["value"], d["version"] = prm["value"], d["version"] + 1
+                s.setdefault("doc_writes", 0)
+                s["doc_writes"] += 1
+                res = {"version": d["version"]}
+            else:
+                res = {}
+            print(json.dumps({"jsonrpc": "2.0", "id": rid, "result": res}))
+        save(s)
+        sys.exit(0)
     if cmd == "run":
         opts, i = {"labels": {}}, 0
         while i < len(rest) and rest[i] != "--":
@@ -106,6 +139,13 @@ def main():
         s["terminals"].remove(t)
     elif cmd == "send":
         t["inbox"].append(rest[-1])
+    elif cmd == "label":
+        for kv in rest[1:]:
+            k, v = kv.split("=", 1)
+            if v:
+                t["labels"][k] = v
+            else:
+                t["labels"].pop(k, None)
     elif cmd == "keys":
         t["keys"].append(rest[1:])
         if "down" in rest[1:] and os.environ.get("FAKE_HC_STUCK_KEYS") != "1":

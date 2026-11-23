@@ -247,7 +247,8 @@ class IdentityTests(Base):
         self.assertEqual(rc, 0, body)
         t = list(self.tasks().values())[0]
         term = self.terminal(body["terminal"])
-        self.assertEqual(term["labels"], {"july-task": "1", "july-launch": t["launch"]})
+        self.assertEqual(term["labels"], {"july-task": "1", "july-launch": t["launch"],
+                                          "where": f"pcs / {t['id']}"})  # no app document here: label only
         self.assertEqual(term["argv"][0], CLAUDE)  # absolute, never an hc template named claude
         self.assertIn(f"--label july-launch={t['launch']}", term["argv"][-1])
 
@@ -616,6 +617,130 @@ class StartDialogTests(Base):
         self.assertFalse(m.trust_screen(" ❯ 1. Yes, I trust this folder\n   2. No, exit"))
         self.assertTrue(m.yes_highlighted("   No, exit\n ❯ Yes, I trust this folder"))
         self.assertFalse(m.yes_highlighted(TRUST_VARIANT))
+
+
+class AppTabTests(Base):
+    """The task's tab in the Herdr app's layout document ("herdr-app"), against recorded-shape documents."""
+
+    def setUp(self):
+        super().setUp()
+        self.t_studio = self.add_terminal(None, argv=["/bin/zsh"], app=None, labels={
+            "herdr.space": "spSTUDIO", "herdr.tab": "tbSTUDIO1", "where": "studio / 1"})
+        self.t_pcs = self.add_terminal(None, argv=["/bin/zsh"], app=None, labels={
+            "herdr.space": "spPCS", "herdr.tab": "tbPCS1", "where": "pcs / 1"})
+        self.doc = {"spaces": [
+            {"id": "spSTUDIO", "name": "studio", "folder": "/Users/x/studio", "tabs": [
+                {"id": "tbSTUDIO1", "name": "", "root": {"type": "row", "id": "tbSTUDIO1", "children": [
+                    {"type": "block", "id": "pdS1", "size": {"weight": 0.5}, "content": {"terminal": self.t_studio}}]}}]},
+            {"id": "spPCS", "name": "", "folder": "/Users/x/stale-folder", "tabs": [
+                {"id": "tbPCS1", "name": "", "root": {"type": "row", "id": "tbPCS1", "children": [
+                    {"type": "block", "id": "pdP1", "content": {"terminal": self.t_pcs}}]}}]}]}
+        self.set_doc(self.doc)
+
+    def set_doc(self, value, version=7, conflicts=0):
+        s = self.hc()
+        s["docs"] = {"herdr-app": {"value": value, "version": version}}
+        s["doc_conflicts"] = conflicts
+        wj(self.hc_state, s)
+
+    def app_doc(self):
+        return self.hc()["docs"]["herdr-app"]
+
+    def start(self):
+        rc, body, err = self.run_cli("start", "pcs", "--", "read the README", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
+        return body["terminal"], list(self.tasks().values())[0], err
+
+    def test_start_adds_one_tab_in_the_projects_space(self):
+        addr, task, _ = self.start()
+        doc = self.app_doc()["value"]
+        self.assertEqual(doc["spaces"][0], self.doc["spaces"][0])  # other spaces untouched
+        tabs = doc["spaces"][1]["tabs"]
+        self.assertEqual(tabs[0], self.doc["spaces"][1]["tabs"][0])  # the user's own tab untouched
+        self.assertEqual(len(tabs), 2)
+        new = tabs[1]
+        self.assertEqual((new["name"], new["root"]["type"], new["root"]["id"]), (task["id"], "row", new["id"]))
+        self.assertEqual([b["content"] for b in new["root"]["children"]], [{"terminal": addr}])
+        self.assertEqual(task["ui_tab"], {"space": "spPCS", "tab": new["id"], "block": new["root"]["children"][0]["id"]})
+        labels = self.terminal(addr)["labels"]
+        self.assertEqual((labels["herdr.space"], labels["herdr.tab"], labels["where"]), ("spPCS", new["id"], f"pcs / {task['id']}"))
+        self.assertEqual((labels["july-task"], labels["july-launch"]), ("1", task["launch"]))  # ownership labels kept
+
+    def test_space_found_by_cwd_when_no_where_label(self):
+        s = self.hc()
+        t = next(x for x in s["terminals"] if x["address"] == self.t_pcs)
+        t["labels"].pop("where")
+        t["cwd"] = self.repo
+        wj(self.hc_state, s)
+        addr, task, _ = self.start()
+        self.assertEqual(task["ui_tab"]["space"], "spPCS")
+
+    def test_version_conflict_is_retried_and_the_apps_write_kept(self):
+        self.set_doc(self.doc, conflicts=2)
+        addr, task, _ = self.start()
+        doc = self.app_doc()
+        self.assertEqual(self.hc()["doc_writes"], 1)
+        names = [tb["id"] for sp in doc["value"]["spaces"] for tb in sp["tabs"]]
+        self.assertEqual(names.count("tbAPPWROTE"), 2)  # the app's two concurrent writes survive
+        self.assertIn(task["ui_tab"]["tab"], names)
+
+    def test_endless_conflicts_fall_back_to_the_label(self):
+        self.set_doc(self.doc, conflicts=50)
+        addr, task, err = self.start()
+        self.assertNotIn("ui_tab", task)
+        self.assertNotIn("doc_writes", self.hc())
+        self.assertEqual(self.terminal(addr)["labels"]["where"], f"pcs / {task['id']}")
+        self.assertNotIn("herdr.space", self.terminal(addr)["labels"])
+        self.assertIn("gave up", err)
+
+    def test_unexpected_shapes_are_left_alone(self):
+        for bad in ({"spaces": {"not": "a list"}}, {"spaces": [{"id": "spX", "tabs": [{"id": "tbX"}]}]}, None, []):
+            self.set_doc(bad)
+            rc, body, err = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER},
+                                         extra={"FAKE_HC_STATE": self.hc_state})
+            self.assertEqual(rc, 0, body)
+            self.assertEqual(self.app_doc()["value"], bad)
+            self.assertNotIn("doc_writes", self.hc())
+            self.run_cli("stop", slack={"actor": OWNER})
+
+    def test_no_matching_space_means_label_only(self):
+        doc = json.loads(json.dumps(self.doc))
+        del doc["spaces"][1]
+        self.set_doc(doc)
+        addr, task, _ = self.start()
+        self.assertEqual(self.app_doc()["value"], doc)
+        self.assertEqual(self.terminal(addr)["labels"]["where"], f"pcs / {task['id']}")
+
+    def test_stop_removes_only_its_own_tab(self):
+        addr, task, _ = self.start()
+        rc, body, _ = self.run_cli("stop", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
+        self.assertEqual(self.app_doc()["value"], self.doc)
+
+    def test_a_tab_changed_by_hand_is_left_alone(self):
+        addr, task, _ = self.start()
+        s = self.hc()
+        tab = s["docs"]["herdr-app"]["value"]["spaces"][1]["tabs"][1]
+        tab["root"]["children"].append({"type": "block", "id": "pdUSER", "content": {"terminal": self.t_pcs}})
+        wj(self.hc_state, s)
+        rc, body, err = self.run_cli("stop", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
+        self.assertEqual(self.app_doc()["value"]["spaces"][1]["tabs"][1]["id"], tab["id"])
+        self.assertIn("changed by hand", err)
+
+    def test_monitor_removes_orphan_task_tabs_only(self):
+        live = self.add_root("july-pcs-aaa1")
+        self.add_task(tid="july-pcs-aaa1", address=live)
+        doc = json.loads(json.dumps(self.doc))
+        mk = lambda name, term: {"id": "tb" + name, "name": name, "root": {"type": "row", "id": "tb" + name, "children": [
+            {"type": "block", "id": "pd" + name, "content": {"terminal": term}}]}}
+        doc["spaces"][1]["tabs"] += [mk("july-pcs-dead", "t999"), mk("july-pcs-aaa1", live),
+                                    mk("july-pcs-bbb2", self.t_pcs), mk("my-notes", "t998")]
+        self.set_doc(doc)
+        rc, body, err = self.run_cli("monitor")
+        self.assertEqual(rc, 0, err)
+        names = [tb["name"] for tb in self.app_doc()["value"]["spaces"][1]["tabs"]]
+        self.assertEqual(names, ["", "july-pcs-aaa1", "july-pcs-bbb2", "my-notes"])
 
 
 class RelayTests(Base):
