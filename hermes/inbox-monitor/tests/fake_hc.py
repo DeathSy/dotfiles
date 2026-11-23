@@ -69,6 +69,11 @@ def main():
         s["next"] += 1
         s["terminals"].append(t)
         save(s)
+        if os.environ.get("FAKE_HC_STOP_ON_RUN"):  # a `july-task stop` landing while hc run starts it
+            st = rj(os.environ["FAKE_HC_STOP_ON_RUN"])
+            for task in st["tasks"].values():
+                task["state"] = "stopped"
+            wj(os.environ["FAKE_HC_STOP_ON_RUN"], st)
         if "--session-id" in argv and os.environ.get("FAKE_HC_TRANSCRIPTS") and \
                 os.environ.get("FAKE_HC_NO_TRANSCRIPT") != "1":
             sid = argv[argv.index("--session-id") + 1]

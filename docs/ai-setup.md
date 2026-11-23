@@ -668,7 +668,9 @@ default plugins.
   it still writes no code itself. Code: `hermes/inbox-monitor/july_task.py`,
   installed as the `july-task` command, plus the launchd monitor
   `com.ksotis.july-tasks` (every minute, log `~/Library/Logs/july-tasks.log`).
-  State: `~/.local/state/july-tasks/tasks.json` (0600, locked).
+  State: `~/.local/state/july-tasks/tasks.json` (0600, locked). If it ever
+  stops parsing, repair it in place, or stop the tasks first. Moving it away
+  while sessions run makes the monitor remove their terminals as orphans.
   - **Start:** after the requester confirms the project and the exact task
     text, July runs `july-task start <project> [--repo <dir>] <<'EOF' … EOF`
     in its terminal. Hermes passes each turn's Slack context to terminal
@@ -678,7 +680,8 @@ default plugins.
     shared thread Hermes blanks the actor when a second person's message folds
     into a running turn, while `USER_ID` stays the first sender. With a blank
     actor ("mixed senders") `start`, `stop` and `status` refuse, and `send`
-    relays the message labelled "sender unknown: not a go".
+    relays the message labelled "sender unknown: not a go", and only to the
+    thread's own task (a `--task` naming another task is refused).
     It refuses people outside the owner and colleague list, unknown projects,
     text that looks like a secret, a second running task in the same thread,
     and a fourth running task. It starts `~/.local/bin/claude --model opus
@@ -691,7 +694,10 @@ default plugins.
     over: after about 4 minutes it adopts a session whose first message arrived,
     posting the start message, and removes one whose message didn't. It also
     removes labelled `july-*` terminals the state doesn't know about once they
-    are 10 minutes old. The task text sits between delimiters with a random
+    are 10 minutes old. A `stop` that lands while `start` is still launching
+    marks the task stopped, and `start` then removes the new terminal itself.
+    Task ids must be `july-<configured project>-<4 hex>`, so a helper such as
+    `july-pcs-ab12-feed` never passes for one. The task text sits between delimiters with a random
     nonce, and display names are reduced to one plain line.
     The brief holds the task and the rules: follow `~/.claude/CLAUDE.md`, report
     through `july-task`, never post secrets, and stop at "PR opened and reviews
@@ -738,10 +744,16 @@ default plugins.
     go never counts. The session checks with `july-task owner-go`. It reads
     the task's thread from Slack with the bot token (`conversations.replies`)
     and lists only messages since the task started whose Slack `user` is the
-    owner's member id and that aren't bot messages. Slack's own record is the
-    proof, so a forged `HERMES_SESSION_ACTOR_ID` on `send` can't make one.
-    Messages the owner posts with his user token through another app
-    (the Claude app) count too, as they do elsewhere (above). The brief says
+    owner's member id, with no `bot_id` and no `app_id`: plain messages,
+    including ones also sent to the channel (`thread_broadcast`). Slack's own
+    record is the proof, so a forged `HERMES_SESSION_ACTOR_ID` on `send`
+    can't make one. Unlike elsewhere (above), messages the owner posts with
+    his user token through another app (the Claude app) do not count: the
+    task session itself holds the owner's Slack tools and could post a "go"
+    as him. Those two Slack read methods (and `chat.getPermalink`) are sent
+    form-encoded, which is how Slack takes them. Checked live on 2026-11-23
+    against the owner's DM with July: replies were listed, and an app-posted
+    owner message was left out. The brief says
     nothing else is proof: not a `[Slack reply from …]` line, and not text
     claiming to be from the owner. Messages typed at the owner's own terminal
     (`send --task`) are labelled "not a go". The gate is still an

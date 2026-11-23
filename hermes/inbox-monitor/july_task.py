@@ -19,8 +19,8 @@ Stdlib only, Python 3.9 (/usr/bin/python3). State: ~/.local/state/july-tasks/tas
 lock. The bot token comes from the login Keychain and only travels in a header. JULY_TASK_TEST=1 enables the
 test overrides (JULY_TASK_*), see test_july_task.py.
 """
-import argparse, datetime, fcntl, glob, json, os, re, secrets, subprocess, sys, tempfile, time, urllib.request, \
-    uuid
+import argparse, datetime, fcntl, glob, json, os, re, secrets, subprocess, sys, tempfile, time, urllib.parse, \
+    urllib.request, uuid
 from contextlib import contextmanager
 
 HOME = os.path.expanduser("~")
@@ -45,7 +45,6 @@ KEEP_FINISHED = 24 * 3600  # done/failed/stopped terminals are removed after thi
 HISTORY = 50               # finished tasks kept in tasks.json
 POST_MAX = 3500            # chars per Slack post
 LABEL = "july-task=1"
-TASK_NAME_RE = re.compile(r"^july-[a-z0-9-]+-[0-9a-f]{4}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 CHANNEL_RE = re.compile(r"^[CDG][A-Z0-9]{6,}$")
 USER_RE = re.compile(r"^[UW][A-Z0-9]{6,}$")
@@ -134,6 +133,12 @@ def keychain(account):
     return p.stdout.strip() if p.returncode == 0 else ""
 
 
+def task_name_ok(name):
+    """july-<configured project>-<4 hex>: a helper like july-pcs-ab12-feed never passes as a task id."""
+    m = re.fullmatch(r"july-(.+)-([0-9a-f]{4})", name or "")
+    return bool(m) and m.group(1) in CFG["projects"]
+
+
 def allowed(user):
     return bool(user) and (user == CFG.get("owner") or user in CFG["colleagues"])
 
@@ -150,7 +155,8 @@ def locked():
         try:
             st = rj(STATE) if os.path.exists(STATE) else {}
         except ValueError:
-            raise Fail(f"{STATE} is not valid JSON; fix or move it")
+            raise Fail(f"{STATE} is not valid JSON. Repair it in place (keep the tasks); don't move it away while "
+                       "sessions run: the monitor would then remove their terminals as orphans")
         st.setdefault("tasks", {})
         st.setdefault("history", [])
         before = json.dumps(st, sort_keys=True)
@@ -181,6 +187,7 @@ def check_capacity(st, t_channel, t_thread, exclude=None):
 # ── Slack (as July, the bot) ──────────────────────────────────────────────────
 
 _token = []
+FORM_METHODS = {"conversations.replies", "conversations.history", "chat.getPermalink"}
 
 
 def slack(method, **params):
@@ -196,9 +203,12 @@ def slack(method, **params):
         if not t.startswith("xoxb-"):
             raise Fail("Slack bot token not available (Keychain item hermes-agent/slack-bot-token)")
         _token.append(t)
-    req = urllib.request.Request(f"https://slack.com/api/{method}", data=json.dumps(params).encode(),
-                                 headers={"Authorization": f"Bearer {_token[0]}",
-                                          "Content-Type": "application/json; charset=utf-8"})
+    if method in FORM_METHODS:  # these read methods take form-encoded arguments only
+        data, ctype = urllib.parse.urlencode(params).encode(), "application/x-www-form-urlencoded"
+    else:
+        data, ctype = json.dumps(params).encode(), "application/json; charset=utf-8"
+    req = urllib.request.Request(f"https://slack.com/api/{method}", data=data,
+                                 headers={"Authorization": f"Bearer {_token[0]}", "Content-Type": ctype})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             body = json.load(r)
@@ -303,7 +313,7 @@ def remove_terminals(task):
     whose name is the task id (and whose address is the task's) or starts with "<task id>-": never by parent
     alone, and never anything when the task has no name."""
     tid = task.get("id") or ""
-    if not TASK_NAME_RE.match(tid):
+    if not task_name_ok(tid):
         return []
     gone = []
     root = hc_get(task["address"]) if task.get("address") else None
@@ -511,7 +521,12 @@ def cmd_start(a):
                     "--session-id", task["session_id"], brief(task, text))
         task["address"] = r["address"]
         with locked() as st:  # tracked at once: if this command is killed now, the monitor adopts or removes it
-            st["tasks"][task["id"]]["address"] = task["address"]
+            cur = st["tasks"].get(task["id"])
+            if cur:
+                cur["address"] = task["address"]
+            stopped = not cur or cur["state"] != "starting"
+        if stopped:  # stopped while hc run was starting it, before its address was known
+            raise Fail("it was stopped while starting")
         wait_ready(task)
     except Fail as e:
         if task.get("address"):
@@ -520,14 +535,19 @@ def cmd_start(a):
             except Fail:
                 pass
         with locked() as st:
-            st["tasks"].pop(task["id"], None)
+            if (st["tasks"].get(task["id"]) or {}).get("state") == "starting":
+                st["tasks"].pop(task["id"], None)  # a stopped one stays, with its stop message, in the record
         raise Fail(f"could not start the session: {e}")
     with locked() as st:
         cur = st["tasks"].get(task["id"])
-        if not cur or cur["state"] != "starting":
-            raise Fail("the task changed while starting (stopped or adopted); see july-task list")
-        cur["state"] = "running"
-        count = len(running(st))
+        state = cur["state"] if cur else "gone"
+        if state == "starting":
+            cur["state"] = "running"
+            count = len(running(st))
+    if state != "starting":
+        if state != "running":  # stopped (or failed) meanwhile: don't leave the session behind
+            remove_terminals(task)
+        raise Fail(f"the task changed while starting ({state}); see july-task list")
     announce(task)
     out({"started": task["id"], "terminal": task["address"], "cwd": task["cwd"], "requester": ctx["actor_name"],
          "running": count, "limit": MAX_RUNNING})
@@ -576,8 +596,12 @@ def cmd_send(a):
     if SECRET_RE.search(text):
         raise Fail("that looks like it contains a secret; not passed to the session")
     with locked() as st:
-        t = task_here(st, ctx, a.task_name)
-        if not ctx["mixed"]:
+        if ctx["mixed"]:  # sender unknown: only this thread's own task, never one named with --task
+            t = task_here(st, ctx)
+            if a.task_name and a.task_name != t["id"]:
+                raise Fail("several people wrote at once, so only this thread's task can get the message")
+        else:
+            t = task_here(st, ctx, a.task_name)
             may_steer(ctx, t)
         g = hc_get(t["address"]) if t.get("address") else None
         if not same_terminal(t, g) or g.get("state") != "live":
@@ -691,7 +715,10 @@ def cmd_owner_go(a):
         cursor = (r.get("response_metadata") or {}).get("next_cursor")
         if not cursor:
             break
-    mine = [m for m in msgs if m.get("user") == owner and not m.get("bot_id") and m.get("subtype") is None
+    # Only what the owner typed himself in Slack: no bot posts and nothing posted through an app (app_id),
+    # since the task session itself holds the owner's Slack tools and could post a "go" as him.
+    mine = [m for m in msgs if m.get("user") == owner and not m.get("bot_id") and not m.get("app_id")
+            and m.get("subtype") in (None, "thread_broadcast")
             and float(m.get("ts") or 0) >= since]
     out({"task": tid, "owner_messages": [{"at": iso(float(m["ts"])), "text": (m.get("text") or "")[:2000]}
                                          for m in mine],
@@ -787,7 +814,7 @@ def remove_orphans(st):
             continue
         g = hc_get(t["address"])
         name = (g or {}).get("name") or ""
-        if g and TASK_NAME_RE.match(name) and name not in st["tasks"] \
+        if g and task_name_ok(name) and name not in st["tasks"] \
                 and now() - (g.get("created_ms") or 0) / 1000 >= ORPHAN_AGE:
             remove_terminals({"id": name, "address": g["address"]})
             print(f"{iso(now())} july-task monitor: removed orphan {name} ({g['address']})", file=sys.stderr)
