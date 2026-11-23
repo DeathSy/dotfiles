@@ -525,7 +525,7 @@ default plugins.
   (`approvals.mode: smart`, the owner's choice on 2026-11-23 so colleagues'
   code exploration doesn't wait for him: the `auxiliary.approval` model, Sonnet
   via the gateway, approves low-risk commands, denies clearly dangerous ones and
-  escalates the rest to the owner) are a heuristic for dangerous commands, not a
+  escalates the rest to the owner; `approvals.smart_policy` makes it always escalate data egress, secret reads, installs, git push/merge and cluster, cloud or database changes) are a heuristic for dangerous commands, not a
   boundary. The guards that remain: only `SLACK_ALLOWED_USERS` (the owner and
   the listed colleagues) is answered and other DMs are ignored; cron jobs never
   auto-approve; chat is offered only the `personal` MCP server, not the

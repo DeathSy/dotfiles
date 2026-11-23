@@ -242,6 +242,13 @@ let
     # The owner chose smart approvals (2026-11-23): an auxiliary model approves low-risk
     # commands (code exploration), denies clearly dangerous ones and escalates the rest to the owner.
     (eq [ "approvals" "mode" ] "smart")
+    (eq [ "approvals" "smart_policy" ] (lib.concatStringsSep " " [
+      "Approve read-only code and docs exploration (reading, searching, listing, git log/diff/show, running tests)."
+      "ESCALATE, never approve: sending data off this machine (curl/wget with a body or upload, scp, rsync, nc, webhooks);"
+      "reading secrets (security find-generic-password, pass show, ~/.ssh, .env files, cloud credentials);"
+      "package or tool installs; git push, merge or tag; and anything that changes a cluster, cloud or database"
+      "(kubectl apply/delete/edit/scale/patch/exec/rollout, helm, terraform apply, aws/gcloud writes, SQL writes)."
+    ]))
     (eq [ "approvals" "cron_mode" ] "deny")
     (eq [ "approvals" "single_query_mode" ] "deny")
     (eq [ "approvals" "unattended_mode" ] "deny")
