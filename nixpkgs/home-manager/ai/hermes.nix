@@ -120,9 +120,21 @@ let
   # ~/.local/state/inbox-monitor (see hermes/inbox-monitor/README.md).
   inboxMonitor = pkgs.runCommand "inbox-monitor" { } ''
     mkdir -p $out
-    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,personal_mcp.py,im,reminders.js,docs_text.js,fetch_gmail.py,deadman.py} $out/
-    chmod 0555 $out/inbox_mcp.py $out/personal_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py
+    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,personal_mcp.py,im,reminders.js,docs_text.js,fetch_gmail.py,deadman.py,july_task.py} $out/
+    chmod 0555 $out/inbox_mcp.py $out/personal_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py $out/july_task.py
     chmod 0444 $out/reminders.js $out/docs_text.js
+  '';
+  # July's coding tasks in herdr (hermes/inbox-monitor/july_task.py): the CLI July
+  # runs from its terminal and the sessions post with, and its launchd monitor.
+  # The owner and colleague ids are already in the store (secrets helper, config check).
+  tasksEnabled = cfg.taskProjects != { };
+  taskConfig = pkgs.writeText "july-task.json" (builtins.toJSON {
+    projects = cfg.taskProjects;
+    owner = cfg.ownerSlackId;
+    colleagues = cfg.colleagueSlackIds;
+  });
+  julyTask = pkgs.writeShellScriptBin "july-task" ''
+    exec /usr/bin/python3 -I ${inboxMonitor}/july_task.py --config ${taskConfig} "$@"
   '';
   # The skill is generic; the owner's names, ids, lists and known not-tasks come
   # from config.json (0600, outside the store) through the `window` tool.
@@ -328,6 +340,9 @@ in
     assertions = [{
       assertion = cfg.colleagueSlackIds == [ ] || cfg.ownerSlackId != null;
       message = "dotfiles.ai.hermes.colleagueSlackIds needs dotfiles.ai.hermes.ownerSlackId, or the owner-only approval gating disappears.";
+    } {
+      assertion = !tasksEnabled || cfg.ownerSlackId != null;
+      message = "dotfiles.ai.hermes.taskProjects needs dotfiles.ai.hermes.ownerSlackId (who may steer any task, who gets the notices).";
     }];
 
     # Stable links into the store for config.yaml, which now outlives rebuilds.
@@ -359,6 +374,19 @@ in
         StartInterval = 60;
         StandardOutPath = "${home}/Library/Logs/inbox-monitor-deadman.log";
         StandardErrorPath = "${home}/Library/Logs/inbox-monitor-deadman.log";
+      };
+    };
+
+    # Every minute: relays July task sessions' replies and dialogs to their Slack
+    # threads, notices exits, and removes finished task terminals (no LLM).
+    launchd.agents.july-tasks = lib.mkIf tasksEnabled {
+      enable = true;
+      config = {
+        Label = "com.ksotis.july-tasks";
+        ProgramArguments = [ "${julyTask}/bin/july-task" "monitor" ];
+        StartInterval = 60;
+        StandardOutPath = "${home}/Library/Logs/july-tasks.log";
+        StandardErrorPath = "${home}/Library/Logs/july-tasks.log";
       };
     };
 
@@ -541,7 +569,7 @@ in
       )
     '';
 
-    home.packages = [
+    home.packages = lib.optional tasksEnabled julyTask ++ [
       keychainSync
       configCheck
       # Creates the paused monitor job and the daily prune job (and removes the

@@ -657,10 +657,77 @@ default plugins.
   state and code. That follows from giving colleagues the terminal.
 - **No code changes (an instruction, not enforced):** July's persona
   (`dotfiles.ai.hermes.soulFile` → `~/.hermes/SOUL.md`, the AppMan support
-  assistant) tells it never to write, change or commit code or open PRs;
+  assistant) tells it never to write, change or commit code or open PRs itself
+  (it may start a coding task session, below);
   reading code to answer is fine. By the owner's choice nothing enforces this:
   everyone, colleagues included, has the terminal and the file tools, which
   can edit and commit anything the macOS user can.
+- **Coding tasks in herdr (`july-task`):** with
+  `dotfiles.ai.hermes.taskProjects` (private overlay: name -> repo or folder of
+  repos) July may start a Claude Code main session for a coding task, though
+  it still writes no code itself. Code: `hermes/inbox-monitor/july_task.py`,
+  installed as the `july-task` command, plus the launchd monitor
+  `com.ksotis.july-tasks` (every minute, log `~/Library/Logs/july-tasks.log`).
+  State: `~/.local/state/july-tasks/tasks.json` (0600, locked).
+  - **Start:** after the requester confirms the project and the exact task
+    text, July runs `july-task start <project> [--repo <dir>] <<'EOF' … EOF`
+    in its terminal. Hermes passes each turn's Slack context to terminal
+    commands as `HERMES_SESSION_*` (platform, chat, thread ts, actor), so the
+    CLI takes the requester and the thread from there, not from the model.
+    It refuses people outside the owner and colleague list, unknown projects,
+    text that looks like a secret, a second running task in the same thread,
+    and a fourth running task. It starts `claude --model opus
+    --permission-mode auto -n july-<project>-<4 hex> --session-id <uuid>
+    "<brief>"` with `hc run --bg --no-parent --outlive-parent` in the project.
+    The brief holds the task and the rules: follow `~/.claude/CLAUDE.md`, report
+    through `july-task`, never post secrets, stop at an opened PR, and never merge,
+    deploy or push to shared branches without the owner's go in the thread.
+    If Claude's trust screen appears, it is answered (`down enter`) only when
+    "No, exit" is highlighted above "Yes, I trust this folder", and only in a
+    mapped project. Any other dialog at start fails the start. July then posts
+    a start message in the thread. When a colleague started the task, the owner
+    gets a one-line DM.
+  - **Reporting:** the session posts as July into its own thread with
+    `july-task post|ask|done "<text>"`. The task is found by the session's
+    `$HC_TERMINAL_ID`, so a session can post only into its own thread.
+    `done` marks the task done. Text is masked like the monitor's (emails,
+    13-digit ids, Thai phones) and refused if it looks like a token or key.
+    The monitor reads the Claude transcript
+    (`~/.claude/projects/*/<session-id>.jsonl`) incrementally and calls `hc
+    get` per task. It needs no LLM, and unchanged output costs nothing. It
+    posts a turn's final reply once if the session ended that turn without
+    posting and has been idle for 3 minutes. A session at a dialog for 2
+    minutes (status blocked/error) gets a thread note, and the owner gets a DM
+    with the masked screen and `hc attach <task>`. An exit without `done`
+    marks the task failed and posts the last reply. After 8 h of running the
+    owner gets one DM, and a task idle for 24 h is stopped.
+  - **Answers:** the requester's replies in the thread reach July as usual.
+    The persona has July pass them on unchanged with `july-task send`, which
+    finds the task by thread, takes only the requester or the owner, never
+    types into a session that is blocked at a dialog (`hc send` without
+    `--force`), and reopens a done task whose terminal is still alive.
+    `status`, `list` and `stop` complete the set. Outside Slack (the owner's own
+    terminal) `--task <id>` names the task, and the caller counts as the owner.
+  - **Cleanup:** 24 h after done, failed or stopped (`stop` does it at once),
+    the monitor kills and removes the task's terminal and its descendants:
+    terminals whose parent chain leads to it, or named `<task>-*` (its reviewer
+    session and workers). Git worktrees and branches the session made are
+    left alone.
+  - **Risk (owner's choice):** the owner and the 12 colleagues can each start
+    a coding agent that runs as the owner's macOS user, in the owner's repos
+    and with his credentials (git and `gh` as Kittipong, the Keychain, Podman,
+    the agent-browser, `~/.claude` settings, MCP servers), in Claude's auto mode,
+    where the auto-mode classifier is the only per-action check. A
+    colleague's task text becomes that agent's instructions. The agent can
+    commit, push branches and open PRs as the owner. Merging, deploying and
+    pushing to shared branches are forbidden only by the brief and by
+    `~/.claude/CLAUDE.md`, both instructions, not enforcement. The
+    requester and thread checks are guards against mix-ups, not a boundary.
+    The model writes the command line and could set `HERMES_SESSION_*` itself,
+    and a colleague already has July's terminal (above). What limits the risk:
+    one confirmed task per thread, at most 3 running, the owner's DM for every
+    colleague task, dialogs that only the owner can answer, and every action
+    visible in the thread and in the herdr terminal (`hc attach <task>`).
 - **Colleagues' dangerous commands:** only the owner can approve (above).
   Hermes posts the approval in the chat where it was raised and doesn't
   notify anyone else, so in a colleague's DM with July the owner never sees

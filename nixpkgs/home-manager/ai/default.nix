@@ -160,6 +160,15 @@ in
         default = null;
         description = "Where Hermes chat sessions start (terminal.cwd).";
       };
+      taskProjects = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        example = { app = "/Users/me/workspace/app"; };
+        description = ''
+          Projects July may start Claude Code sessions in (`july-task start <name>`):
+          name -> repo or folder of repos. Empty: no task dispatch (no CLI, no monitor).
+        '';
+      };
       extraSkillDirs = mkOption {
         type = types.listOf types.str;
         default = [ ];
