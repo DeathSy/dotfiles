@@ -120,8 +120,8 @@ let
   # ~/.local/state/inbox-monitor (see hermes/inbox-monitor/README.md).
   inboxMonitor = pkgs.runCommand "inbox-monitor" { } ''
     mkdir -p $out
-    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,personal_mcp.py,im,reminders.js,docs_text.js,fetch_gmail.py,deadman.py,july_task.py} $out/
-    chmod 0555 $out/inbox_mcp.py $out/personal_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py $out/july_task.py
+    cp ${../../../hermes/inbox-monitor}/{inbox_mcp.py,personal_mcp.py,im,reminders.js,docs_text.js,fetch_gmail.py,deadman.py} $out/
+    chmod 0555 $out/inbox_mcp.py $out/personal_mcp.py $out/im $out/fetch_gmail.py $out/deadman.py
     chmod 0444 $out/reminders.js $out/docs_text.js
   '';
   # July's coding tasks in herdr (hermes/inbox-monitor/july_task.py): the CLI July
@@ -134,8 +134,17 @@ let
     colleagues = cfg.colleagueSlackIds;
     claude = "${home}/.local/bin/claude";  # Claude Code's own stable link; absolute, so never an hc template
   });
+  # The script reads july-task.json from its own (read-only) folder: no config
+  # override, and no test hooks through the environment.
+  julyTaskDir = pkgs.runCommand "july-task-code" { } ''
+    mkdir -p $out
+    cp ${../../../hermes/inbox-monitor/july_task.py} $out/july_task.py
+    cp ${taskConfig} $out/july-task.json
+    chmod 0555 $out/july_task.py
+    chmod 0444 $out/july-task.json
+  '';
   julyTask = pkgs.writeShellScriptBin "july-task" ''
-    exec /usr/bin/python3 -I ${inboxMonitor}/july_task.py --config ${taskConfig} "$@"
+    exec /usr/bin/python3 -I ${julyTaskDir}/july_task.py "$@"
   '';
   # The skill is generic; the owner's names, ids, lists and known not-tasks come
   # from config.json (0600, outside the store) through the `window` tool.

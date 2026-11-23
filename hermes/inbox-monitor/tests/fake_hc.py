@@ -2,7 +2,7 @@
 """A fake `hc` for test_july_task.py: terminals live in the JSON file $FAKE_HC_STATE.
 
 Supports what july_task.py uses: run, get, ls, kill, rm, send, wait, read, keys. Exit 3 + not_found like
-the real hc. FAKE_HC_DOWN=1 makes every command fail as if the core were unavailable. On `run` with
+the real hc. FAKE_HC_DOWN=1 makes every command fail as if the core were unavailable; FAKE_HC_RM_FAIL=1 makes rm fail. On `run` with
 --session-id it writes a transcript under $FAKE_HC_TRANSCRIPTS (unless FAKE_HC_NO_TRANSCRIPT=1); on `wait`
 it copies $FAKE_HC_SNAPSHOT_FROM to $FAKE_HC_SNAPSHOT_TO (to see the task state during a start).
 """
@@ -63,7 +63,8 @@ def main():
                 i += 1
         argv = rest[i + 1:]
         t = {"address": f"t{s['next']}", "name": opts.get("name"), "state": "live", "parent": None,
-             "labels": opts["labels"], "argv": argv, "cwd": opts.get("cwd"), "status": {"state": "idle"},
+             "labels": opts["labels"], "argv": argv, "cwd": opts.get("cwd"),
+             "status": {"app": "claude-code", "state": "idle"} if argv and argv[0].endswith("claude") else None,
              "status_ms": int(time.time() * 1000), "created_ms": int(time.time() * 1000), "exit_code": None,
              "screen": "", "inbox": [], "keys": []}
         s["next"] += 1
@@ -94,6 +95,8 @@ def main():
     if cmd == "kill":
         t.update(state="finished", exit_code=129)
     elif cmd == "rm":
+        if os.environ.get("FAKE_HC_RM_FAIL") == "1":
+            out({"error": {"kind": "busy", "message": "can't remove now"}}, 1)
         if t["state"] == "live":
             out({"error": {"kind": "live", "message": "still running"}}, 11)
         s["terminals"].remove(t)
@@ -108,7 +111,7 @@ def main():
     elif cmd == "wait":
         if os.environ.get("FAKE_HC_SNAPSHOT_FROM"):
             shutil.copy(os.environ["FAKE_HC_SNAPSHOT_FROM"], os.environ["FAKE_HC_SNAPSHOT_TO"])
-        out({"reason": "timeout", "status": t["status"]["state"]})
+        out({"reason": "timeout", "status": (t["status"] or {}).get("state")})
     save(s)
     out({"ok": True, "address": t["address"]})
 

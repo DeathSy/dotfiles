@@ -672,8 +672,11 @@ default plugins.
   stops parsing, repair it in place, or stop the tasks first. Moving it away
   while sessions run makes the monitor remove their terminals as orphans.
   - **Start:** after the requester confirms the project and the exact task
-    text, July runs `july-task start <project> [--repo <dir>] <<'EOF' … EOF`
-    in its terminal. Hermes passes each turn's Slack context to terminal
+    text, July writes the text with its file tool to a new file in
+    `~/.cache/july-task-input/` and runs `july-task start <project> [--repo
+    <dir>] --file <file>` in its terminal. The CLI reads the file (it must be
+    the caller's own regular file, at most 64 KB) and removes it. A heredoc
+    isn't used: a line of the task text could end it and run the rest as shell. Hermes passes each turn's Slack context to terminal
     commands as `HERMES_SESSION_*` (platform, chat, thread ts, actor), so the
     CLI takes the requester and the thread from there, not from the model.
     Only `HERMES_SESSION_ACTOR_ID` names the sender, never `USER_ID`: in a
@@ -687,14 +690,20 @@ default plugins.
     and a fourth running task. It starts `~/.local/bin/claude --model opus
     --permission-mode auto -n july-<project>-<4 hex> --session-id <uuid>
     "<brief>"` with `hc run --bg --no-parent --outlive-parent --label
-    july-task=1` in the project. The absolute path keeps hc from reading the
-    command as a template. The terminal's address is saved right after `hc run`.
+    july-task=1 --label july-launch=<random id>` in the project. The launch id
+    ties every terminal to this launch. The brief tells the session to put the
+    same label on each terminal it starts. Nothing is killed, typed into or
+    trusted without that label (below). The absolute path keeps hc from reading the
+    command as a template. The terminal's address is saved right after `hc run`. If the launcher dies
+    before that, the monitor finds the terminal by its launch label.
     Then it waits up to 120 s for the first message to land (Hermes' terminal
     tool allows a command 180 s). If the command dies midway, the monitor takes
     over: after about 4 minutes it adopts a session whose first message arrived,
     posting the start message, and removes one whose message didn't. It also
-    removes labelled `july-*` terminals the state doesn't know about once they
-    are 10 minutes old. A `stop` that lands while `start` is still launching
+    removes labelled task terminals whose launch id no task knows once they
+    are 10 minutes old. A send during startup is refused until it finishes. A
+    linked worktree (a `.git` file) counts as a repo, not a folder of repos.
+    A `stop` that lands while `start` is still launching
     marks the task stopped, and `start` then removes the new terminal itself.
     Task ids must be `july-<configured project>-<4 hex>`, so a helper such as
     `july-pcs-ab12-feed` never passes for one. The task text sits between delimiters with a random
@@ -708,8 +717,10 @@ default plugins.
     a start message in the thread. When a colleague started the task, the owner
     gets a one-line DM.
   - **Reporting:** the session posts as July into its own thread with
-    `july-task post|ask|done "<text>"`. The task is found by the session's
-    `$HC_TERMINAL_ID`, so a session can post only into its own thread.
+    `july-task post|ask|done "<text>"` (or `--file`). The task is found by the
+    session's `$HC_TERMINAL_ID` and checked against that terminal's name and
+    launch label. A reused address therefore can't post into an older task's
+    thread or read its approvals.
     `done` marks the task done. Text is masked like the monitor's (emails,
     13-digit ids, Thai phones). `&`, `<` and `>` are escaped, so `<!channel>`,
     `<!here>`, mentions and link markup from a session stay plain text. Text
@@ -721,7 +732,9 @@ default plugins.
     get` per task. It needs no LLM, and unchanged output costs nothing. It
     posts a turn's final reply once, after 3 minutes idle, unless the
     session's last post came after its last tool call (then the reply only
-    comments on that post). Subagent (sidechain) entries are skipped. A session at a dialog for 2
+    comments on that post). Subagent (sidechain) entries are skipped. A reply
+    that looks like it holds a secret is never stored: the state keeps only a
+    flag and the message id, and the thread gets a "withheld" note. A session at a dialog for 2
     minutes (status blocked/error) gets a thread note, and the owner gets a DM
     with the masked screen and `hc attach <task>`. An exit without `done`
     marks the task failed and posts the last reply. After 8 h of running the
@@ -729,23 +742,31 @@ default plugins.
     `not_found` (exit 3) counts as a terminal gone. Any other hc failure, such
     as a core restart, skips the cycle, so tasks don't fail by mistake. One
     broken task record is logged and skipped, and the state is saved even when
-    a step fails, so a post that went out is never repeated.
+    a step fails, so a post that went out is never repeated. Thread messages
+    and owner DMs that Slack refuses go into an outbox in the state. The
+    monitor retries them every minute for a day, so a final reply, failure or
+    alert isn't lost to a Slack hiccup.
   - **Answers:** the requester's replies in the thread reach July as usual.
     The persona has July pass them on unchanged with `july-task send`, which
-    finds the task by thread, takes only the requester or the owner, never
-    types into a session that is blocked at a dialog (`hc send` without
-    `--force`), and reopens a done task whose terminal is still alive.
+    finds the task by thread, takes only the requester or the owner, and types
+    only into the task's own terminal while it still runs Claude Code: name,
+    launch label and `claude` as the program, Claude's status reported. It
+    refuses a session that is blocked at a dialog (`hc send` without
+    `--force`) and a task that is still starting or has failed or stopped. It
+    reopens only a done task whose terminal is still alive.
     Each relayed message is labelled `(owner)` or `(colleague)` from the
     gateway's actor id. Reopening a done task counts against the limit of 3
     and the one-task-per-thread rule.
   - **Merge gate (owner's decision):** a session may merge, deploy, release or
     push to a shared branch only after the owner's explicit go for that action
     in the thread. This applies to the owner's own tasks too, and a colleague's
-    go never counts. The session checks with `july-task owner-go`. It reads
-    the task's thread from Slack with the bot token (`conversations.replies`)
-    and lists only messages since the task started whose Slack `user` is the
-    owner's member id, with no `bot_id` and no `app_id`: plain messages,
-    including ones also sent to the channel (`thread_broadcast`). Slack's own
+    go never counts. The session asks for the go with `july-task ask` (its
+    timestamp is recorded) and checks with `july-task owner-go`. That reads
+    the whole thread from Slack with the bot token (`conversations.replies`).
+    If it can't read every page (more than 100), it fails and assumes no go.
+    It lists, in full, only replies posted after the latest `ask` whose Slack
+    `user` is the owner's member id: not edited, no `bot_id`, no `app_id`,
+    plain messages or ones also sent to the channel (`thread_broadcast`). Slack's own
     record is the proof, so a forged `HERMES_SESSION_ACTOR_ID` on `send`
     can't make one. Unlike elsewhere (above), messages the owner posts with
     his user token through another app (the Claude app) do not count: the
@@ -766,16 +787,23 @@ default plugins.
     caller counts as the owner.
   - **Cleanup:** 24 h after done, failed or stopped (`stop` does it at once),
     the monitor kills and removes the task's terminal and its helpers. The
-    task's own terminal goes only if both its address and its name match the
-    task. Helpers go if their name starts with `<task>-` (the brief tells the
-    session to name its reviewer session and workers that way). Nothing is
-    removed by parent alone, and a task without a saved address removes only
-    helpers named that way. Workers started without `--outlive-parent` end with the session anyway.
+    task's own terminal goes only if its address, name and launch label all
+    match. Without a saved address, the terminal with the task's name and
+    launch label goes. Helpers go only if named `<task>-…` and either carrying
+    the launch label or being direct children of the verified root. A
+    lookalike name alone is never enough. If `hc rm` fails, the task keeps
+    `cleanup_pending`, and its record stays until a later minute removes the
+    terminals. Orphans are labelled task terminals whose launch id no task
+    knows, removed after 10 minutes with their helpers.
     Git worktrees and branches the session made are left alone.
   - **Tests:** `/usr/bin/python3 -I hermes/inbox-monitor/tests/test_july_task.py`
-    (stdlib unittest, a fake `hc` in `tests/fake_hc.py`, Slack calls written to
-    a log; no network, terminals or Keychain). The test overrides
-    (`JULY_TASK_*`) work only with `JULY_TASK_TEST=1`.
+    (stdlib unittest, a fake `hc` in `tests/fake_hc.py`; no network,
+    terminals or Keychain). The harness `tests/run_cli.py` loads the module
+    and swaps its paths and Slack transport from outside. The installed
+    script has no `--config` option and reads no test settings from the
+    environment. Its config (`july-task.json`) sits next to it in its own
+    store folder, so a session can't point it at a fake Slack or another
+    owner.
   - **Risk (owner's choice):** the owner and the 12 colleagues can each start
     a coding agent that runs as the owner's macOS user, in the owner's repos
     and with his credentials (git and `gh` as Kittipong, the Keychain, Podman,
