@@ -689,6 +689,13 @@ def settle_tabs(only=None, budget=TAB_BUDGET):
     and is retried later; each distinct document problem is logged once."""
     if not TABS:
         return
+    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    with open(os.path.join(STATE_DIR, ".tabs.lock"), "a") as tab_lock:
+        fcntl.flock(tab_lock, fcntl.LOCK_EX)  # one settle at a time: an add and a remove never interleave
+        _settle_tabs(only, budget)
+
+
+def _settle_tabs(only, budget):
     with locked() as st:
         jobs = [(t["id"], dict(t["ui_tab"]), t.get("address"), t["project"])
                 for t in st["tasks"].values()
@@ -980,6 +987,9 @@ def cmd_start(a):
         st["tasks"][name] = task
     try:
         pre_trust(top, root)
+        # The checkout must still be what was validated (no link swapped in meanwhile).
+        if os.path.realpath(cwd) != cwd or os.path.realpath(git_toplevel(cwd) or "/nonexistent") != os.path.realpath(top):
+            raise Fail("the repo folder changed while starting; try again")
         r = hc_json("run", "--bg", "--no-notify", "--no-parent", "--outlive-parent", "--name", task["id"],
                     "--cwd", task["cwd"], "--label", LABEL, "--label", f"july-launch={task['launch']}", "--",
                     CFG["claude"], "--model", "opus", "--permission-mode", "auto", "-n", task["id"],
@@ -996,28 +1006,34 @@ def cmd_start(a):
     except Fail as e:
         with locked() as st:
             cur = st["tasks"].get(task["id"])
-            try:
-                _, failed = remove_terminals(task)
-            except Fail:
-                failed = ["?"]
-            if cur and cur["state"] == "starting" and not failed:
-                st["tasks"].pop(task["id"], None)
-            elif cur:  # keep the record until its terminals are gone; the monitor retries
-                cur.update(state=cur["state"] if cur["state"] != "starting" else "failed",
-                           ended_at=cur.get("ended_at") or now(), cleanup_pending=bool(failed))
-        raise Fail(f"could not start the session: {e}")
+            alive = bool(cur) and cur["state"] in ("running", "waiting", "takeover")  # it already worked or posted
+            if not alive:
+                try:
+                    _, failed = remove_terminals(task)
+                except Fail:
+                    failed = ["?"]
+                if cur and cur["state"] == "starting" and not failed:
+                    st["tasks"].pop(task["id"], None)
+                elif cur:  # keep the record until its terminals are gone; the monitor retries
+                    cur.update(state=cur["state"] if cur["state"] != "starting" else "failed",
+                               ended_at=cur.get("ended_at") or now(), cleanup_pending=bool(failed))
+        if not alive:
+            raise Fail(f"could not start the session: {e}")
+        log(f"{task['id']}: start check failed ({e}) but the session already reported; treated as started")
     with locked() as st:
         cur = st["tasks"].get(task["id"])
         state = cur["state"] if cur else "gone"
         if state == "starting":
             cur["state"] = "running"
-            count = len(running(st))
+        if state in ("starting", "waiting", "takeover"):  # waiting/takeover: it posted done/blocked early
             announce(st, cur)
             plan_tab(cur)
-        elif state not in ("running",) and cur:  # stopped or failed meanwhile: don't leave the session behind
+        elif state in ENDED:  # stopped or failed meanwhile: don't leave the session behind
             cleanup(cur)
+        # "running" without "starting": the monitor already adopted and announced it
+        count = len(running(st))
     settle_tabs(only={task["id"]}, budget=START_BUDGET - DOC_CALL_TIMEOUT - (now() - t0))  # the tab, outside the lock
-    if state != "starting":
+    if state in ENDED or state == "gone":
         raise Fail(f"the task changed while starting ({state}); see july-task list")
     out({"started": task["id"], "terminal": task["address"], "cwd": task["cwd"], "requester": ctx["actor_name"],
          "running": count, "limit": MAX_RUNNING})
@@ -1147,6 +1163,8 @@ def cmd_send(a):
             may_steer(ctx, t)
         if t["state"] == "starting":
             raise Fail(f"{t['id']} is still starting; send it again in a minute")
+        if ctx["platform"] == "slack" and (ctx["mixed"] or ctx["actor"] != CFG.get("owner")) and taken_over(t):
+            raise Fail(f"Kittipong has taken {t['id']} over in herdr; only he can send it messages now")
         if t["state"] not in ("running", "waiting", "takeover"):
             raise Fail(f"{t['id']} has ended ({t['state']}); start a new task")
         g = hc_get(t["address"]) if t.get("address") else None
@@ -1181,6 +1199,19 @@ def last_reply(t):
         return "(its last reply looked like it held a secret; not shown)"
 
 
+def taken_over(t):
+    """The owner has typed into this task's session, now or at any time (takeover_at stays set through later
+    done/blocked notes). Reads the transcript, so it doesn't wait for the monitor's next minute."""
+    try:
+        read_transcript(t)
+    except (OSError, ValueError):
+        pass
+    tv = t.get("tx") or {}
+    if tv.get("last_human") and not t.get("takeover_at"):
+        t["takeover_at"] = tv["last_human"]
+    return bool(t.get("takeover_at") or tv.get("last_human") or t["state"] == "takeover")
+
+
 def cmd_status(a):
     ctx = slack_context(need_thread=not a.task_name)
     with locked() as st:
@@ -1208,7 +1239,7 @@ def cmd_stop(a):
     with locked() as st:
         t = task_here(st, ctx, a.task_name)
         may_steer(ctx, t)
-        if t["state"] == "takeover" and ctx["platform"] == "slack" and ctx["actor"] != CFG.get("owner"):
+        if ctx["platform"] == "slack" and ctx["actor"] != CFG.get("owner") and taken_over(t):
             raise Fail(f"Kittipong has taken {t['id']} over in herdr; only he can stop it now")
         gone, failed = cleanup(t)  # the terminals first: the session stops now
         who = ctx["actor_name"] if ctx["platform"] == "slack" else "Kittipong"
@@ -1249,10 +1280,20 @@ def cmd_post(a, kind):
         elif kind == "blocked":
             body = (f"`{t['id']}` needs <@{owner}>: {body}\n_(waiting; answer here or in its herdr tab)_"
                     if owner else f"`{t['id']}` is blocked: {body}")
-        ts = post(t, body)
+        floor = now()  # if Slack's answer is lost, the note still went out no earlier than this
+        try:
+            ts = post(t, body)
+        except Fail:
+            if kind in ("done", "blocked"):  # it may have gone out: no older reply may count for it
+                t["last_note_ts"] = f"{floor:.6f}"
+            raise
         t["last_post_at"] = now()
-        if kind in ("done", "blocked") and ts:
-            t["last_note_ts"] = ts  # owner-go accepts only the owner's replies after this note
+        if kind in ("done", "blocked"):  # owner-go accepts only the owner's replies after this note
+            try:
+                note = max(float(ts or 0), floor)
+            except (TypeError, ValueError):
+                note = floor
+            t["last_note_ts"] = f"{note:.6f}"
         if kind in ("done", "blocked"):
             t.update(state="waiting", waiting_since=now(), outcome=kind)
             if kind == "done" and t["requester"] != owner:
@@ -1284,6 +1325,10 @@ def cmd_owner_go(a):
             break
     else:
         raise Fail(f"the thread has more than {MAX_PAGES} pages of replies; can't verify a go (none assumed)")
+    with locked() as st:  # a newer note while reading: those replies answered the old one
+        cur = st["tasks"].get(tid)
+        if not cur or cur.get("last_note_ts") != after:
+            raise Fail("the task posted a newer note while the thread was read; run owner-go again (no go assumed)")
     mine = [m for m in msgs if m.get("user") == owner and not m.get("bot_id") and not m.get("app_id")
             and m.get("subtype") in (None, "thread_broadcast") and not m.get("edited")
             and TS_RE.match(str(m.get("ts") or "")) and float(m["ts"]) > float(after)]

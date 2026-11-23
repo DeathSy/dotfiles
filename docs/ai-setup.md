@@ -723,6 +723,11 @@ default plugins.
     trusted without that label (below). The absolute path keeps hc from reading the
     command as a template. The terminal's address is saved right after `hc run`. If the launcher dies
     before that, the monitor finds the terminal by its launch label.
+    Right before `hc run` it checks again that the folder is not a link and
+    still resolves to the same repo toplevel; otherwise the start fails (a
+    cheap narrowing of the gap between check and launch). A session that
+    already posts `done` or `blocked` while `start` is still waiting counts as
+    started: it is announced and kept, never cleaned up.
     Then it waits up to 120 s for the first message to land (Hermes' terminal
     tool allows a command 180 s). If the command dies midway, the monitor takes
     over: after about 4 minutes it adopts a session whose first message arrived,
@@ -817,8 +822,11 @@ default plugins.
       "This session is being continued…") and `isMeta` entries don't count.
       hc has no attach or keystroke signal, so this is a heuristic, and it
       only decides what July relays (nothing during a takeover) and who may
-      stop the task: once taken over, only the owner can. It never decides
-      what gets closed.
+      steer the task. Once the owner has typed into it, at any time (the mark
+      stays through later done/blocked notes), only he can `stop` it or `send`
+      to it from Slack; a colleague or a mixed-sender thread is refused.
+      `stop`/`send` read the transcript themselves for this, so they don't
+      wait for the monitor's next minute. It never decides what gets closed.
   - **Decisions and the merge gate, from herdr or Slack (owner's decision):**
     the session never merges, deploys, releases or pushes to a shared branch on
     its own. That holds also for the owner's own tasks, and whatever the
@@ -881,7 +889,10 @@ default plugins.
       the session's last `done`/`blocked` note whose Slack `user` is the
       owner's member id: not edited, no `bot_id`, no `app_id`, plain messages
       or ones also sent to the channel (`thread_broadcast`). The task records
-      that note's ts.
+      that note's ts. If Slack's answer is lost (no ts, or an error after it
+      may have gone out), the time just before the post is recorded instead,
+      so an older reply never answers a newer note. If a newer note is
+      recorded while owner-go reads the thread, it fails and assumes no go.
     - If owner-go can't read every page (more than 100, or `has_more` without
       a cursor), it fails and assumes no go.
     - A relayed `[Slack reply from …]` line is not proof on its own: the brief
@@ -980,11 +991,12 @@ default plugins.
       or odd document, a race lost on every retry, or malformed data means no
       tab: only the `where` label, and the running task is never failed by this.
       Each distinct document problem is logged once, not every minute.
-    - Cleanup (stop, the monitor's 24 h cleanup, an idle stop) kills the
-      session's terminals first, under the state lock. It only marks the tab
-      for removal. All document work runs afterwards, outside the lock,
-      within a 60 s budget, so `stop` stays fast and never holds other commands
-      up.
+    - Cleanup (`stop`, or a closed terminal) kills the session's terminals
+      first, under the state lock, and only marks the tab for removal. All
+      document work runs afterwards, outside the state lock, within a 60 s
+      budget, so `stop` stays fast and never holds other commands up. It
+      runs one at a time (its own lock file, `.tabs.lock`), so a stop and the
+      monitor never interleave an add and a remove.
     - Removal deletes the recorded tab only in the recorded space, only with
       the task's name, and only with exactly the one-row, one-block layout July
       wrote (the app may add a `size` to the block). A tab that was moved,

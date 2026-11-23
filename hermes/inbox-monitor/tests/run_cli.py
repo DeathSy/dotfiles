@@ -5,7 +5,8 @@ the JT_* environment of THIS runner, then calls its main(). The installed script
 JT_CONFIG, JT_STATE_DIR, JT_HC, JT_PROJECTS (Claude transcripts), JT_INPUT_DIR, JT_START_WAIT, JT_MAX_PAGES, JT_DIALOG_WAIT;
 JT_SLACK_LOG (every Slack call is appended as JSON), JT_SLACK_REPLIES (conversations.replies answers: one
 response, or a list of pages chained by cursor), JT_SLACK_FAIL (comma-separated methods that fail) and
-JT_SLACK_FAIL_ERROR (the Slack error they fail with).
+JT_SLACK_FAIL_ERROR (the Slack error they fail with), JT_SLACK_NO_TS (chat.postMessage answers without a ts),
+JT_BUMP_NOTE_ON_READ (a newer done/blocked note lands while owner-go reads the thread).
 """
 import importlib.util, json, os, sys
 
@@ -32,6 +33,16 @@ def transport(method, params):
         f.write(json.dumps({"method": method, **params}, ensure_ascii=False) + "\n")
     if method in FAIL:
         raise m.Fail(f"Slack {method}: {env.get('JT_SLACK_FAIL_ERROR', 'test failure')}")
+    if method == "conversations.replies" and env.get("JT_BUMP_NOTE_ON_READ"):  # a newer note lands mid-read
+        path = os.path.join(m.STATE_DIR, "tasks.json")
+        with open(path) as f:
+            st = json.load(f)
+        for t in st["tasks"].values():
+            t["last_note_ts"] = f"{float(t.get('last_note_ts') or 0) + 1:.6f}"
+        with open(path, "w") as f:
+            json.dump(st, f)
+    if method == "chat.postMessage" and env.get("JT_SLACK_NO_TS"):  # accepted, but the answer has no ts
+        return {"ok": True}
     if method == "conversations.replies":
         if not env.get("JT_SLACK_REPLIES"):
             return {"ok": True, "messages": []}

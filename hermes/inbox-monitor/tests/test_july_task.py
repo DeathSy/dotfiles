@@ -326,6 +326,21 @@ class OwnerGoTests(Base):
         self.assertEqual(rc, 1)
         self.assertIn("can't verify", body["error"])
 
+    def test_astra2_a_note_without_a_ts_still_moves_the_floor(self):
+        t_before = time.time()
+        for extra in ({"JT_SLACK_NO_TS": "1"}, {"JT_SLACK_FAIL": "chat.postMessage"}):
+            self.add_task(address=self.a, requester=COLL, started_age=600, last_note_ts=f"{self.ask:.6f}")
+            self.run_cli("blocked", "need a decision", extra=dict(extra, HC_TERMINAL_ID=self.a))
+            note = self.tasks()["july-pcs-ab12"]["last_note_ts"]
+            self.assertRegex(note, r"^\d{9,10}\.\d{1,6}$")
+            self.assertGreaterEqual(float(note), t_before - 1, extra)  # the older reply no longer counts
+
+    def test_astra2_a_newer_note_during_the_read_means_no_go(self):
+        rc, body, _ = self.owner_go({"ok": True, "messages": [
+            {"user": OWNER, "ts": f"{self.ask + 5:.6f}", "text": "go"}]}, extra={"JT_BUMP_NOTE_ON_READ": "1"})
+        self.assertEqual(rc, 1)
+        self.assertIn("newer note", body["error"])
+
     def test_done_and_blocked_record_the_note_ts_and_say_where_to_answer(self):
         for kind in ("done", "blocked"):
             rc, body, _ = self.run_cli(kind, "PR #1 is open, reviews ok", extra={"HC_TERMINAL_ID": self.a})
@@ -670,6 +685,15 @@ json.dump(d, open("{self.claude_json}", "w"))
         self.assertEqual(rc, 0, body)
         self.assertIn("also became trusted", err)
 
+    def test_astra2b_a_repo_swapped_during_pre_trust_fails_the_start(self):
+        script = os.path.join(self.d, "claude-trust-repo")
+        with open(script, "a") as f:  # after trusting, swap the repo folder for a link
+            f.write(f"""os.rename("{self.repo}", "{self.repo}-real"); os.symlink("{self.repo}-real", "{self.repo}")\n""")
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER})
+        self.assertEqual(rc, 1)
+        self.assertIn("changed while starting", body["error"])
+        self.assertEqual(self.hc()["terminals"], [])
+
     def test_b2_an_already_trusted_repo_skips_the_helper(self):
         wj(self.claude_json, {"projects": {os.path.realpath(self.repo): {"hasTrustDialogAccepted": True}}})
         rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER})
@@ -951,10 +975,10 @@ class AppTabTests(Base):
         probe = os.path.join(self.d, "probe.json")
         rc, body, _ = self.run_cli("stop", slack={"actor": OWNER}, extra={
             "FAKE_HC_DOCSET_PROBE": probe, "FAKE_HC_LOCKFILE": os.path.join(self.state_dir, ".lock"),
-            "FAKE_HC_PROBE_TERMINAL": addr})
+            "FAKE_HC_PROBE_TERMINAL": addr, "FAKE_HC_TABLOCK": os.path.join(self.state_dir, ".tabs.lock")})
         self.assertEqual(rc, 0, body)
         p = rj(probe)
-        self.assertEqual((p["lock"], p["terminal"]), ("free", "gone"))
+        self.assertEqual((p["lock"], p["terminal"], p["tab_lock"]), ("free", "gone", "held"))  # tab work serialized
 
     def test_s3_a_bad_space_id_means_no_tab_and_safe_labels(self):
         doc = json.loads(json.dumps(self.doc))
@@ -1084,6 +1108,35 @@ class LifecycleTests(Base):
         self.assertEqual(rc, 1)
         self.assertIn("10 tasks are open (the limit is 10)", body["error"])
         self.assertIn("july-pcs-e000", body["error"])
+
+    def test_astra3_takeover_protection_lasts_through_done_and_needs_no_monitor_run(self):
+        t0 = time.time() - 3000
+        a = self.add_root(status="idle")
+        self.add_task(address=a, state="running", requester=COLL, session_id="s6")
+        self.write_transcript("s6", self.entries(
+            {"type": "user", "message": {"content": "I'll take it from here"}, "timestamp": iso(t0 + 100)}, t0=t0))
+        rc, body, _ = self.run_cli("done", "finished", extra={"HC_TERMINAL_ID": a})  # resets the state to waiting
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")
+        for cmd, ctx in (("stop", {"actor": COLL}), ("send", {"actor": COLL}), ("send", {"actor": "", "user": OWNER})):
+            rc, body, _ = self.run_cli(cmd, *(["more info"] if cmd == "send" else []), slack=ctx)
+            self.assertEqual(rc, 1, (cmd, ctx))
+            self.assertIn("taken", body["error"])
+        self.assertEqual(self.terminal(a)["inbox"], [])
+        self.assertTrue(self.tasks()["july-pcs-ab12"]["takeover_at"])
+        rc, body, _ = self.run_cli("send", "owner here", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
+
+    def test_astra4_a_done_during_start_is_a_started_task(self):
+        path = os.path.join(self.state_dir, "tasks.json")
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER},
+                                   extra={"FAKE_HC_WAIT_SETS_STATE": f"{path}:waiting"})
+        self.assertEqual(rc, 0, body)
+        self.assertEqual(self.terminal(body["terminal"])["state"], "live")
+        self.assertTrue(any("Started `" in p["text"] for p in self.posts()))
+        rc, body, _ = self.run_cli("start", "pcs", "--", "y", slack={"actor": OWNER, "thread": "1795400040.000001"},
+                                   extra={"FAKE_HC_WAIT_SETS_STATE": f"{path}:waiting", "FAKE_HC_NO_TRANSCRIPT": "1"})
+        self.assertEqual(rc, 0, body)  # its start check failed, but it already posted: still started, not killed
+        self.assertEqual(self.terminal(body["terminal"])["state"], "live")
 
     def test_only_the_owner_stops_a_taken_over_task(self):
         a = self.add_root()

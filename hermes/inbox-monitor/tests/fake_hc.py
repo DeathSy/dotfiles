@@ -86,8 +86,17 @@ def main():
                             fcntl.flock(lk, fcntl.LOCK_UN)
                         except OSError:
                             lock = "held"
+                    if os.environ.get("FAKE_HC_TABLOCK"):
+                        with open(os.environ["FAKE_HC_TABLOCK"], "a") as tl:
+                            try:
+                                fcntl.flock(tl, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                                tab = "free"
+                                fcntl.flock(tl, fcntl.LOCK_UN)
+                            except OSError:
+                                tab = "held"
                     term = [x for x in s["terminals"] if x["address"] == os.environ["FAKE_HC_PROBE_TERMINAL"]]
-                    wj(os.environ["FAKE_HC_DOCSET_PROBE"], {"lock": lock, "terminal": term[0]["state"] if term else "gone"})
+                    wj(os.environ["FAKE_HC_DOCSET_PROBE"], {"lock": lock, "terminal": term[0]["state"] if term else "gone",
+                                                            "tab_lock": tab if os.environ.get("FAKE_HC_TABLOCK") else None})
                 d["value"], d["version"] = prm["value"], d["version"] + 1
                 s.setdefault("doc_writes", 0)
                 s["doc_writes"] += 1
@@ -189,6 +198,12 @@ def main():
         print(t["screen"])
         sys.exit(0)
     elif cmd == "wait":
+        if os.environ.get("FAKE_HC_WAIT_SETS_STATE"):  # e.g. the session posts done while start waits
+            path, new = os.environ["FAKE_HC_WAIT_SETS_STATE"].rsplit(":", 1)
+            st = rj(path)
+            for task in st["tasks"].values():
+                task["state"] = new
+            wj(path, st)
         if os.environ.get("FAKE_HC_SNAPSHOT_FROM"):
             shutil.copy(os.environ["FAKE_HC_SNAPSHOT_FROM"], os.environ["FAKE_HC_SNAPSHOT_TO"])
         out({"reason": "timeout", "status": (t["status"] or {}).get("state")})
