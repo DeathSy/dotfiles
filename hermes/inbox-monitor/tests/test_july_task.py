@@ -585,6 +585,29 @@ class StartDialogTests(Base):
         head = m.screen_head("╭────╮\n│ Login as bob@example.com? │\n│ call 0812345678 │\n│ third line │\n╰────╯")
         self.assertEqual(head, "Login as ***.com? / call ***5678")
 
+    def test_screen_head_withholds_secrets_and_masks_before_label(self):
+        m = load_module()
+        self.assertEqual(m.screen_head("Paste token xoxb-123456789012-abcdefabcdef here\nok"),
+                         "(screen not shown: it looked like it held a secret)")
+        self.assertEqual(m.screen_head("Sign in as first_last@example.com\nnext"), "Sign in as ***.com / next")
+
+    def test_dialog_wait_is_bounded_by_the_start_wait(self):
+        path = os.path.join(self.d, "screens.json")
+        wj(path, [" Some unknown dialog\n ❯ Yes\n"])
+        t0 = time.time()
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER}, extra={
+            "FAKE_HC_RUN_STATUS": "blocked", "FAKE_HC_SCREENS": path, "JT_DIALOG_WAIT": "30", "JT_START_WAIT": "3"})
+        self.assertEqual(rc, 1)
+        self.assertLess(time.time() - t0, 15)
+
+    def test_brief_keeps_the_merge_gate_over_repo_permissions(self):
+        m = load_module()
+        m.CFG.update(owner=OWNER)
+        b = m.brief({"id": "july-pcs-ab12", "project": "pcs", "cwd": "/x", "requester": OWNER, "launch": "L",
+                     "requester_name": "K"}, "x")
+        self.assertIn("pre-approves", b)
+        self.assertIn("owner-go is still required", b)
+
     def test_trust_matcher(self):
         m = load_module()
         self.assertTrue(m.trust_screen(TRUST_VARIANT))

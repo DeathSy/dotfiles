@@ -257,7 +257,7 @@ if soul:
             else:
                 say("note: ~/.hermes/SOUL.md is an older overlay version (--fix updates it)")
         else:
-            print(f"note: ~/.hermes/SOUL.md has local edits, so the overlay's version was not installed; "
+            say(f"note: ~/.hermes/SOUL.md has local edits, so the overlay's version was not installed; "
                 f"compare (diff ~/.hermes/SOUL.md {soul}) and merge by hand")
 
 # ── resolved toolsets (Hermes' own resolver) ───────────────────────────────

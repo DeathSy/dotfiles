@@ -660,7 +660,11 @@ default plugins.
   --fix` at each rebuild installs it when the live file is missing or is
   still exactly the copy it installed last, whose hash is kept in
   `~/.local/state/inbox-monitor/.soul-installed`. A live file edited by hand
-  is never overwritten: the rebuild prints a note to merge it by hand. The
+  is never overwritten: `hermes-config-check` (without `--quiet`) notes it so
+  you can merge by hand. A live file seeded before the hash was kept, or
+  copied in by hand, counts as edited until it equals the overlay once: copy
+  the overlay over it (`install -m 600 <store SOUL.md> ~/.hermes/SOUL.md`)
+  after checking the diff, and the next rebuild records its hash. The
   AppMan support
   assistant) tells it never to write, change or commit code or open PRs itself
   (it may start a coding task session, below);
@@ -848,6 +852,13 @@ default plugins.
     one confirmed task per thread, at most 3 running, the owner's DM for every
     colleague task, dialogs that only the owner can answer, and every action
     visible in the thread and in the herdr terminal (`hc attach <task>`).
+    Trusting a repo at start (the trust screen, answered for mapped projects)
+    also loads that repo's `.claude/settings*.json`. Its allow rules, such as
+    `Bash(git push:*)`, then run without the auto-mode classifier, and its
+    hooks run as the owner. A colleague can thus reach whatever a mapped
+    repo's committed settings pre-approve. The brief says such permissions
+    don't lift the merge gate (owner-go is still required), but that is an
+    instruction too.
 - **Colleagues' dangerous commands:** only the owner can approve (above).
   Hermes posts the approval in the chat where it was raised and doesn't
   notify anyone else, so in a colleague's DM with July the owner never sees
