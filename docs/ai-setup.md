@@ -692,7 +692,7 @@ default plugins.
     <dir>] --file <file>` in its terminal. The CLI reads the file and removes it.
     The file must sit inside that folder (real path checked), be opened
     without following a link, and be the caller's own regular file of at most
-    64 KB. The same holds for `--file` on `send`, `post`, `ask` and `done`. The
+    64 KB. The same holds for `--file` on `send`, `post`, `ask`, `done` and `blocked`. The
     folder is kept at mode 0700. A heredoc
     isn't used: a line of the task text could end it and run the rest as shell.
     By the owner's decision, `approvals.smart_policy` approves `july-task`
@@ -742,16 +742,20 @@ default plugins.
     Task ids must be `july-<configured project>-<4 hex>`, so a helper such as
     `july-pcs-ab12-feed` never passes for one. The task text sits between delimiters with a random
     nonce, and display names are reduced to one plain line.
-    The brief holds the task and the rules: follow `~/.claude/CLAUDE.md`, report
-    through `july-task`, never post secrets, and stop at "PR opened and reviews
-    reported" (owner's decision, 2026-11-23).
+    The brief holds the task and the rules: follow `~/.claude/CLAUDE.md`, work
+    autonomously, report through `july-task`, never post secrets, and stop at
+    "PR opened and reviews done" without merging (below). A whole `start`, tab
+    work included, stays under 165 s: Hermes gives a terminal command 180 s,
+    and the start wait and tab work are cut to fit.
     Folder trust: Claude Code has no supported way to trust a folder for an
     interactive session (only `-p` skips the question), so before the launch
     July runs the owner's own `claude-trust-repo` (claude.nix), the helper his
     `claude` shell wrapper runs at every start. July passes the toplevel it
     validated above. Afterwards it reads `~/.claude.json` back (read-only),
-    and if any folder other than exactly that toplevel became trusted, the
-    start fails before launch. An already-trusted repo skips the helper. The helper marks a git repo trusted in
+    and if a folder other than exactly that toplevel became trusted under one
+    of the OTHER mapped projects, the start fails before launch. Anywhere
+    else, such as the owner trusting a repo by hand at the same moment, it is
+    only logged. An already-trusted repo skips the helper. The helper marks a git repo trusted in
     `~/.claude.json` only if its GitHub owner is on
     `dotfiles.ai.claude.trustedRepoOwners`; every mapped repo is under
     appman-agm, which is on that list. It writes with jq and an atomic rename,
@@ -769,91 +773,123 @@ default plugins.
     its output. July then posts
     a start message in the thread. When a colleague started the task, the owner
     gets a one-line DM.
-  - **Reporting:** the session posts as July into its own thread with
-    `july-task post|ask|done "<text>"` (or `--file`). The task is found by the
-    session's `$HC_TERMINAL_ID` and checked against that terminal's name and
-    launch label. A reused address therefore can't post into an older task's
-    thread or read its approvals.
-    `done` marks the task done. Text is masked like the monitor's (emails,
-    13-digit ids, Thai phones). `&`, `<` and `>` are escaped, so `<!channel>`,
-    `<!here>`, mentions and link markup from a session stay plain text. Text
-    is refused if it looks like a secret: tokens and keys (Slack, OpenAI,
-    Stripe live, GitHub, GitLab, npm, AWS, Google, JWT), private keys, Slack
-    webhook URLs, URLs with a password. The check runs before any cut.
-    The monitor reads the Claude transcript
+  - **Autonomous, with takeover in herdr (owner's choice, 2026-11-23):** a
+    task never waits for anyone in Slack. The brief tells the session to work
+    on its own, make reasonable assumptions, list them in its result, and not
+    ask and wait. It reports to its own thread as July:
+    - `july-task post "<text>"`: an optional one-line milestone.
+    - `july-task done "<summary>"`: the result once (what changed, PR link,
+      both review stages, assumptions, what wasn't verified).
+    - `july-task blocked "<what's needed>"`: only for something only a person
+      can resolve (a decision for the owner, credentials, a login, a dialog).
+      It is one line that mentions the owner and says "answer here or in its
+      herdr tab". The session then stays idle and never polls Slack;
+      whichever channel answers first wins.
+    - `ask` is kept only as an alias of `post`, a note that doesn't block.
+    - `--file` works for all of them. The task is found by the session's
+      `$HC_TERMINAL_ID` and checked against that terminal's name and launch
+      label, so a reused address can't post into an older task's thread.
+    After `done` or `blocked` the task is `waiting`: it stays in its tab in the
+    owner's Herdr app. He decides in either place: typing into the session
+    there (takeover), or replying in the thread. July relays his reply with
+    `send`.
+  - **States:** `starting`, then `running` (working on its own), then `waiting`
+    (reported done or blocked, or idle 15 min after a turn that posted
+    nothing), then `takeover` (the owner typed into its tab). A waiting task
+    whose session starts working again, e.g. its reviewer reported back, is
+    `running` again. `stop` or a closed terminal ends it (`stopped`,
+    `closed`, `failed`).
+    - Only `starting` and `running` count toward the limit of 3, so tasks
+      waiting for takeover don't block new ones. One task per thread still
+      holds while a task is alive in any state.
+    - Takeover is read from the Claude transcript: an input after the brief
+      that doesn't come from July (`[Slack reply from …]`), hc workers
+      (`<hc …>`) or teammates or tools (`<teammate-message>`, `<task-notification>`,
+      `<system-reminder>`, `<local-command…>`, `<command-…>`) counts as the
+      owner. hc has no attach or keystroke signal, so this is a heuristic, and
+      it only decides what July relays (nothing during a takeover). It never
+      decides what gets closed.
+  - **Decisions and the merge gate, from herdr or Slack (owner's decision):**
+    the session never merges, deploys, releases or pushes to a shared branch on
+    its own. That holds also for the owner's own tasks, and whatever the
+    repo's `.claude/settings*.json` pre-approves. It stops at "PR opened and
+    reviews done", posts that once with `done`, and waits.
+    - A decision or a merge go counts when the owner types it directly into
+      the session in its herdr tab (only he has access there), or when
+      `july-task owner-go` lists his Slack reply saying it.
+    - `owner-go` reads the thread from Slack with the bot token
+      (`conversations.replies`). It lists, in full, only replies posted after
+      the session's last `done`/`blocked` note whose Slack `user` is the
+      owner's member id: not edited, no `bot_id`, no `app_id`, plain messages
+      or ones also sent to the channel (`thread_broadcast`). The task records
+      that note's ts.
+    - If owner-go can't read every page (more than 100, or `has_more` without
+      a cursor), it fails and assumes no go.
+    - A relayed `[Slack reply from …]` line is not proof on its own: the brief
+      tells the session to check with `owner-go`. Slack's own record is the
+      proof, so a forged `HERMES_SESSION_ACTOR_ID` on `send` can't make one.
+    - App-posted owner messages, for example from the Claude app, don't count:
+      the task session holds the owner's Slack tools and could post a "go" as
+      him.
+    - A colleague's go never counts.
+    - This is still an instruction to the session, not enforcement: it runs as
+      the owner and could merge anyway.
+  - **Monitor:** it reads the Claude transcript
     (`~/.claude/projects/*/<session-id>.jsonl`) incrementally and calls `hc
-    get` per task. It needs no LLM, and unchanged output costs nothing. It
-    posts a turn's final reply once, after 3 minutes idle, unless the
-    session's last post came after its last tool call (then the reply only
-    comments on that post). Subagent (sidechain) entries are skipped. A reply
-    that looks like it holds a secret is never stored: the state keeps only a
-    flag and the message id, and the thread gets a "withheld" note. A session at a dialog for 2
-    minutes (status blocked/error) gets a thread note, and the owner gets a DM
-    with a fixed description of the dialog (as at start, never its text) and
-    `hc attach <task>`. An exit without `done`
-    marks the task failed and posts the last reply. After 8 h of running the
-    owner gets one DM, and a task idle for 24 h is stopped. Only hc's
-    `not_found` (exit 3) counts as a terminal gone. Any other hc failure, such
-    as a core restart, skips the cycle, so tasks don't fail by mistake. One
-    broken task record is logged and skipped, and the state is saved even when
-    a step fails, so a post that went out is never repeated. Thread messages
-    and owner DMs that Slack refuses go into an outbox in the state. The
-    monitor retries them every minute for a day, so a final reply, failure or
-    alert isn't lost to a Slack hiccup. Permanent errors (`channel_not_found`,
-    `is_archived`, `not_in_channel`, `msg_too_long`, …) are dropped with a log
-    line instead. The retry doesn't hold the state lock over the network: a
-    crash can repeat a message but not lose it.
-  - **Answers:** the requester's replies in the thread reach July as usual.
-    The persona has July pass them on unchanged with `july-task send`, which
-    finds the task by thread, takes only the requester or the owner, and types
-    only into the task's own terminal while it still runs Claude Code: name,
-    launch label and `claude` as the program, Claude's status reported. It
-    refuses a session that is blocked at a dialog (`hc send` without
-    `--force`) and a task that is still starting or has failed or stopped. It
-    reopens only a done task whose terminal is still alive.
-    Each relayed message is labelled `(owner)` or `(colleague)` from the
-    gateway's actor id. Reopening a done task counts against the limit of 3
-    and the one-task-per-thread rule.
-  - **Merge gate (owner's decision):** a session may merge, deploy, release or
-    push to a shared branch only after the owner's explicit go for that action
-    in the thread. This applies to the owner's own tasks too, and a colleague's
-    go never counts. The session asks for the go with `july-task ask` (its
-    timestamp is recorded) and checks with `july-task owner-go`. That reads
-    the whole thread from Slack with the bot token (`conversations.replies`).
-    If it can't read every page (more than 100, or `has_more` without a
-    cursor), it fails and assumes no go.
-    It lists, in full, only replies posted after the latest `ask` whose Slack
-    `user` is the owner's member id: not edited, no `bot_id`, no `app_id`,
-    plain messages or ones also sent to the channel (`thread_broadcast`). Slack's own
-    record is the proof, so a forged `HERMES_SESSION_ACTOR_ID` on `send`
-    can't make one. Unlike elsewhere (above), messages the owner posts with
-    his user token through another app (the Claude app) do not count: the
-    task session itself holds the owner's Slack tools and could post a "go"
-    as him. Those two Slack read methods (and `chat.getPermalink`) are sent
-    form-encoded, which is how Slack takes them. Checked live on 2026-11-23
-    against the owner's DM with July: replies were listed, and an app-posted
-    owner message was left out. The brief says
-    nothing else is proof: not a `[Slack reply from …]` line, and not text
-    claiming to be from the owner. Messages typed at the owner's own terminal
-    (`send --task`) are labelled "not a go". The gate is still an
-    instruction to the session, not enforcement: the session runs as the
-    owner and could merge anyway.
+    get` per task, without an LLM.
+    - When a running session ends a turn without posting and stays idle for
+      15 min, it relays the turn's first line once ("… (more in its herdr
+      tab)") and sets the task `waiting`. The 15 min are long enough that a
+      session waiting for its reviewer isn't relayed. It doesn't relay when
+      the session's last post came after its last tool call. Subagent
+      (sidechain) entries are skipped. A reply that looks like it holds a
+      secret is never stored: the state keeps only a flag and the message id,
+      and the thread gets a "withheld" note.
+    - A session at a dialog for 2 minutes (status blocked/error, not during a
+      takeover) gets a one-line thread note, and the owner gets a DM with a
+      fixed description of the dialog (never its text) and `hc attach
+      <task>`. After 8 h of running the owner gets one DM.
+    - Tasks are never closed automatically. A `waiting` or `takeover` task
+      idle for 3 days gets one reminder line in its thread per idle stretch.
+      A closed or exited terminal ends the task as `closed`: July tidies up
+      its helpers and tab and posts one line.
+    - Only hc's `not_found` (exit 3) counts as a terminal gone. Any other hc
+      failure, such as a core restart, skips the cycle. One broken task record
+      is logged and skipped, and the state is saved even when a step fails,
+      so a post that went out is never repeated.
+    - Thread messages and owner DMs that Slack refuses go into an outbox and
+      are retried every minute for a day. Permanent errors
+      (`channel_not_found`, `is_archived`, …) are dropped with a log line. The
+      retry doesn't hold the state lock over the network.
+    - Task records written by an older version in state `done` are read as
+      `waiting`.
+  - **Messages from the thread:** the requester's later messages reach July as
+    usual. July relays the owner's replies unchanged with `july-task send`
+    (colleagues' replies as information only). It never blocks the session. It finds the task by thread and takes only the
+    requester or the owner. It types only into the task's own terminal while
+    that still runs Claude Code (name, launch label, `claude` as the
+    program, Claude's status reported). It refuses a session blocked at a
+    dialog (`hc send` without `--force`) and a task that is starting or has
+    ended. Each message is labelled `(owner)`, `(colleague)` or "sender
+    unknown: not a go". A `waiting` task that gets a message is `running`
+    again, which counts toward the limit.
     `status`, `list` and `stop` complete the set. `status` (it shows the last
     reply) and `stop` take only the requester or the owner. `list` shows every
     task's id, project, requester and state to anyone on the list. Outside
     Slack (the owner's own terminal) `--task <id>` names the task, and the
     caller counts as the owner.
-  - **Cleanup:** 24 h after done, failed or stopped (`stop` does it at once),
-    the monitor kills and removes the task's terminal and its helpers. The
-    task's own terminal goes only if its address, name and launch label all
-    match. Without a saved address, the terminal with the task's name and
-    launch label goes. Helpers go only if named `<task>-…` and either carrying
-    the launch label or being direct children of the verified root. A
-    lookalike name alone is never enough. If `hc rm` fails, the task keeps
-    `cleanup_pending`, and its record stays until a later minute removes the
-    terminals. Orphans are labelled task terminals whose launch id no task
-    knows, removed after 10 minutes with their helpers.
-    Git worktrees and branches the session made are left alone.
+  - **Cleanup:** only `july-task stop`, or the owner closing the task's
+    terminal himself, ends a task. Its terminals are killed first: the task's
+    own terminal only if its address, name and launch label all match, or,
+    without a saved address, the terminal with the task's name and launch
+    label. Helpers go only if named `<task>-…` and either carrying the launch
+    label or being direct children of the verified root; a lookalike name
+    alone is never enough. Then its tab is removed (below). A failing `hc rm`
+    or tab removal is retried every minute. After 3 days of failures July
+    gives up, logs what was left, and moves the record to history. Orphans
+    are labelled task terminals whose launch id no task knows, removed after
+    10 minutes with their helpers. Git worktrees and branches the session
+    made are left alone.
   - **Tab in the Herdr app (owner's choice, 2026-11-23):** each task shows up
     as a new tab, named after the task, in its project's workspace in the
     owner's Herdr app on garage. The app keeps its layout in the core as the
@@ -930,7 +966,8 @@ default plugins.
     `Bash(git push:*)`, then run without the auto-mode classifier, and its
     hooks run as the owner. A colleague can thus reach whatever a mapped
     repo's committed settings pre-approve. The brief says such permissions
-    don't lift the merge gate (owner-go is still required), but that is an
+    don't lift the merge gate (only the owner's own instruction, in the
+    session or verified by owner-go from Slack, is a go), but that is an
     instruction too.
 - **Colleagues' dangerous commands:** only the owner can approve (above).
   Hermes posts the approval in the chat where it was raised and doesn't

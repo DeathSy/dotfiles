@@ -201,14 +201,14 @@ class SenderTests(Base):
 
     def test_s8_reopen_respects_cap(self):
         a = self.add_root()
-        self.add_task(address=a, state="done", requester=COLL)
+        self.add_task(address=a, state="waiting", requester=COLL)
         for i in range(3):
             self.add_task(tid=f"july-pcs-ff0{i}", address=self.add_root(f"july-pcs-ff0{i}"),
                           thread=f"1795400001.00000{i}")
         rc, body, _ = self.run_cli("send", "one more thing", slack={"actor": COLL})
         self.assertEqual(rc, 1)
-        self.assertIn("tasks are running", body["error"])
-        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "done")
+        self.assertIn("tasks are working", body["error"])
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")
 
     def test_a9_send_refused_while_starting_or_after_failure(self):
         a = self.add_root()
@@ -239,8 +239,8 @@ class IdentityTests(Base):
     def test_a2_reused_address_cant_post_or_read_approvals(self):
         a = self.add_root("july-pcs-new1")  # a new terminal now holds the old task's address
         self.add_task(address=a, state="done", requester=COLL, last_ask_ts="1795400100.000001")
-        for cmd in ("post", "owner-go"):
-            rc, body, _ = self.run_cli(cmd, *(["hello"] if cmd == "post" else []), extra={"HC_TERMINAL_ID": a})
+        for cmd in ("post", "done", "blocked"):
+            rc, body, _ = self.run_cli(cmd, "hello", extra={"HC_TERMINAL_ID": a})
             self.assertEqual(rc, 1, cmd)
         self.assertEqual(self.slack_calls(), [])
 
@@ -272,11 +272,13 @@ class IdentityTests(Base):
 
 
 class OwnerGoTests(Base):
+    """Decisions from Slack: owner-go reads the thread itself (one typed into the session counts too)."""
+
     def setUp(self):
         super().setUp()
         self.a = self.add_root()
         self.ask = time.time() - 300
-        self.add_task(address=self.a, requester=COLL, started_age=600, last_ask_ts=f"{self.ask:.6f}")
+        self.add_task(address=self.a, requester=COLL, started_age=600, last_note_ts=f"{self.ask:.6f}")
         self.replies = os.path.join(self.d, "replies.json")
 
     def owner_go(self, messages_or_pages, extra=None):
@@ -304,7 +306,7 @@ class OwnerGoTests(Base):
         self.assertEqual((call["channel"], call["ts"]), (CHAN, THREAD))
 
     def test_a4_no_ask_yet_means_no_go(self):
-        self.add_task(address=self.a, requester=COLL, started_age=600)  # no last_ask_ts
+        self.add_task(address=self.a, requester=COLL, started_age=600)  # no last_note_ts
         rc, body, _ = self.owner_go({"ok": True, "messages": [{"user": OWNER, "ts": f"{time.time():.6f}",
                                                                "text": "go"}]})
         self.assertEqual(body["owner_messages"], [])
@@ -324,11 +326,18 @@ class OwnerGoTests(Base):
         self.assertEqual(rc, 1)
         self.assertIn("can't verify", body["error"])
 
-    def test_ask_records_the_review_request_ts(self):
-        rc, body, _ = self.run_cli("ask", "PR #1 is open, reviews ok. Merge?", extra={"HC_TERMINAL_ID": self.a})
-        self.assertEqual(rc, 0, body)
-        self.assertGreater(float(self.tasks()["july-pcs-ab12"]["last_ask_ts"]), self.ask)
+    def test_done_and_blocked_record_the_note_ts_and_say_where_to_answer(self):
+        for kind in ("done", "blocked"):
+            rc, body, _ = self.run_cli(kind, "PR #1 is open, reviews ok", extra={"HC_TERMINAL_ID": self.a})
+            self.assertEqual(rc, 0, body)
+            self.assertGreater(float(self.tasks()["july-pcs-ab12"]["last_note_ts"]), self.ask)
+            thread_posts = [p["text"] for p in self.posts() if p.get("thread_ts") == THREAD]
+            self.assertIn("answer here or in its herdr tab", thread_posts[-1])
+            self.add_task(address=self.a, requester=COLL, started_age=600, last_note_ts=f"{self.ask:.6f}")
+        rc, body, _ = self.run_cli("ask", "just a note", extra={"HC_TERMINAL_ID": self.a})
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["last_note_ts"], f"{self.ask:.6f}")  # a note isn't a request
 
+class SlackEncodingTests(Base):
     def test_r1_read_methods_are_form_encoded(self):
         m = load_module()
         seen = []
@@ -431,7 +440,8 @@ class TerminalTests(Base):
         tasks = self.tasks()
         self.assertEqual((tasks["july-pcs-aa01"]["state"], tasks["july-pcs-aa01"]["address"]), ("running", a1))
         self.assertTrue(any("Started `july-pcs-aa01`" in p["text"] for p in self.posts()))
-        self.assertEqual(tasks["july-pcs-aa02"]["state"], "failed")
+        self.assertNotIn("july-pcs-aa02", tasks)  # failed, cleaned up, moved to history
+        self.assertEqual([h["state"] for h in self.state()["history"] if h["id"] == "july-pcs-aa02"], ["failed"])
         self.assertIsNone(self.terminal(a2))
 
     def test_a5_failed_removal_is_retried_and_the_record_kept(self):
@@ -467,10 +477,12 @@ class TerminalTests(Base):
         self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "running")
         self.assertEqual(self.posts(), [])
 
-    def test_gone_terminal_still_fails_the_task(self):
+    def test_a_closed_terminal_ends_the_task(self):
         self.add_task(address="t77")
         self.run_cli("monitor")
-        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "failed")
+        self.assertNotIn("july-pcs-ab12", self.tasks())
+        self.assertEqual(self.state()["history"][-1]["state"], "closed")
+        self.assertIn("its terminal was closed", self.posts()[-1]["text"])
 
 
 class InputTests(Base):
@@ -640,12 +652,23 @@ json.dump(d, open("{self.claude_json}", "w"))
             self.assertEqual(f.read().split()[0], os.path.realpath(self.repo))
         self.assertIn(os.path.realpath(self.repo), rj(self.claude_json)["projects"])
 
-    def test_b2_a_helper_that_trusts_another_folder_fails_the_start(self):
+    def test_b2_a_helper_that_trusts_a_folder_in_another_project_fails_the_start(self):
+        other = os.path.join(self.d, "other-project")
+        os.makedirs(os.path.join(other, "repo"))
+        cfg = rj(self.cfg)
+        cfg["projects"]["other"] = other
+        wj(self.cfg, cfg)
         rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER},
-                                   extra={"TRUST_KEY": "/Users/someone/elsewhere"})
+                                   extra={"TRUST_KEY": os.path.join(other, "repo")})
         self.assertEqual(rc, 1)
-        self.assertIn("trusted another folder", body["error"])
+        self.assertIn("in another project", body["error"])
         self.assertEqual(self.hc()["terminals"], [])  # never launched
+
+    def test_nit_an_unrelated_folder_trusted_meanwhile_only_warns(self):
+        rc, body, err = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER},
+                                     extra={"TRUST_KEY": "/Users/someone/elsewhere"})
+        self.assertEqual(rc, 0, body)
+        self.assertIn("also became trusted", err)
 
     def test_b2_an_already_trusted_repo_skips_the_helper(self):
         wj(self.claude_json, {"projects": {os.path.realpath(self.repo): {"hasTrustDialogAccepted": True}}})
@@ -664,12 +687,20 @@ json.dump(d, open("{self.claude_json}", "w"))
             m.hc("read", "t1", "--lines", "0")
         self.assertEqual(str(e.exception), "hc read: failed (exit 1)")
 
-    def test_brief_keeps_the_merge_gate_over_repo_permissions(self):
+    def test_brief_is_autonomous_and_the_merge_gate_is_in_herdr(self):
         m = load_module()
         m.CFG.update(owner=OWNER)
         b = m.brief({"id": "july-pcs-ab12", "project": "pcs", "cwd": "/x", "requester": OWNER, "launch": "L",
                      "requester_name": "K"}, "x")
-        self.assertIn("owner-go is still required", b)
+        for phrase in ("Work autonomously", "Don't ask the requester and wait", "july-task blocked",
+                       "Never merge, deploy, release or push to a shared branch on your own",
+                       "pre-approves"):
+            self.assertIn(phrase, b)
+        self.assertIn("july-task owner-go", b)
+        self.assertIn("in the thread or in this session's herdr tab", b)
+        self.assertIn("types it directly into this session", b)
+        self.assertIn("is not proof on its own", b)
+        self.assertNotIn("july-task ask", b)
 
     def test_dialog_kinds(self):
         m = load_module()
@@ -893,6 +924,22 @@ class AppTabTests(Base):
             self.assertNotIn("ui_tab", self.tasks()[task["id"]], name)  # a definite outcome: no retries
             self.set_doc(self.doc)
 
+    def test_nit_a_stop_racing_the_add_still_removes_the_tab(self):
+        a = self.add_root("july-pcs-aaa1", state="finished")
+        ui = {"tab": "tbAAA1", "block": "pdAAA1", "state": "adding", "since": time.time(), "remove": True}
+        self.add_task(tid="july-pcs-aaa1", address=a, state="stopped", ended_at=time.time(), ui_tab=ui)
+        self.run_cli("monitor")  # the add hasn't landed yet: the record is kept
+        self.assertEqual(self.tasks()["july-pcs-aaa1"]["ui_tab"]["tab"], "tbAAA1")
+        doc = json.loads(json.dumps(self.doc))
+        doc["spaces"][1]["tabs"].append({"id": "tbAAA1", "name": "july-pcs-aaa1", "root": {"type": "row", "id": "tbAAA1",
+                                         "children": [{"type": "block", "id": "pdAAA1", "content": {"terminal": a}}]}})
+        self.set_doc(doc)  # ...then the late add lands
+        self.run_cli("monitor")
+        self.assertEqual(self.app_doc()["value"], self.doc)
+        self.assertNotIn("ui_tab", self.tasks()["july-pcs-aaa1"])
+        self.run_cli("monitor")  # the next minute moves the settled record to history
+        self.assertNotIn("july-pcs-aaa1", self.tasks())
+
     def test_b4_a_size_the_app_added_still_counts_as_ours(self):
         task, err = self.stop_with(lambda sp, tab: sp[1]["tabs"][1]["root"]["children"][0].update(size={"weight": 1.0}))
         self.assertEqual(self.app_doc()["value"], self.doc)
@@ -942,9 +989,114 @@ class AppTabTests(Base):
         self.assertEqual(str(e.exception), "doc.get: rpc error")
 
 
+class LifecycleTests(Base):
+    """Autonomous tasks: no waiting in Slack; finished or blocked tasks wait in their herdr tab for takeover."""
+
+    def entries(self, *extra, t0=None):
+        t0 = t0 or time.time() - 3000
+        e = [{"type": "user", "message": {"content": "the brief"}, "timestamp": iso(t0)}]
+        return e + list(extra)
+
+    def test_done_and_blocked_wait_in_the_tab_and_dont_count(self):
+        addrs = []
+        for i, kind in enumerate(("done", "blocked", "done")):
+            a = self.add_root(f"july-pcs-cc0{i}")
+            self.add_task(tid=f"july-pcs-cc0{i}", address=a, thread=f"1795400010.00000{i}", requester=COLL)
+            rc, body, _ = self.run_cli(kind, "PR #1 opened, reviews ok" if kind == "done" else "need the DB password",
+                                       extra={"HC_TERMINAL_ID": a})
+            self.assertEqual(rc, 0, body)
+            addrs.append(a)
+        self.assertEqual({t["state"] for t in self.tasks().values()}, {"waiting"})
+        blocked = [p["text"] for p in self.posts() if p.get("thread_ts") == "1795400010.000001"]
+        self.assertEqual(len(blocked), 1)
+        self.assertIn(f"needs <@{OWNER}>", blocked[0])
+        self.assertIn("answer here or in its herdr tab", blocked[0])
+        rc, body, _ = self.run_cli("start", "pcs", "--", "another task", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)  # three waiting tasks don't block a new one
+
+    def test_ask_is_only_a_note(self):
+        a = self.add_root()
+        self.add_task(address=a)
+        rc, body, _ = self.run_cli("ask", "which DB?", extra={"HC_TERMINAL_ID": a})
+        self.assertEqual(rc, 0, body)
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "running")
+
+    def test_human_input_in_the_tab_is_a_takeover(self):
+        t0 = time.time() - 3000
+        a = self.add_root(status="idle", status_age=2000)
+        self.add_task(address=a, state="waiting", session_id="s1", waiting_since=t0 + 50)
+        self.write_transcript("s1", self.entries(
+            {"type": "user", "message": {"content": "[Slack reply from Bob (colleague)] fyi"}, "timestamp": iso(t0 + 10)},
+            {"type": "user", "message": {"content": "<hc from=\"t9 review\">ok</hc>"}, "timestamp": iso(t0 + 20)},
+            t0=t0))
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")  # relayed and worker input: not a person
+        with open(os.path.join(self.projects, "proj", "s1.jsonl"), "a") as f:
+            f.write(json.dumps({"type": "user", "message": {"content": "merge it please"}, "timestamp": iso(t0 + 100)}) + "\n")
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "takeover")
+
+    def test_waiting_tasks_are_never_closed_and_get_one_reminder(self):
+        a = self.add_root(status="idle", status_age=30 * 86400)
+        self.add_task(address=a, state="waiting", waiting_since=time.time() - 30 * 86400, started_age=31 * 86400)
+        self.run_cli("monitor")
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")
+        self.assertEqual(self.terminal(a)["state"], "live")
+        reminders = [p for p in self.posts() if "idle in its herdr tab" in p["text"]]
+        self.assertEqual(len(reminders), 1)
+
+    def test_a_waiting_task_that_works_again_is_running(self):
+        t0 = time.time() - 3000
+        a = self.add_root(status="working")
+        self.add_task(address=a, state="waiting", session_id="s2", waiting_since=t0 + 50)
+        self.write_transcript("s2", self.entries(
+            {"type": "user", "message": {"content": "<teammate-message>review: ok</teammate-message>"},
+             "timestamp": iso(t0 + 100)}, t0=t0))
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "running")
+
+    def test_an_idle_running_task_relays_one_line_and_waits(self):
+        t0 = time.time() - 3000
+        a = self.add_root(status="done", status_age=1200)
+        self.add_task(address=a, session_id="s3")
+        self.write_transcript("s3", self.entries(
+            {"type": "assistant", "uuid": "u1", "message": {"content": [{"type": "text", "text":
+             "PR #7 is open, both reviews passed.\nDetails: lots of lines\nmore"}]}, "timestamp": iso(t0 + 10)}, t0=t0))
+        self.run_cli("monitor")
+        self.assertEqual(self.posts()[-1]["text"],
+                         "`july-pcs-ab12`: PR #7 is open, both reviews passed. … (more in its herdr tab)")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")
+
+    def test_an_old_done_record_is_read_as_waiting(self):
+        a = self.add_root(status="idle")
+        self.add_task(address=a, state="done", ended_at=time.time() - 2 * 86400)
+        self.run_cli("monitor")
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")
+        self.assertEqual(self.terminal(a)["state"], "live")
+
+    def test_nit_stuck_cleanup_is_given_up_after_three_days(self):
+        a = self.add_root(state="finished")
+        self.add_task(address=a, state="stopped", ended_at=time.time() - 4 * 86400, cleanup_pending=True,
+                      ui_tab={"tab": "tbX", "block": "pdX", "state": "added", "space": "spX", "remove": True})
+        rc, body, err = self.run_cli("monitor", extra={"FAKE_HC_RM_FAIL": "1"})
+        self.assertNotIn("july-pcs-ab12", self.tasks())
+        self.assertIn("giving up", err)
+
+    def test_nit_start_stays_within_its_budget(self):
+        path = os.path.join(self.d, "screens.json")
+        wj(path, [" Some unknown dialog\n"])
+        t0 = time.time()
+        rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER}, extra={
+            "FAKE_HC_RUN_STATUS": "blocked", "FAKE_HC_SCREENS": path, "JT_DIALOG_WAIT": "60", "JT_START_WAIT": "120",
+            "JT_START_BUDGET": "26"})
+        self.assertEqual(rc, 1)
+        self.assertLess(time.time() - t0, 20)
+
+
 class RelayTests(Base):
     def task_with(self, entries, last_post_at=0, tid="july-pcs-ab12", thread=THREAD):
-        a = self.add_root(tid, status="done", status_age=600)
+        a = self.add_root(tid, status="done", status_age=1200)
         self.add_task(tid=tid, address=a, session_id="s-" + tid, last_post_at=last_post_at, thread=thread)
         self.write_transcript("s-" + tid, entries)
         return a
@@ -960,7 +1112,7 @@ class RelayTests(Base):
         ], last_post_at=t0 + 20)
         self.run_cli("monitor")
         self.run_cli("monitor")
-        self.assertEqual([p["text"] for p in self.posts()], ["`july-pcs-ab12` says:\nWhich DB?"])
+        self.assertEqual([p["text"] for p in self.posts()], ["`july-pcs-ab12`: Which DB?"])
 
     def test_s6_comment_on_own_post_not_relayed(self):
         t0 = time.time() - 500
@@ -990,7 +1142,7 @@ class RelayTests(Base):
         rc, body, err = self.run_cli("monitor")
         self.assertEqual(rc, 0, err)
         self.assertIn("july-pcs-bad1", err)
-        self.assertEqual([p["text"] for p in self.posts()], ["`july-pcs-ab12` says:\nDone reading."])
+        self.assertEqual([p["text"] for p in self.posts()], ["`july-pcs-ab12`: Done reading."])
         self.assertEqual(self.tasks()["july-pcs-ab12"]["notes"]["relayed"], "u9")
 
     def test_a7_secret_reply_is_not_stored(self):
@@ -1019,7 +1171,7 @@ class RelayTests(Base):
         ])
         self.run_cli("monitor", extra={"JT_SLACK_FAIL": "chat.postMessage"})
         outbox = self.state()["outbox"]
-        self.assertEqual([(m["kind"], m["text"]) for m in outbox], [("thread", "`july-pcs-ab12` says:\nFinal answer")])
+        self.assertEqual([(m["kind"], m["text"]) for m in outbox], [("thread", "`july-pcs-ab12`: Final answer")])
         self.run_cli("monitor")
         self.assertEqual(self.state()["outbox"], [])
         delivered = [p for p in self.posts() if p["text"].endswith("Final answer")]

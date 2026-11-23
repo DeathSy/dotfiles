@@ -275,7 +275,7 @@ let
       # The owner's decision: July's task CLI runs without him (it enforces its own allowlist, cap and
       # secret checks), but only as a single, unchained invocation.
       "For July's task CLI: approve it only when the WHOLE command line is a single `july-task` invocation (start, send, status, list, stop,"
-      "post, ask, done, owner-go), or a single write of a file under ~/.cache/july-task-input, with no other command,"
+      "post, ask, done, blocked, owner-go), or a single write of a file under ~/.cache/july-task-input, with no other command,"
       "pipe, `;`, `&&`, `||`, substitution or redirection; otherwise judge the other parts by the rules above, and"
       "ESCALATE when unsure. ESCALATE if the command sets or unsets HERMES_SESSION_* or HC_* variables (including"
       "env -u). The ESCALATE rules win."
