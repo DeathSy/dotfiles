@@ -676,7 +676,11 @@ default plugins.
     `~/.cache/july-task-input/` and runs `july-task start <project> [--repo
     <dir>] --file <file>` in its terminal. The CLI reads the file (it must be
     the caller's own regular file, at most 64 KB) and removes it. A heredoc
-    isn't used: a line of the task text could end it and run the rest as shell. Hermes passes each turn's Slack context to terminal
+    isn't used: a line of the task text could end it and run the rest as shell.
+    With `approvals.mode: smart` the approval model judges these `july-task`
+    commands like any other terminal command. `approvals.smart_policy`
+    doesn't mention them, so a start or a send may be escalated to the owner,
+    and in a colleague's DM it is then denied after 300 s. Hermes passes each turn's Slack context to terminal
     commands as `HERMES_SESSION_*` (platform, chat, thread ts, actor), so the
     CLI takes the requester and the thread from there, not from the model.
     Only `HERMES_SESSION_ACTOR_ID` names the sender, never `USER_ID`: in a

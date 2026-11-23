@@ -266,6 +266,7 @@ let
     (eq [ "approvals" "mode" ] "smart")
     (eq [ "approvals" "smart_policy" ] (lib.concatStringsSep " " [
       "Approve read-only code and docs exploration (reading, searching, listing, git log/diff/show)."
+      "Also approve the `july-task` CLI (start, send, status, list, stop, post, ask, done, owner-go) and writing its input files under ~/.cache/july-task-input: it enforces its own allowlist, cap and secret checks."
       "ESCALATE, never approve: sending data off this machine (curl/wget with a body or upload, scp, rsync, nc, webhooks);"
       "reading secrets (security find-generic-password, pass show, ~/.ssh, .env files, cloud credentials);"
       "package or tool installs; git push, merge or tag; and anything that changes a cluster, cloud or database"
