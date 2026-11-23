@@ -656,7 +656,12 @@ default plugins.
   127.0.0.1:8642 (where host-side approvals apply), or edit the monitor's
   state and code. That follows from giving colleagues the terminal.
 - **No code changes (an instruction, not enforced):** July's persona
-  (`dotfiles.ai.hermes.soulFile` → `~/.hermes/SOUL.md`, the AppMan support
+  (`dotfiles.ai.hermes.soulFile` → `~/.hermes/SOUL.md`; `hermes-config-check
+  --fix` at each rebuild installs it when the live file is missing or is
+  still exactly the copy it installed last, whose hash is kept in
+  `~/.local/state/inbox-monitor/.soul-installed`. A live file edited by hand
+  is never overwritten: the rebuild prints a note to merge it by hand. The
+  AppMan support
   assistant) tells it never to write, change or commit code or open PRs itself
   (it may start a coding task session, below);
   reading code to answer is fine. By the owner's choice nothing enforces this:
@@ -725,7 +730,15 @@ default plugins.
     reported" (owner's decision, 2026-11-23).
     If Claude's trust screen appears, it is answered (`down enter`) only when
     "No, exit" is highlighted above "Yes, I trust this folder", and only in a
-    mapped project. Any other dialog at start fails the start. July then posts
+    mapped project. Both forms count: "Do you trust the files in this
+    folder?" and "Quick safety check: Is this a project you created or one you
+    trust?". The second may also list the permissions the repo's
+    `.claude/settings.local.json` pre-approves. hc can report `blocked` before
+    the dialog has finished drawing, so a dialog at start is re-read for up to
+    10 s before it counts as unknown. Seen on 2026-11-23: a first start in an
+    untrusted saas subrepo failed on the half-drawn screen. Any other dialog
+    fails the start, and the error names it with the first two screen lines
+    (masked). July then posts
     a start message in the thread. When a colleague started the task, the owner
     gets a one-line DM.
   - **Reporting:** the session posts as July into its own thread with

@@ -20,7 +20,7 @@ when they clear. Output names settings, never values.
 The resolved-toolset assertion uses Hermes' own resolver (hermes_cli.tools_config) from the installed
 checkout: no chat platform may resolve to the monitor's inbox MCP server.
 """
-import argparse, copy, importlib.util, json, os, re, stat, subprocess, sys, time
+import argparse, copy, hashlib, importlib.util, json, os, re, stat, subprocess, sys, time
 
 import yaml
 
@@ -223,13 +223,42 @@ if os.path.exists(managed):
     else:
         problems.append("~/.hermes/.managed exists: Hermes treats the install as read-only")
 soul = spec.get("soul")
-if soul and not os.path.exists(os.path.join(home, "SOUL.md")):
-    if a.fix:
-        with open(soul) as f:
-            write_private(os.path.join(home, "SOUL.md"), f.read())
-        changes.append("SOUL.md seeded")
+if soul:
+    # The persona follows the overlay without clobbering local edits: --fix installs the overlay's SOUL.md
+    # when the live file is missing, or is still exactly the copy it installed last (its hash is kept in
+    # .soul-installed next to the state file). A live file that matches neither has been edited here: it is
+    # left alone, with a note to merge by hand.
+    live_soul, mark = os.path.join(home, "SOUL.md"), os.path.join(os.path.dirname(spec["state_file"]), ".soul-installed")
+    sha = lambda text: hashlib.sha256(text.encode()).hexdigest()
+    with open(soul) as f:
+        want_soul = f.read()
+    try:
+        installed = open(mark).read().strip()
+    except OSError:
+        installed = ""
+    if not os.path.exists(live_soul):
+        if a.fix:
+            write_private(live_soul, want_soul)
+            write_private(mark, sha(want_soul))
+            changes.append("SOUL.md seeded")
+        else:
+            problems.append("~/.hermes/SOUL.md is missing (--fix seeds the persona)")
     else:
-        problems.append("~/.hermes/SOUL.md is missing (--fix seeds the persona)")
+        with open(live_soul) as f:
+            live_text = f.read()
+        if live_text == want_soul:
+            if a.fix and installed != sha(want_soul):
+                write_private(mark, sha(want_soul))
+        elif installed and sha(live_text) == installed:
+            if a.fix:
+                write_private(live_soul, want_soul)
+                write_private(mark, sha(want_soul))
+                changes.append("SOUL.md updated from the overlay")
+            else:
+                say("note: ~/.hermes/SOUL.md is an older overlay version (--fix updates it)")
+        else:
+            print(f"note: ~/.hermes/SOUL.md has local edits, so the overlay's version was not installed; "
+                f"compare (diff ~/.hermes/SOUL.md {soul}) and merge by hand")
 
 # ── resolved toolsets (Hermes' own resolver) ───────────────────────────────
 RESOLVE = r"""

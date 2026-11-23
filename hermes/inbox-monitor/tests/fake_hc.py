@@ -5,8 +5,11 @@ Supports what july_task.py uses: run, get, ls, kill, rm, send, wait, read, keys.
 the real hc. FAKE_HC_DOWN=1 makes every command fail as if the core were unavailable; FAKE_HC_RM_FAIL=1 makes rm fail. On `run` with
 --session-id it writes a transcript under $FAKE_HC_TRANSCRIPTS (unless FAKE_HC_NO_TRANSCRIPT=1); on `wait`
 it copies $FAKE_HC_SNAPSHOT_FROM to $FAKE_HC_SNAPSHOT_TO (to see the task state during a start).
+FAKE_HC_RUN_STATUS sets a new claude terminal's status (e.g. blocked), FAKE_HC_SCREENS (a JSON list) gives
+successive `read` screens, FAKE_HC_KEYS_UNBLOCK=1 makes `enter` (after a `down`) clear a blocked status, and FAKE_HC_STUCK_KEYS=1
+makes `down` move nothing.
 """
-import json, os, shutil, sys, time
+import json, os, re, shutil, sys, time
 
 PATH = os.environ["FAKE_HC_STATE"]
 
@@ -64,7 +67,8 @@ def main():
         argv = rest[i + 1:]
         t = {"address": f"t{s['next']}", "name": opts.get("name"), "state": "live", "parent": None,
              "labels": opts["labels"], "argv": argv, "cwd": opts.get("cwd"),
-             "status": {"app": "claude-code", "state": "idle"} if argv and argv[0].endswith("claude") else None,
+             "status": {"app": "claude-code", "state": os.environ.get("FAKE_HC_RUN_STATUS", "idle")}
+             if argv and argv[0].endswith("claude") else None,
              "status_ms": int(time.time() * 1000), "created_ms": int(time.time() * 1000), "exit_code": None,
              "screen": "", "inbox": [], "keys": []}
         s["next"] += 1
@@ -104,7 +108,20 @@ def main():
         t["inbox"].append(rest[-1])
     elif cmd == "keys":
         t["keys"].append(rest[1:])
+        if "down" in rest[1:] and os.environ.get("FAKE_HC_STUCK_KEYS") != "1":
+            t["moved"] = True  # the cursor moves to the next choice (applied to every later screen)
+        if "enter" in rest[1:] and os.environ.get("FAKE_HC_KEYS_UNBLOCK") == "1" and t["status"] and t.get("moved"):
+            t["status"]["state"] = "idle"
     elif cmd == "read":
+        screens = os.environ.get("FAKE_HC_SCREENS")  # a JSON list: one screen per read, the last one stays
+        if screens:
+            seq = rj(screens)
+            n = t.setdefault("reads", 0)
+            t["screen"] = seq[min(n, len(seq) - 1)]
+            t["reads"] = n + 1
+        if t.get("moved"):
+            t["screen"] = re.sub(r"❯( *(?:1\. )?No, exit)", r" \1", t["screen"])
+            t["screen"] = re.sub(r" ( *)((?:2\. )?Yes, I trust this folder)", r"❯\1\2", t["screen"], count=1)
         save(s)
         print(t["screen"])
         sys.exit(0)

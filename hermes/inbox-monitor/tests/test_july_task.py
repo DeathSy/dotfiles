@@ -521,6 +521,80 @@ class InputTests(Base):
         self.assertNotIn("holds many repos", self.terminal(body["terminal"])["argv"][-1])
 
 
+TRUST_VARIANT = """ Quick safety check: Is this a project you created or one you trust?
+ ⚠ This folder pre-approves 15 tool permissions in .claude/settings.local.json
+ ❯ 1. No, exit
+   2. Yes, I trust this folder
+"""
+TRUST_PARTIAL = """ Quick safety check: Is this a project you created or one you trust?
+"""
+
+
+class StartDialogTests(Base):
+    def start(self, screens, unblock=True, wait="3", extra=None):
+        path = os.path.join(self.d, "screens.json")
+        wj(path, screens)
+        extra = dict(extra or {}, FAKE_HC_RUN_STATUS="blocked", FAKE_HC_SCREENS=path, JT_DIALOG_WAIT=wait)
+        if unblock:
+            extra["FAKE_HC_KEYS_UNBLOCK"] = "1"
+        t0 = time.time()
+        rc, body, err = self.run_cli("start", "pcs", "--", "read the README", slack={"actor": OWNER}, extra=extra)
+        return rc, body, time.time() - t0
+
+    def keys_sent(self):
+        return [k for t in self.hc()["terminals"] for k in t["keys"]]
+
+    def test_trust_variant_answered_after_the_screen_finishes_drawing(self):
+        # hc reports blocked while only the first line is drawn; the choices appear a read later.
+        rc, body, _ = self.start([TRUST_PARTIAL, TRUST_PARTIAL, TRUST_VARIANT])
+        self.assertEqual(rc, 0, body)
+        self.assertEqual(self.keys_sent(), [["down"], ["enter"]])  # one at a time, enter only once on "Yes"
+
+    def test_trust_cursor_that_doesnt_move_is_never_confirmed(self):
+        rc, body, _ = self.start([TRUST_VARIANT], extra={"FAKE_HC_STUCK_KEYS": "1"})
+        self.assertEqual(rc, 1)
+        self.assertIn("didn't move", body["error"])  # enter is pressed only once "Yes" is highlighted
+        self.assertEqual(self.hc()["terminals"], [])  # and the stuck session is removed
+
+    def test_unknown_dialog_fails_after_rereading_and_names_it(self):
+        rc, body, elapsed = self.start([" Allow this MCP server to run?\n ❯ Yes\n   No\n"], wait="2")
+        self.assertEqual(rc, 1)
+        self.assertIn("Allow this MCP server to run?", body["error"])
+        self.assertGreaterEqual(elapsed, 2)
+        self.assertEqual(self.keys_sent(), [])
+        self.assertEqual(self.hc()["terminals"], [])  # the failed start is cleaned up
+
+    def test_trust_screen_with_yes_highlighted_is_not_answered(self):
+        rc, body, _ = self.start([" Do you trust the files in this folder?\n   1. No, exit\n ❯ 2. Yes, I trust this folder\n"],
+                                 wait="1")
+        self.assertEqual(rc, 1)
+        self.assertEqual(self.keys_sent(), [])
+
+    def test_trust_screen_outside_a_mapped_project_is_not_answered(self):
+        cfg = rj(self.cfg)
+        cfg["projects"]["pcs"] = os.path.join(self.d, "elsewhere")
+        os.makedirs(cfg["projects"]["pcs"])
+        wj(self.cfg, cfg)
+        m = load_module()
+        m.CFG.update(projects={"pcs": cfg["projects"]["pcs"]})
+        self.assertFalse(m.in_mapped_project(self.repo))
+        self.assertTrue(m.in_mapped_project(os.path.join(cfg["projects"]["pcs"])))
+
+    def test_error_screen_head_is_masked(self):
+        m = load_module()
+        head = m.screen_head("╭────╮\n│ Login as bob@example.com? │\n│ call 0812345678 │\n│ third line │\n╰────╯")
+        self.assertEqual(head, "Login as ***.com? / call ***5678")
+
+    def test_trust_matcher(self):
+        m = load_module()
+        self.assertTrue(m.trust_screen(TRUST_VARIANT))
+        self.assertTrue(m.trust_screen(" Do you trust the files in this folder?\n ❯ 1. No, exit\n   2. Yes, I trust this folder"))
+        self.assertFalse(m.trust_screen(TRUST_PARTIAL))
+        self.assertFalse(m.trust_screen(" ❯ 1. Yes, I trust this folder\n   2. No, exit"))
+        self.assertTrue(m.yes_highlighted("   No, exit\n ❯ Yes, I trust this folder"))
+        self.assertFalse(m.yes_highlighted(TRUST_VARIANT))
+
+
 class RelayTests(Base):
     def task_with(self, entries, last_post_at=0, tid="july-pcs-ab12", thread=THREAD):
         a = self.add_root(tid, status="done", status_age=600)
