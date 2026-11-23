@@ -31,6 +31,7 @@ in
   imports = [
     ./claude.nix
     ./codex.nix
+    ./trust-worktree.nix
     ./gateway.nix
   ];
 
