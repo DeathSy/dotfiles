@@ -10,4 +10,8 @@
   # A headless runtime box: no desktop-only apps or settings
   # (nixpkgs/nix-darwin/desktop-extras.nix).
   dotfiles.desktopExtras = false;
+
+  home-manager.users.ksotis.imports = [
+    ../home-manager/node-exporter.nix
+  ];
 }
