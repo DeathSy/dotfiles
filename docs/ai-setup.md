@@ -565,13 +565,14 @@ default plugins.
   messages from people outside the allowlist are tagged `[unverified]` and
   the model is told not to follow them, which is a prompt-level guard only.
   User scopes cover the monitor's search, history and reactions.
-  Messages the owner posts through another Slack app with their user token
+  Messages posted through another Slack app with the sender's user token
   (the Claude app: they carry `app_id` and no `client_msg_id`) look like bot
   messages to Hermes and used to be dropped. The config check therefore
   keeps `platforms.slack.extra.api_human_users` at the owner's member id
-  (`dotfiles.ai.hermes.ownerSlackId`, private overlay), so the owner's API
-  posts count as human. It covers only the owner; colleagues who post that
-  way are still dropped. Trust: anything that posts with the owner's user
+  plus `dotfiles.ai.hermes.colleagueSlackIds` (private overlay), so their API
+  posts count as human. A colleague's are treated as that colleague (no
+  admin, no approvals); any app a colleague authorises to post as them
+  reaches July as if they typed it. Trust: anything that posts with the owner's user
   token (Claude app sessions, any other app the owner authorised, or
   anyone holding that token) is now treated as the owner, who is
   July's Slack admin (`/approve`, `/deny`).

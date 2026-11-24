@@ -312,10 +312,10 @@ let
     (eq [ "slack" "group_allow_admin_from" ] [ cfg.ownerSlackId ])
     (eq [ "slack" "user_allowed_commands" ] userCommands)
     (eq [ "slack" "group_user_allowed_commands" ] userCommands)
-    # The owner's posts through another Slack app with their user token (the
-    # Claude app: app_id, no client_msg_id) look like bot messages to Hermes and
-    # were dropped; these users' API posts count as human.
-    (eq [ "platforms" "slack" "extra" "api_human_users" ] [ cfg.ownerSlackId ])
+    # Posts through another Slack app with the sender's user token (the Claude
+    # app: app_id, no client_msg_id) look like bot messages to Hermes and were
+    # dropped; the owner's and the allowlisted colleagues' API posts count as human.
+    (eq [ "platforms" "slack" "extra" "api_human_users" ] ([ cfg.ownerSlackId ] ++ cfg.colleagueSlackIds))
   ];
   defaults = lib.mapAttrsToList (k: value: { path = lib.splitString "." k; inherit value; }) ({
     "providers.cliproxy" = {
