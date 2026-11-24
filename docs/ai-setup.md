@@ -998,10 +998,28 @@ default plugins.
       runs one at a time (its own lock file, `.tabs.lock`), so a stop and the
       monitor never interleave an add and a remove.
     - Removal deletes the recorded tab only in the recorded space, only with
-      the task's name, and only with exactly the one-row, one-block layout July
-      wrote (the app may add a `size` to the block). A tab that was moved,
-      renamed or split, or has extra nodes or keys, is left alone and logged;
-      that counts as settled.
+      the task's name, and only while it holds nothing but this task. That
+      means either the one-row, one-block layout July wrote (the app may add a
+      `size` to the block), or the layout `hc-worker` makes of it.
+    - `hc-worker` copies the task root's `herdr.space`/`herdr.tab` labels, so
+      the session's workers and reviewer open as panes in its tab. It then
+      re-lays the tab: the session on the left at 70%, the rest stacked on the
+      right. Such a tab still counts as the task's when all of this holds:
+      - its tree passes `hc-worker`'s own `valid_node` (only row, column and
+        block nodes, known keys, finite positive weights), and its root is a
+        row with the tab's id;
+      - it holds the task's root block (the recorded block id, or a block
+        showing the task's terminal);
+      - every other block shows a terminal that is gone or finished, or that is
+        the task's own: named `<task>-…` and carrying its `july-launch` label.
+      July ships a copy of `hc-worker.py` next to `july_task.py`, so it judges
+      the shapes by the same code that writes them. Cleanup kills the
+      terminals first, so at removal they are normally gone. The `hc get`
+      checks count against the settle budget.
+    - A tab that was moved or renamed, holds a live terminal that isn't the
+      task's (a lookalike name without the launch label counts as foreign), or
+      has unknown nodes, keys or weights is left alone and logged; that counts
+      as settled.
     - A missing or unreadable document, a lost race or hc being down keeps the
       tab recorded for removal, and the monitor tries again every minute. The
       task record leaves the state only once its terminals and its tab are

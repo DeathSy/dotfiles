@@ -456,9 +456,12 @@ def cleanup(task):
 # its terminal, and loses it again at cleanup.
 # - The tab and block ids are recorded in the task (ui_tab, state "adding") BEFORE the document is written,
 #   so every tab July ever writes is known by id; nothing is ever found or deleted by name.
-# - Removal deletes only that recorded tab, only in the recorded space, only with the task's name and
-#   exactly the one-row, one-block layout July wrote (the app may add a size to the block). Anything else
-#   (moved, renamed, split, extra nodes) is left alone and logged.
+# - Removal deletes only that recorded tab, only in the recorded space, only with the task's name, and only
+#   while it holds nothing but this task: exactly the one-row, one-block layout July wrote (the app may add a
+#   size), or the layout hc-worker makes of it when the session starts workers and its reviewer in the tab
+#   (rows/columns/blocks with weights, judged by hc-worker's own valid_node): the task's root block plus
+#   blocks whose terminals are gone, finished, or the task's own (named "<task>-…" with its launch label).
+#   Anything else (moved, renamed, a live foreign terminal, unknown nodes) is left alone and logged.
 # - All document work runs in settle_tabs(), outside the state lock and after the terminals are killed,
 #   within a time budget; unfinished work stays recorded and the monitor retries it.
 # - Writes are version-checked (doc.set fails with "conflict" when the app wrote in between) and retried
@@ -605,6 +608,27 @@ def plan_tab(task):
         set_labels(task, None, None)
 
 
+def _load_hc_worker():
+    """hc-worker's own layout rules (valid_node, blocks), so a tab it re-laid is judged exactly by what it
+    writes: the copy installed next to this file, else the repo's source (tests). None if neither exists."""
+    import importlib.util
+    for path in (os.path.join(HERE, "hc_worker.py"),
+                 os.path.join(HERE, "..", "..", "nixpkgs", "home-manager", "ai", "hc-worker.py")):
+        if os.path.isfile(path):
+            try:
+                spec = importlib.util.spec_from_file_location("hc_worker", path)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                if callable(getattr(mod, "valid_node", None)) and callable(getattr(mod, "blocks", None)):
+                    return mod
+            except Exception:
+                continue
+    return None
+
+
+HC_WORKER = _load_hc_worker()
+
+
 def expected_tab(tid, ui, addr):
     """The exact tab July writes."""
     return {"id": ui["tab"], "name": tid, "root": {"type": "row", "id": ui["tab"], "children": [
@@ -648,9 +672,41 @@ def tab_add(tid, ui, addr, project, deadline=None):
     return "none", None, None
 
 
-def tab_remove(tid, ui, addr, deadline=None):
-    """Delete the recorded tab if it is still exactly ours, in the recorded space. Returns "removed",
-    "gone" (not there) or "left" (changed by hand: left alone)."""
+def relaid_tab_ours(tb, tid, ui, addr, launch, deadline=None):
+    """A tab hc-worker re-laid for this task's workers (session left, workers stacked right): still July's to
+    remove when its tree is only hc-worker's row/column/block nodes with valid weights (hc-worker's own
+    valid_node), its root is the row with the tab's id, it holds the task's root block (recorded id or the
+    task's terminal), and every other block shows a terminal that is gone or finished, or is one of this
+    task's own (named "<task>-…" with the task's launch label). Anything else: not ours to remove."""
+    if HC_WORKER is None or not isinstance(tb, dict) or set(tb) - {"id", "name", "root"} \
+            or tb.get("id") != ui["tab"] or tb.get("name") != tid:
+        return False
+    root = tb.get("root")
+    if not HC_WORKER.valid_node(root) or root.get("type") != "row" or root.get("id") != ui["tab"]:
+        return False
+    bs = HC_WORKER.blocks(root)
+    if not any(b["id"] == ui["block"] or b["content"]["terminal"] == addr for b in bs):
+        return False
+    for b in bs:
+        term = b["content"]["terminal"]
+        if b["id"] == ui["block"] or term == addr:
+            continue
+        if deadline and now() >= deadline:
+            raise DocTimeout("out of time while checking the tab's terminals")
+        g = hc_get(term) if re.fullmatch(r"t[0-9a-z]+", term) else None
+        if not g or g.get("state") != "live":
+            continue  # gone or finished
+        labels = g.get("labels") if isinstance(g.get("labels"), dict) else {}
+        if (g.get("name") or "").startswith(tid + "-") and launch and labels.get("july-launch") == launch:
+            continue  # one of this task's own workers or its reviewer
+        return False  # a live terminal that isn't the task's
+    return True
+
+
+def tab_remove(tid, ui, addr, deadline=None, launch=None):
+    """Delete the recorded tab in the recorded space, if it is still exactly what July wrote, or a layout
+    hc-worker made of it holding only this task's terminals (relaid_tab_ours). Returns "removed", "gone"
+    (not there) or "left" (changed by hand: left alone)."""
     outcome = []
 
     def change(value):
@@ -658,7 +714,8 @@ def tab_remove(tid, ui, addr, deadline=None):
             for tb in list(sp["tabs"]):
                 if tb.get("id") != ui["tab"]:
                     continue
-                if (ui.get("space") and sp["id"] != ui["space"]) or not is_our_tab(tb, tid, ui, addr):
+                if (ui.get("space") and sp["id"] != ui["space"]) or not (
+                        is_our_tab(tb, tid, ui, addr) or relaid_tab_ours(tb, tid, ui, addr, launch, deadline)):
                     outcome.append("left")
                     return None
                 sp["tabs"].remove(tb)
@@ -705,17 +762,17 @@ def settle_tabs(only=None, budget=TAB_BUDGET):
 
 def _settle_tabs(only, budget):
     with locked() as st:
-        jobs = [(t["id"], dict(t["ui_tab"]), t.get("address"), t["project"])
+        jobs = [(t["id"], dict(t["ui_tab"]), t.get("address"), t["project"], t.get("launch"))
                 for t in st["tasks"].values()
                 if isinstance(t.get("ui_tab"), dict) and (only is None or t["id"] in only)]
     deadline, results, problem = now() + min(TAB_BUDGET, max(0, budget)), {}, None
-    for tid, ui, addr, project in jobs:
+    for tid, ui, addr, project, launch in jobs:
         if now() >= deadline:
             break
         adding = not ui.get("remove") and ui.get("state") == "adding" and addr
         try:
             if ui.get("remove"):
-                results[tid] = ("removal", tab_remove(tid, ui, addr, deadline), None, None)
+                results[tid] = ("removal", tab_remove(tid, ui, addr, deadline, launch), None, None)
             elif adding:
                 results[tid] = ("add",) + tab_add(tid, ui, addr, project, deadline)
         except (DocOdd, DocBusy) as e:
@@ -757,7 +814,7 @@ def _settle_tabs(only, budget):
 
 
 def jobs_tab(jobs, tid):
-    return next(ui["tab"] for i, ui, _a, _p in jobs if i == tid)
+    return next(ui["tab"] for i, ui, _a, _p, _l in jobs if i == tid)
 
 
 # ── the Claude transcript (exact replies, read incrementally) ─────────────────

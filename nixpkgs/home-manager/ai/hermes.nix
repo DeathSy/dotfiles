@@ -142,8 +142,9 @@ let
     mkdir -p $out
     cp ${../../../hermes/inbox-monitor/july_task.py} $out/july_task.py
     cp ${taskConfig} $out/july-task.json
+    cp ${./hc-worker.py} $out/hc_worker.py  # its layout rules decide which re-laid task tabs July may remove
     chmod 0555 $out/july_task.py
-    chmod 0444 $out/july-task.json
+    chmod 0444 $out/july-task.json $out/hc_worker.py
   '';
   julyTask = pkgs.writeShellScriptBin "july-task" ''
     exec /usr/bin/python3 -I ${julyTaskDir}/july_task.py "$@"

@@ -966,6 +966,79 @@ class AppTabTests(Base):
         self.run_cli("monitor")  # the next minute moves the settled record to history
         self.assertNotIn("july-pcs-aaa1", self.tasks())
 
+    def relaid(self, task, worker_addrs, kind="column", weight=None):
+        """The tab as hc-worker re-lays it: the session left at 70%, the workers stacked on the right."""
+        ui, addr = task["ui_tab"], task["address"]
+        n = len(worker_addrs)
+        return {"id": ui["tab"], "name": task["id"], "root": {"type": "row", "id": ui["tab"], "children": [
+            {"type": "block", "id": ui["block"], "content": {"terminal": addr}, "size": {"weight": 0.7}},
+            {"type": kind, "id": "s" + "ab" * 16, "size": {"weight": 0.3 if weight is None else weight}, "children": [
+                {"type": "block", "id": f"pdW{i}", "content": {"terminal": w}, "size": {"weight": 1.0 / n}}
+                for i, w in enumerate(worker_addrs)]}]}}
+
+    def relay_and_stop(self, workers, **kw):
+        addr, task, _ = self.start()
+        ws = workers(task)  # may add terminals: before the fake hc state is read and written back
+        s = self.hc()
+        tabs = s["docs"]["herdr-app"]["value"]["spaces"][1]["tabs"]
+        tabs[1] = self.relaid(task, ws, **kw)
+        wj(self.hc_state, s)
+        rc, body, err = self.run_cli("stop", slack={"actor": OWNER})
+        self.assertEqual(rc, 0, body)
+        return task, err
+
+    def tab_ids(self):
+        return [tb["id"] for sp in self.app_doc()["value"]["spaces"] for tb in sp["tabs"]]
+
+    def test_hcw_a_relaid_tab_with_gone_workers_is_removed(self):
+        def workers(task):
+            done = self.add_terminal(task["id"] + "-w1", state="finished", labels={"july-launch": task["launch"]})
+            return [done, "t901"]  # one finished, one gone
+        task, err = self.relay_and_stop(workers)
+        self.assertEqual(self.app_doc()["value"], self.doc)
+        self.assertNotIn("ui_tab", self.tasks()[task["id"]])
+
+    def test_hcw_a_live_foreign_terminal_keeps_the_tab(self):
+        def workers(task):
+            return ["t901", "t902", self.add_terminal("someone-elses", app=None, argv=["/bin/zsh"])]
+        task, err = self.relay_and_stop(workers)
+        self.assertIn(task["ui_tab"]["tab"], self.tab_ids())
+        self.assertIn("left alone", err)
+
+    def test_hcw_a_live_terminal_of_the_task_itself_still_counts_as_ours(self):
+        addr, task, _ = self.start()
+        own = self.add_terminal(task["id"] + "-review", labels={"july-launch": task["launch"]})
+        s = self.hc()
+        s["docs"]["herdr-app"]["value"]["spaces"][1]["tabs"][1] = self.relaid(task, [own])
+        wj(self.hc_state, s)
+        st = self.state()  # stopped, terminals not killed yet (cleanup normally kills them first)
+        t = st["tasks"][task["id"]]
+        t.update(state="stopped", ended_at=time.time())
+        t["ui_tab"]["remove"] = True
+        wj(os.path.join(self.state_dir, "tasks.json"), st)
+        self.run_cli("monitor")
+        self.assertEqual(self.app_doc()["value"], self.doc)
+
+    def test_hcw_a_lookalike_terminal_keeps_the_tab(self):
+        def workers(task):
+            return [self.add_terminal(task["id"] + "-x")]  # the task's name pattern, but no launch label
+        task, err = self.relay_and_stop(workers)
+        self.assertIn(task["ui_tab"]["tab"], self.tab_ids())
+
+    def test_hcw_unknown_nodes_bad_weights_or_a_rename_keep_the_tab(self):
+        for kw in ({"kind": "grid"}, {"weight": 0}, {"weight": float("inf")}):
+            task, err = self.relay_and_stop(lambda task: ["t901"], **kw)
+            self.assertIn(task["ui_tab"]["tab"], self.tab_ids(), kw)
+            self.set_doc(self.doc)
+        addr, task, _ = self.start()
+        s = self.hc()
+        tab = self.relaid(task, ["t901"])
+        tab["name"] = "renamed by hand"
+        s["docs"]["herdr-app"]["value"]["spaces"][1]["tabs"][1] = tab
+        wj(self.hc_state, s)
+        self.run_cli("stop", slack={"actor": OWNER})
+        self.assertIn(task["ui_tab"]["tab"], self.tab_ids())
+
     def test_b4_a_size_the_app_added_still_counts_as_ours(self):
         task, err = self.stop_with(lambda sp, tab: sp[1]["tabs"][1]["root"]["children"][0].update(size={"weight": 1.0}))
         self.assertEqual(self.app_doc()["value"], self.doc)
