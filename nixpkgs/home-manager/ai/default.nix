@@ -32,6 +32,7 @@ in
     ./claude.nix
     ./codex.nix
     ./trust-worktree.nix
+    ./hc-worker.nix
     ./gateway.nix
   ];
 
