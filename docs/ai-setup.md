@@ -1019,7 +1019,7 @@ default plugins.
         must be gone or finished, or the task's own: for the root, the task's
         name, address and launch label; for the others, named `<task>-…` and
         carrying its `july-launch` label. Panes on another machine (`vps/t3`,
-        from `hc run --on`) are looked up there too: a live one keeps the tab,
+        from `hc run --on`) are looked up there too: a live one that isn't the task's keeps the tab,
         and an unreachable host means the tab stays recorded and is tried
         again later. Only a reference that isn't a terminal address keeps the
         tab without a lookup. If `hc get` fails or the time runs out, the tab
