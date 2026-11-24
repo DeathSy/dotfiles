@@ -16,13 +16,15 @@ iokit = ctypes.CDLL(ctypes.util.find_library("IOKit"))
 vp, i32, i64 = ctypes.c_void_p, ctypes.c_int32, ctypes.c_int64
 
 cf.CFStringCreateWithCString.restype, cf.CFStringCreateWithCString.argtypes = vp, [vp, ctypes.c_char_p, ctypes.c_uint32]
-cf.CFNumberCreate.restype, cf.CFNumberCreate.argtypes = vp, [vp, ctypes.c_int, vp]
+cf.CFNumberCreate.restype, cf.CFNumberCreate.argtypes = vp, [vp, ctypes.c_long, vp]
 cf.CFDictionaryCreate.restype = vp
 cf.CFDictionaryCreate.argtypes = [vp, ctypes.POINTER(vp), ctypes.POINTER(vp), ctypes.c_long, vp, vp]
 cf.CFArrayGetCount.restype, cf.CFArrayGetCount.argtypes = ctypes.c_long, [vp]
 cf.CFArrayGetValueAtIndex.restype, cf.CFArrayGetValueAtIndex.argtypes = vp, [vp, ctypes.c_long]
 cf.CFStringGetCString.restype, cf.CFStringGetCString.argtypes = ctypes.c_bool, [vp, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32]
 cf.CFRelease.argtypes = [vp]
+cf.CFGetTypeID.restype, cf.CFGetTypeID.argtypes = ctypes.c_ulong, [vp]
+cf.CFStringGetTypeID.restype = ctypes.c_ulong
 iokit.IOHIDEventSystemClientCreate.restype, iokit.IOHIDEventSystemClientCreate.argtypes = vp, [vp]
 iokit.IOHIDEventSystemClientSetMatching.argtypes = [vp, vp]
 iokit.IOHIDEventSystemClientCopyServices.restype, iokit.IOHIDEventSystemClientCopyServices.argtypes = vp, [vp]
@@ -47,9 +49,11 @@ def die_temps():
     keys = (vp * 2)(cfstr("PrimaryUsagePage"), cfstr("PrimaryUsage"))
     vals = (vp * 2)(cfint(0xFF00), cfint(5))
     matching = cf.CFDictionaryCreate(None, keys, vals, 2,
-                                     ctypes.c_void_p.in_dll(cf, "kCFTypeDictionaryKeyCallBacks"),
-                                     ctypes.c_void_p.in_dll(cf, "kCFTypeDictionaryValueCallBacks"))
+                                     ctypes.addressof(ctypes.c_byte.in_dll(cf, "kCFTypeDictionaryKeyCallBacks")),
+                                     ctypes.addressof(ctypes.c_byte.in_dll(cf, "kCFTypeDictionaryValueCallBacks")))
     client = iokit.IOHIDEventSystemClientCreate(None)
+    if not client or not matching:
+        return []
     iokit.IOHIDEventSystemClientSetMatching(client, matching)
     services = iokit.IOHIDEventSystemClientCopyServices(client)
     product, buf, temps = cfstr("Product"), ctypes.create_string_buffer(128), []
@@ -57,6 +61,9 @@ def die_temps():
         svc = cf.CFArrayGetValueAtIndex(services, i)
         name = iokit.IOHIDServiceClientCopyProperty(svc, product)
         if not name:
+            continue
+        if cf.CFGetTypeID(name) != cf.CFStringGetTypeID():
+            cf.CFRelease(name)
             continue
         ok = cf.CFStringGetCString(name, buf, len(buf), UTF8)
         cf.CFRelease(name)
@@ -78,7 +85,9 @@ def main():
              "# TYPE mac_cpu_temp_celsius gauge"]
     if temps:
         lines.append(f"mac_cpu_temp_celsius {max(temps):.1f}")
-    tmp = out + ".tmp"
+    else:
+        print("mac-temp-exporter: no PMU tdie sensors found", file=sys.stderr)
+    tmp = f"{out}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
     os.replace(tmp, out)

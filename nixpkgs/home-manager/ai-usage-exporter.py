@@ -306,7 +306,7 @@ def agy_pool(model_id):
 
 def collect_agy():
     """agy's Gemini quota pool from Google's per-model quota list."""
-    down = [{"provider": "agy", "account": "agy", "up": 0}]
+    down = [{"provider": "agy", "account": "gemini", "up": 0}]
     got = read_agy_token()
     if got is None:
         log("agy: no usable login in Keychain (run agy once to log in)")
@@ -408,7 +408,7 @@ def main(argv=None):
         accounts.extend(collect_agy())
     except Exception as exc:
         log(f"agy collection failed ({type(exc).__name__})")
-        accounts.append({"provider": "agy", "account": "agy", "up": 0})
+        accounts.append({"provider": "agy", "account": "gemini", "up": 0})
 
     text = render_prometheus(accounts, time.time())
     if args.dry_run:
