@@ -236,22 +236,24 @@ def collect_codex_live(auth_path):
     refreshed by Codex itself; the refresh token is never used). Returns None on any failure."""
     try:
         tokens = json.loads(auth_path.read_text(encoding="utf-8")).get("tokens") or {}
-        access, account_id = tokens.get("access_token"), tokens.get("account_id") or ""
+        access, account_id = tokens.get("access_token"), tokens.get("account_id")
         if not isinstance(access, str) or not access.strip() or not access.isascii() or not access.isprintable():
             return None
         headers = {"Authorization": f"Bearer {access}", "User-Agent": "codex_cli_rs"}
-        if isinstance(account_id, str) and account_id.isascii() and account_id.isprintable():
+        if isinstance(account_id, str) and account_id.strip() and account_id.isascii() and account_id.isprintable():
             headers["ChatGPT-Account-Id"] = account_id
         limits = http_json(CODEX_USAGE_URL, headers=headers).get("rate_limit") or {}
+        windows = {}
+        for key in ("primary_window", "secondary_window"):
+            w = limits.get(key)
+            if isinstance(w, dict) and is_number(w.get("used_percent")) and is_number(w.get("limit_window_seconds")):
+                windows[codex_window_label(w["limit_window_seconds"])] = (float(w["used_percent"]), parse_timestamp(w.get("reset_at")))
     except Exception as exc:
-        log(f"codex live usage failed ({type(exc).__name__}); falling back to session logs")
+        code = f" {exc.code}" if isinstance(exc, urllib.error.HTTPError) else ""
+        log(f"codex live usage failed ({type(exc).__name__}{code}); falling back to session logs")
         return None
-    windows = {}
-    for key in ("primary_window", "secondary_window"):
-        w = limits.get(key)
-        if isinstance(w, dict) and is_number(w.get("used_percent")) and is_number(w.get("limit_window_seconds")):
-            windows[codex_window_label(w["limit_window_seconds"])] = (float(w["used_percent"]), parse_timestamp(w.get("reset_at")))
     if not windows:
+        log("codex live usage: no windows in response; falling back to session logs")
         return None
     return {"provider": "codex", "account": "codex", "up": 1, "observed_at": time.time(), "windows": windows}
 
