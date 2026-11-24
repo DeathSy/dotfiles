@@ -420,7 +420,10 @@ if restart and a.fix and not a.auto and "gateway" in restart:
         changes.append("gateway not restarted: its launchd job isn't running")
     else:
         try:
-            log = open(os.path.expanduser("~/Library/Logs/hermes-config-check.log"), "a")
+            fd = os.open(os.path.expanduser("~/Library/Logs/hermes-config-check.log"),
+                         os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            os.fchmod(fd, 0o600)  # the drain report can name task text
+            log = os.fdopen(fd, "a")
             subprocess.Popen([spec["hermes_bin"], "gateway", "restart"], stdin=subprocess.DEVNULL, stdout=log,
                              stderr=log, start_new_session=True,
                              env=dict(os.environ, PATH="/usr/bin:/bin:/usr/sbin:/sbin:" + os.environ.get("PATH", "")))
