@@ -4,18 +4,19 @@ import copy, json, math, os, re, secrets, shutil, subprocess, sys, time
 
 PROG, APP_DOC = "hc-worker", "herdr-app"
 DOC_RETRIES, DOC_CALL_TIMEOUT = 5, 10
-POLL_INTERVAL, POLL_TIMEOUT, WEIGHT_TOL = 0.25, 10.0, 1e-3
+POLL_INTERVAL, POLL_TIMEOUT, TIDY_BUDGET, WEIGHT_TOL = 0.25, 10.0, 20.0, 1e-3
 ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 RPC_KINDS = {"conflict", "invalid_params", "machine_unknown", "unavailable",
              "needs_update", "internal", "not_found"}
 RESERVED_LABELS = {"herdr.space", "herdr.tab"}
 REQUIRED_FLAGS = ("--bg", "--json", "--no-notify")
-VALUE_OPTS = {"--name", "--cwd", "--label", "-l", "--env", "-e", "--shell", "--title", "--cols", "--rows"}
+VALUE_OPTS = {"--name", "--cwd", "--on", "--label", "-l", "--parent", "--timeout"}
 USAGE = (f"usage: {PROG} [hc run options...] -- <program> [args...]\n"
          f"       {PROG} --tidy\n       {PROG} --help\n")
 
 class Fail(Exception): pass
 class HcDown(Fail): pass
+class DocTimeout(HcDown): pass
 class DocConflict(Fail): pass
 class DocBusy(Fail): pass
 class DocOdd(Fail): pass
@@ -126,27 +127,35 @@ def nodes_equal(a, b, tol=WEIGHT_TOL):
     return True
 
 def find_tab(value, space_id, tab_id):
+    sp_ids = [sp["id"] for sp in value["spaces"]]
+    if len(sp_ids) != len(set(sp_ids)):
+        return None, None, None
+    found = (None, None, None)
     for si, sp in enumerate(value["spaces"]):
+        tb_ids = [tb["id"] for tb in sp["tabs"]]
+        if len(tb_ids) != len(set(tb_ids)):
+            return None, None, None
         if sp["id"] == space_id:
-            return next(((si, ti, tb) for ti, tb in enumerate(sp["tabs"]) if tb["id"] == tab_id), (None, None, None))
-    return None, None, None
+            found = next(((si, ti, tb) for ti, tb in enumerate(sp["tabs"]) if tb["id"] == tab_id), found)
+    return found
 
-def tidy(value, space_id, tab_id, parent, is_child):
-    """Return a new document with the target tab tidied to 70/30, or None to leave untouched."""
+def _tidy(value, space_id, tab_id, parent, is_child):
     if not doc_shape_ok(value):
-        return None
+        return None, "refused"
     si, ti, tb = find_tab(value, space_id, tab_id)
     if tb is None:
-        return None
+        return None, "refused"
     root = tb["root"]
     if not valid_node(root) or root["type"] != "row" or root["id"] != tab_id:
-        return None
+        return None, "refused"
     all_b = blocks(root)
     pblocks = [b for b in all_b if b["content"]["terminal"] == parent]
     wblocks = [b for b in all_b if b["content"]["terminal"] != parent]
+    if len(pblocks) == 1 and not wblocks:
+        return None, "already_tidy"
     waddrs = [b["content"]["terminal"] for b in wblocks]
-    if len(pblocks) != 1 or not wblocks or len(waddrs) != len(set(waddrs)) or not all(is_child(a) for a in waddrs):
-        return None
+    if len(pblocks) != 1 or len(waddrs) != len(set(waddrs)) or not all(is_child(a) for a in waddrs):
+        return None, "refused"
     existing = root["children"][1] if len(root["children"]) >= 2 else None
     col_id = existing["id"] if existing and existing["type"] == "column" else "s" + secrets.token_hex(16)
     w = 1.0 / len(wblocks)
@@ -159,17 +168,29 @@ def tidy(value, space_id, tab_id, parent, is_child):
             ]},
         ],
     }
+    if "size" in root:
+        new_root["size"] = copy.deepcopy(root["size"])
     if nodes_equal(root, new_root):
-        return None
+        return None, "already_tidy"
     new_value = copy.deepcopy(value)
     new_value["spaces"][si]["tabs"][ti]["root"] = new_root
     check = copy.deepcopy(new_value)
     check["spaces"][si]["tabs"][ti]["root"] = root
-    assert check == value
-    return new_value
+    if check != value:
+        raise DocOdd("tidy invariant failed; leaving document unchanged")
+    return new_value, "tidied"
 
-def edit_doc(change, *, rpc=doc_call):
+def tidy(value, space_id, tab_id, parent, is_child):
+    """Return a new document with the target tab tidied to 70/30, or None to leave untouched."""
+    return _tidy(value, space_id, tab_id, parent, is_child)[0]
+
+def _check_deadline(deadline, clock):
+    if deadline is not None and clock() >= deadline:
+        raise DocTimeout("out of time for the Herdr app document")
+
+def edit_doc(change, *, rpc=doc_call, deadline=None, clock=time.monotonic):
     for _ in range(DOC_RETRIES):
+        _check_deadline(deadline, clock)
         cur = rpc("doc.get", {"name": APP_DOC})
         value = cur.get("value")
         if value is None:
@@ -179,6 +200,7 @@ def edit_doc(change, *, rpc=doc_call):
         new = change(copy.deepcopy(value))
         if new is None:
             return None
+        _check_deadline(deadline, clock)
         try:
             rpc("doc.set", {"name": APP_DOC, "value": new, "version": cur.get("version", 0)})
             return new
@@ -186,9 +208,10 @@ def edit_doc(change, *, rpc=doc_call):
             continue
     raise DocBusy(f"the Herdr app document kept changing; gave up after {DOC_RETRIES} tries")
 
-def wait_for_block(space_id, tab_id, addr, *, rpc=doc_call, clock=time.monotonic, sleep=time.sleep):
-    deadline = clock() + POLL_TIMEOUT
+def wait_for_block(space_id, tab_id, addr, *, rpc=doc_call, clock=time.monotonic, sleep=time.sleep, deadline=None):
+    poll_end = clock() + POLL_TIMEOUT
     while True:
+        _check_deadline(deadline, clock)
         value = rpc("doc.get", {"name": APP_DOC}).get("value")
         if value is not None and doc_shape_ok(value):
             _, _, tb = find_tab(value, space_id, tab_id)
@@ -196,7 +219,11 @@ def wait_for_block(space_id, tab_id, addr, *, rpc=doc_call, clock=time.monotonic
                 isinstance(b.get("content"), dict) and b["content"].get("terminal") == addr for b in blocks(tb["root"])
             ):
                 return True
-        rem = deadline - clock()
+        now_t = clock()
+        _check_deadline(deadline, clock)
+        rem = poll_end - now_t
+        if deadline is not None:
+            rem = min(rem, deadline - now_t)
         if rem <= 0:
             return False
         sleep(min(POLL_INTERVAL, rem))
@@ -218,10 +245,14 @@ def parse_options(opts):
             val, i = (opt[3:] if opt.startswith("-l=") else opt[2:]), i + 1
         elif opt in VALUE_OPTS:
             i += 2
-        else:
+        elif opt == "--tidy":
+            raise ValueError("--tidy cannot be combined with a command")
+        elif opt.startswith("-"):
             if opt in REQUIRED_FLAGS:
                 seen.add(opt)
             i += 1
+        else:
+            break  # first positional (e.g. template name): remaining args belong to it
         if val is not None and val.split("=", 1)[0] in RESERVED_LABELS:
             raise ValueError(f"cannot pass {val.split('=', 1)[0]} label")
     return [f for f in REQUIRED_FLAGS if f not in seen]
@@ -236,19 +267,26 @@ def parse_address(stdout):
             return d["address"]
     return None
 
-def tidy_tab(space_id, tab_id, parent, *, rpc=doc_call, get_term=hc_get, err=None):
-    cache = {}
+def tidy_tab(space_id, tab_id, parent, *, rpc=doc_call, get_term=hc_get, err=None,
+             deadline=None, clock=time.monotonic, report_refusal=False):
+    cache, status = {}, [None]
     def is_child(addr):
         if addr not in cache:
             info = get_term(addr)
             cache[addr] = isinstance(info, dict) and info.get("parent") == parent
         return cache[addr]
+    def change(v):
+        new, st = _tidy(v, space_id, tab_id, parent, is_child)
+        status[0] = st
+        return new
     try:
-        edit_doc(lambda v: tidy(v, space_id, tab_id, parent, is_child), rpc=rpc)
-        return True
+        edit_doc(change, rpc=rpc, deadline=deadline, clock=clock)
     except Fail as e:
         (err or sys.stderr).write(f"{PROG}: {e}\n")
         return False
+    if report_refusal and status[0] == "refused":
+        (err or sys.stderr).write(f"{PROG}: tab left unchanged (missing tab, unexpected tree, or foreign terminal)\n")
+    return True
 
 def main(argv=None, *, env=None, run_hc=hc_run, get_term=hc_get, rpc=doc_call,
          clock=time.monotonic, sleep=time.sleep, out=None, err=None):
@@ -265,15 +303,20 @@ def main(argv=None, *, env=None, run_hc=hc_run, get_term=hc_get, rpc=doc_call,
             err.write(USAGE); return 2
         if not parent:
             err.write(f"{PROG}: HC_TERMINAL_ID is not set\n"); return 2
-        space_id, tab_id = parent_tab_labels(get_term(parent))
+        parent_info = get_term(parent)
+        if parent_info is None:
+            err.write(f"{PROG}: could not read parent terminal; nothing to tidy\n"); return 1
+        space_id, tab_id = parent_tab_labels(parent_info)
         if not space_id:
             err.write(f"{PROG}: parent has no valid Herdr tab labels; nothing to tidy\n"); return 1
-        return 0 if tidy_tab(space_id, tab_id, parent, rpc=rpc, get_term=get_term, err=err) else 1
+        ok = tidy_tab(space_id, tab_id, parent, rpc=rpc, get_term=get_term, err=err,
+                      deadline=clock() + TIDY_BUDGET, clock=clock, report_refusal=True)
+        return 0 if ok else 1
     if "--" not in argv:
         err.write(USAGE); return 2
     sep = argv.index("--")
     opts, cmd = argv[:sep], argv[sep + 1:]
-    if not cmd or "--tidy" in opts:
+    if not cmd:
         err.write(USAGE); return 2
     try:
         missing = parse_options(opts)
@@ -281,21 +324,25 @@ def main(argv=None, *, env=None, run_hc=hc_run, get_term=hc_get, rpc=doc_call,
         err.write(f"{PROG}: {e}\n"); return 2
     if not parent:
         err.write(f"{PROG}: HC_TERMINAL_ID is not set\n"); return 2
-    space_id, tab_id = parent_tab_labels(get_term(parent))
-    run_args = list(opts) + missing + ([f"--label=herdr.space={space_id}", f"--label=herdr.tab={tab_id}"] if space_id else []) + ["--"] + cmd
-    rc, stdout, stderr = run_hc(run_args)
+    parent_info = get_term(parent)
+    if parent_info is None:
+        err.write(f"{PROG}: could not read parent terminal; starting worker without Herdr tab labels\n")
+    space_id, tab_id = parent_tab_labels(parent_info)
+    labels = [f"--label=herdr.space={space_id}", f"--label=herdr.tab={tab_id}"] if space_id else []
+    rc, stdout, stderr = run_hc([*missing, *labels, *opts, "--", *cmd])
     out.write(stdout); out.flush()
     if stderr:
         err.write(stderr)
     addr = parse_address(stdout) if rc == 0 else None
     if rc != 0 or not addr or not space_id:
         return rc
+    deadline = clock() + TIDY_BUDGET
     try:
-        if not wait_for_block(space_id, tab_id, addr, rpc=rpc, clock=clock, sleep=sleep):
+        if not wait_for_block(space_id, tab_id, addr, rpc=rpc, clock=clock, sleep=sleep, deadline=deadline):
             err.write(f"{PROG}: new pane did not appear in Herdr app; tab not tidied\n"); return rc
     except Fail as e:
         err.write(f"{PROG}: {e}\n"); return rc
-    tidy_tab(space_id, tab_id, parent, rpc=rpc, get_term=get_term, err=err)
+    tidy_tab(space_id, tab_id, parent, rpc=rpc, get_term=get_term, err=err, deadline=deadline, clock=clock)
     return rc
 
 if __name__ == "__main__":
