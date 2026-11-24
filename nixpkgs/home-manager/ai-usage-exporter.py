@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Collect Claude (CLIProxyAPI) and Codex quota usage into a node_exporter textfile.
+"""Collect Claude (CLIProxyAPI), Codex and Antigravity (agy) quota usage into a node_exporter textfile.
 
 Writes atomically via <output>.tmp + fsync + os.replace. Never logs secrets,
 tokens, management keys, full email addresses, or exception messages.
 """
 
 import argparse
+import base64
 import json
 import math
 import os
@@ -255,6 +256,61 @@ def collect_codex(sessions_dir):
     windows, line_ts = last_found
     return {"provider": "codex", "account": "codex", "up": 1, "observed_at": line_ts if line_ts is not None else mtime, "windows": windows}
 
+AGY_BIN = "/opt/homebrew/bin/agy"
+AGY_KEYCHAIN_SERVICE = "gemini"  # agy's own login (go-keyring item), written and refreshed by agy
+CLOUDCODE_URL = "https://daily-cloudcode-pa.googleapis.com/v1internal:"
+
+
+def read_agy_token():
+    """Returns (access_token, expiry_seconds) from agy's Keychain login, or None.
+    Only the short-lived access token is used; the refresh token is never read out."""
+    res = subprocess.run(["/usr/bin/security", "find-generic-password", "-w", "-s", AGY_KEYCHAIN_SERVICE],
+                         capture_output=True, text=True, timeout=5)
+    raw = res.stdout.strip()
+    prefix = "go-keyring-base64:"
+    if res.returncode != 0 or not raw.startswith(prefix):
+        return None
+    tok = json.loads(base64.b64decode(raw[len(prefix):])).get("token") or {}
+    access = tok.get("access_token")
+    if not isinstance(access, str) or not access.isascii() or not access.isprintable():
+        return None
+    return access, parse_timestamp(tok.get("expiry"))
+
+
+def collect_agy():
+    """agy's per-model quota from Google, grouped into its pools (Gemini models, and the Claude/GPT-OSS models)."""
+    got = read_agy_token()
+    if got is None or got[1] is None or got[1] < time.time() + 300:
+        # Let agy refresh its own login rather than handling its refresh token here.
+        env = dict(os.environ, PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+        subprocess.run([AGY_BIN, "models"], capture_output=True, timeout=60, env=env)
+        got = read_agy_token()
+    if got is None:
+        log("agy: no usable login in Keychain")
+        return [{"provider": "agy", "account": "agy", "up": 0}]
+    headers = {"Authorization": f"Bearer {got[0]}", "User-Agent": "antigravity"}
+    project = http_json(CLOUDCODE_URL + "loadCodeAssist", method="POST", headers=headers,
+                        body={"metadata": {"ideType": "ANTIGRAVITY"}}).get("cloudaicompanionProject")
+    models = http_json(CLOUDCODE_URL + "fetchAvailableModels", method="POST", headers=headers,
+                       body={"project": project}).get("models") or {}
+    pools = {}
+    for model_id, model in models.items():
+        quota = model.get("quotaInfo") or {}
+        remaining, resets_at = quota.get("remainingFraction"), parse_timestamp(quota.get("resetTime"))
+        if not is_number(remaining) or resets_at is None:
+            continue
+        pool = "gemini" if model_id.startswith("gemini") else "claude+gpt"
+        pct = round((1 - float(remaining)) * 100, 1)
+        if pool not in pools or pct > pools[pool][0]:
+            pools[pool] = (pct, resets_at)
+    if not pools:
+        log("agy: no quota info in the model list")
+        return [{"provider": "agy", "account": "agy", "up": 0}]
+    now = time.time()
+    # Google reports one rolling window per pool (about 5 hours on the Ultra plan, 2026-11-24).
+    return [{"provider": "agy", "account": pool, "up": 1, "observed_at": now, "windows": {"5h": value}}
+            for pool, value in sorted(pools.items())]
+
 
 def render_prometheus(accounts, last_run_seconds):
     samples = {name: [] for name, _ in METRICS}
@@ -314,6 +370,12 @@ def main(argv=None):
     except Exception as exc:
         log(f"codex collection failed ({type(exc).__name__})")
         accounts.append({"provider": "codex", "account": "codex", "up": 0})
+
+    try:
+        accounts.extend(collect_agy())
+    except Exception as exc:
+        log(f"agy collection failed ({type(exc).__name__})")
+        accounts.append({"provider": "agy", "account": "agy", "up": 0})
 
     text = render_prometheus(accounts, time.time())
     if args.dry_run:

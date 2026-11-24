@@ -68,8 +68,20 @@ textfile directory.
     extracts the last line with a non-null `payload.rate_limits` (`300` → `5h`,
     `10080` → `7d`, else `<n>m`; observed time from the line's `timestamp` or
     the file mtime; account label `codex`).
+  - **Antigravity (agy):** reads agy's own login from the Keychain (service
+    `gemini`, a go-keyring item agy writes) and uses only its short-lived
+    access token; when that expires within 5 minutes it runs `agy models` so
+    agy refreshes its own login (the refresh token is never read out). Calls
+    Google's undocumented `daily-cloudcode-pa.googleapis.com/v1internal:`
+    `loadCodeAssist` (for the project id) and `fetchAvailableModels`, whose
+    per-model `quotaInfo` (`remainingFraction`, `resetTime`) is grouped into
+    two pools: account `gemini` (Gemini models, assumed to include Gemini 4
+    Neon, which the list doesn't name) and `claude+gpt` (Claude and GPT-OSS
+    in agy). Window label `5h` (Google resets each pool about every 5 hours on
+    the Ultra plan, observed 2026-11-24). Breaks if agy changes its login
+    storage or Google changes that internal API; then `ai_usage_up{provider="agy"} 0`.
 - **Metrics:**
-  - `ai_usage_utilization_percent{provider="claude|codex",account="<label>",window="5h|7d|7d_fable|..."}` (`gauge`, 0–100; Claude `account` is the email local part only, never the domain)
+  - `ai_usage_utilization_percent{provider="claude|codex|agy",account="<label>",window="5h|7d|7d_fable|..."}` (`gauge`, 0–100; Claude `account` is the email local part only, never the domain)
   - `ai_usage_resets_at_seconds{provider,account,window}` (`gauge`, unix seconds)
   - `ai_usage_observed_at_seconds{provider,account}` (`gauge`, unix seconds)
   - `ai_usage_up{provider,account}` (`gauge`, `1` on fetch success, `0` on failure)
