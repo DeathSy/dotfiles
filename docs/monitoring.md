@@ -51,12 +51,17 @@ runs every 60 s and counts tokens appended to `~/.claude/projects/**/*.jsonl`
 `token_count` event, repeats with an unchanged `total_token_usage` skipped,
 model from `turn_context`) since its last run, using a byte offset per file in
 `~/.local/state/token-usage-exporter/state.json`. It writes the running totals
-as `ai_tokens_total{client="claude-code|codex",model,type="input|output|cache_read|cache_write"}`
+as `ai_tokens_total{client="claude-code|codex|agy",model,type="input|output|cache_read|cache_write"}`
 (a counter; graph it with `increase()`) to `ai_tokens.prom` in the textfile
 directory. On the first run every file starts at its end; later, files born
 since the last scan are read from the start, skipping Claude records older than
 the file (resumed and forked sessions copy earlier messages with the same ids).
-If the state file is lost, counting restarts (a counter reset, which
+agy (Antigravity) generations come from new `gen_metadata` rows in
+`~/.gemini/antigravity-cli/conversations/*.db` (read-only SQLite, last row per
+database kept in the state); the protobuf fields were inferred from agy 1.5.14
+(new input, output, and context used, with cache read estimated as context
+minus input minus output), and agy is counted from 2026-11-24 only (its records
+carry no timestamps, so there is no history). If the state file is lost, counting restarts (a counter reset, which
 `increase()` handles). History before 2026-11-24 was loaded once into
 Prometheus as `instance="backfill"` series. Log: `~/Library/Logs/token-usage-exporter.log`.
 

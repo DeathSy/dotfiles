@@ -6,8 +6,9 @@ Usage: token-usage-exporter <state.json> <output.prom>
 Reads only what was appended since the last run (byte offset per file) from
   ~/.claude/projects/**/*.jsonl  (Claude Code: message.usage per reply, deduped by message.id)
   ~/.codex/sessions/**/*.jsonl   (Codex: token_count events, last_token_usage per turn)
+  ~/.gemini/antigravity-cli/conversations/*.db  (agy: new gen_metadata rows, protobuf; see agy_generation)
 and keeps monotonic totals in the state file, written as
-  ai_tokens_total{client="claude-code|codex",model,type="input|output|cache_read|cache_write"}  (counter)
+  ai_tokens_total{client="claude-code|codex|agy",model,type="input|output|cache_read|cache_write"}  (counter)
 On the first run every file starts at its end. Later, a file born since the last scan is read from
 the start (skipping Claude records older than the file: resumed/forked sessions copy earlier
 messages); an older file seen for the first time (e.g. after the 30-day prune) starts at its end.
@@ -15,6 +16,7 @@ messages); an older file seen for the first time (e.g. after the 30-day prune) s
 
 import json
 import os
+import sqlite3
 import sys
 import time
 from datetime import datetime
@@ -22,6 +24,7 @@ from pathlib import Path
 
 HOME = Path.home()
 SOURCES = {"claude-code": HOME / ".claude/projects", "codex": HOME / ".codex/sessions"}
+AGY_CONVERSATIONS = HOME / ".gemini/antigravity-cli/conversations"
 RECENT_IDS = 20  # Claude writes one line per content block with the same message id, consecutively
 
 
@@ -83,6 +86,105 @@ def codex_usage(rec, state):
     }
 
 
+def pb_fields(buf):
+    """Minimal protobuf reader: yields (field number, value); value is int or bytes."""
+    i, n = 0, len(buf)
+    def varint():
+        nonlocal i
+        shift = result = 0
+        while True:
+            b = buf[i]; i += 1
+            result |= (b & 0x7F) << shift
+            if b < 0x80:
+                return result
+            shift += 7
+    while i < n:
+        key = varint()
+        field, wire = key >> 3, key & 7
+        if wire == 0:
+            yield field, varint()
+        elif wire == 2:
+            size = varint(); yield field, buf[i:i + size]; i += size
+        elif wire == 1:
+            i += 8
+        elif wire == 5:
+            i += 4
+        else:
+            return
+
+
+def pb_get(buf, *path):
+    """First value at a field path, e.g. pb_get(b, 1, 4, 2)."""
+    for depth, want in enumerate(path):
+        for field, value in pb_fields(buf):
+            if field == want:
+                if depth == len(path) - 1:
+                    return value
+                if not isinstance(value, bytes):
+                    return None
+                buf = value
+                break
+        else:
+            return None
+    return None
+
+
+def agy_generation(blob):
+    """One agy generation (gen_metadata.data). Field meanings inferred 2026-11-24 from agy 1.5.14:
+    1.4.2 new input tokens, 1.4.3 output tokens (thinking 1.4.9 + text 1.4.10), 1.9.10.1 context
+    used after the turn (cache read is estimated as context - input - output), 1.19 model."""
+    try:
+        new_in, out, ctx = pb_get(blob, 1, 4, 2), pb_get(blob, 1, 4, 3), pb_get(blob, 1, 9, 10, 1)
+        model = pb_get(blob, 1, 19)
+    except IndexError:
+        return None
+    if not isinstance(new_in, int) or not isinstance(out, int):
+        return None
+    cache = ctx - new_in - out if isinstance(ctx, int) and ctx > new_in + out else 0
+    return (model.decode("utf-8", "replace") if isinstance(model, bytes) else "gemini"), {
+        "input": new_in, "output": out, "cache_read": cache}
+
+
+def scan_agy(files, totals, first_run, since):
+    if not AGY_CONVERSATIONS.is_dir():
+        return
+    for path in AGY_CONVERSATIONS.glob("*.db"):
+        try:
+            st = path.stat()
+            wal = path.with_name(path.name + "-wal")
+            mtime = max(st.st_mtime, wal.stat().st_mtime if wal.exists() else 0)
+        except OSError:
+            continue
+        key, born = str(path), getattr(st, "st_birthtime", st.st_mtime)
+        entry = files.get(key)
+        if entry is not None and mtime < since:
+            continue
+        try:
+            db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            try:
+                if entry is None:
+                    start = -1
+                    if first_run or born < since:
+                        start = db.execute("select coalesce(max(idx), -1) from gen_metadata").fetchone()[0]
+                    entry = files[key] = {"gen_idx": start, "mtime": mtime}
+                rows = db.execute("select idx, data from gen_metadata where idx > ? order by idx",
+                                  (entry["gen_idx"],)).fetchall()
+            finally:
+                db.close()
+        except sqlite3.Error:
+            continue
+        for idx, blob in rows:
+            got = agy_generation(blob) if isinstance(blob, bytes) else None
+            if got is not None:
+                model, counts = got
+                for kind, n in counts.items():
+                    if n > 0:
+                        k = f"agy|{model}|{kind}"
+                        totals[k] = totals.get(k, 0) + n
+            entry["gen_idx"] = idx
+        entry["mtime"] = mtime
+
+
 def scan(state):
     files, totals = state.setdefault("files", {}), state.setdefault("totals", {})
     first_run = "last_scan" not in state
@@ -133,6 +235,7 @@ def scan(state):
                         totals[k] = totals.get(k, 0) + n
             entry["offset"] += end
             entry["mtime"] = st.st_mtime
+    scan_agy(files, totals, first_run, since)
     # Forget files untouched for 30 days (their offsets aren't needed any more).
     cutoff = time.time() - 30 * 86400
     for key in [k for k, v in files.items() if v.get("mtime", 0) < cutoff]:
