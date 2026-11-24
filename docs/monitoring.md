@@ -79,7 +79,12 @@ textfile directory.
     account is fetched independently with a 10 s HTTP timeout (no proxy, no
     redirects). If the management key is missing/invalid or the account listing
     fails, emits `ai_usage_up{provider="claude",account="gateway"} 0`.
-  - **Codex:** reads the newest `~/.codex/sessions/**/*.jsonl` by mtime and
+  - **Codex:** asks OpenAI live (`chatgpt.com/backend-api/wham/usage`, the
+    undocumented endpoint Codex's `/status` uses) with Codex's own access
+    token from `~/.codex/auth.json` (Codex refreshes it when it runs; the
+    refresh token is never used); windows by `limit_window_seconds`
+    (`18000` → `5h`, `604800` → `7d`). If that fails, falls back to the logs:
+    reads the newest `~/.codex/sessions/**/*.jsonl` by mtime and
     extracts the last line with a non-null `payload.rate_limits` (`300` → `5h`,
     `10080` → `7d`, else `<n>m`; observed time from the line's `timestamp` or
     the file mtime; account label `codex`).

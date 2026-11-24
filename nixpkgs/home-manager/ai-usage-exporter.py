@@ -224,7 +224,42 @@ def extract_codex_rate_limits(obj):
     return (windows, parse_timestamp(obj.get("timestamp"))) if windows else None
 
 
+CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"  # what Codex's /status uses (undocumented)
+
+
+def codex_window_label(seconds):
+    return {18000: "5h", 604800: "7d"}.get(int(seconds), f"{int(seconds) // 60}m")
+
+
+def collect_codex_live(auth_path):
+    """Live Codex usage from OpenAI with Codex's own access token (~/.codex/auth.json,
+    refreshed by Codex itself; the refresh token is never used). Returns None on any failure."""
+    try:
+        tokens = json.loads(auth_path.read_text(encoding="utf-8")).get("tokens") or {}
+        access, account_id = tokens.get("access_token"), tokens.get("account_id") or ""
+        if not isinstance(access, str) or not access.strip() or not access.isascii() or not access.isprintable():
+            return None
+        headers = {"Authorization": f"Bearer {access}", "User-Agent": "codex_cli_rs"}
+        if isinstance(account_id, str) and account_id.isascii() and account_id.isprintable():
+            headers["ChatGPT-Account-Id"] = account_id
+        limits = http_json(CODEX_USAGE_URL, headers=headers).get("rate_limit") or {}
+    except Exception as exc:
+        log(f"codex live usage failed ({type(exc).__name__}); falling back to session logs")
+        return None
+    windows = {}
+    for key in ("primary_window", "secondary_window"):
+        w = limits.get(key)
+        if isinstance(w, dict) and is_number(w.get("used_percent")) and is_number(w.get("limit_window_seconds")):
+            windows[codex_window_label(w["limit_window_seconds"])] = (float(w["used_percent"]), parse_timestamp(w.get("reset_at")))
+    if not windows:
+        return None
+    return {"provider": "codex", "account": "codex", "up": 1, "observed_at": time.time(), "windows": windows}
+
+
 def collect_codex(sessions_dir):
+    live = collect_codex_live(sessions_dir.parent / "auth.json")
+    if live is not None:
+        return live
     down = {"provider": "codex", "account": "codex", "up": 0}
     if not sessions_dir.is_dir():
         log(f"codex sessions directory not found: {sessions_dir}")
