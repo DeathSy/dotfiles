@@ -1039,6 +1039,91 @@ class AppTabTests(Base):
         self.run_cli("stop", slack={"actor": OWNER})
         self.assertIn(task["ui_tab"]["tab"], self.tab_ids())
 
+    def stopped_with_relaid(self, workers, root_term=None):
+        """A started task, stopped without killing (as if cleanup already ran), its tab re-laid with workers."""
+        addr, task, _ = self.start()
+        ws = workers(task)
+        s = self.hc()
+        tab = self.relaid(task, ws)
+        if root_term:
+            tab["root"]["children"][0]["content"]["terminal"] = root_term
+        s["docs"]["herdr-app"]["value"]["spaces"][1]["tabs"][1] = tab
+        wj(self.hc_state, s)
+        st = self.state()
+        t = st["tasks"][task["id"]]
+        t.update(state="stopped", ended_at=time.time())
+        t["ui_tab"]["remove"] = True
+        wj(os.path.join(self.state_dir, "tasks.json"), st)
+        return task
+
+    def add_remote(self, addr="vps/t3", name="remote-worker"):
+        s = self.hc()
+        s["terminals"].append({"address": addr, "name": name, "state": "live", "parent": None, "labels": {},
+                               "argv": ["/bin/zsh"], "status": None, "status_ms": 0, "created_ms": 0,
+                               "exit_code": None, "screen": "", "inbox": [], "keys": []})
+        wj(self.hc_state, s)
+        return addr
+
+    def test_s1_a_live_remote_pane_keeps_the_tab(self):
+        task = self.stopped_with_relaid(lambda task: [self.add_remote()])
+        rc, body, err = self.run_cli("monitor")
+        self.assertIn(task["ui_tab"]["tab"], self.tab_ids())
+        self.assertIn("left alone", err)
+
+    def test_s1_a_malformed_terminal_ref_keeps_the_tab(self):
+        task = self.stopped_with_relaid(lambda task: ["--json"])
+        self.run_cli("monitor")
+        self.assertIn(task["ui_tab"]["tab"], self.tab_ids())
+
+    def test_s2_the_root_pane_showing_someone_elses_live_terminal_keeps_the_tab(self):
+        foreign = []
+        task = self.stopped_with_relaid(
+            lambda task: foreign.append(self.add_terminal("someone-elses", app=None, argv=["/bin/zsh"])) or ["t901"])
+        s = self.hc()
+        s["docs"]["herdr-app"]["value"]["spaces"][1]["tabs"][1]["root"]["children"][0]["content"]["terminal"] = foreign[0]
+        wj(self.hc_state, s)
+        self.run_cli("monitor")
+        self.assertIn(task["ui_tab"]["tab"], self.tab_ids())  # the recorded block id alone is not enough
+
+    def test_s4_hc_failing_mid_check_keeps_it_recorded(self):
+        task = self.stopped_with_relaid(lambda task: ["t901", "t902"])
+        rc, body, err = self.run_cli("monitor", extra={"FAKE_HC_GET_FAIL": "t902"})
+        self.assertTrue(self.tasks()[task["id"]]["ui_tab"]["remove"])  # not settled as "left"
+        self.assertNotIn("left alone", err)
+        self.run_cli("monitor")
+        self.assertNotIn("ui_tab", self.tasks()[task["id"]])
+
+    def test_s4_running_out_of_time_mid_check_keeps_it_recorded(self):
+        task = self.stopped_with_relaid(lambda task: ["t901", "t902", "t903"])
+        self.run_cli("monitor", extra={"FAKE_HC_GET_SLEEP": "0.6", "JT_TAB_BUDGET": "1"})
+        self.assertTrue(self.tasks()[task["id"]]["ui_tab"]["remove"])
+        self.assertIn(task["ui_tab"]["tab"], self.tab_ids())
+
+    def test_s4_a_conflict_rechecks_on_the_fresh_read(self):
+        task = self.stopped_with_relaid(lambda task: ["t901"])
+        s = self.hc()
+        s["doc_conflicts"] = 1
+        wj(self.hc_state, s)
+        log = os.path.join(self.d, "gets.log")
+        self.run_cli("monitor", extra={"FAKE_HC_GET_LOG": log})
+        with open(log) as f:
+            self.assertGreaterEqual(f.read().split().count("t901"), 2)  # checked again after the conflict
+        ids = self.tab_ids()
+        self.assertNotIn(task["ui_tab"]["tab"], ids)
+        self.assertIn("tbAPPWROTE", ids)  # the app's concurrent write kept
+
+    def test_s4_without_hc_workers_rules_a_relaid_tab_stays(self):
+        m = load_module()
+        m.STATE_DIR = self.state_dir
+        m.HC_WORKER = None
+        ui = {"tab": "tbX", "block": "pdX"}
+        tab = {"id": "tbX", "name": "july-pcs-ab12", "root": {"type": "row", "id": "tbX", "children": [
+            {"type": "block", "id": "pdX", "content": {"terminal": "t1"}, "size": {"weight": 0.7}},
+            {"type": "column", "id": "s1", "size": {"weight": 0.3}, "children": [
+                {"type": "block", "id": "pdW", "content": {"terminal": "t9"}, "size": {"weight": 1.0}}]}]}}
+        self.assertFalse(m.relaid_tab_ours(tab, "july-pcs-ab12", ui, "t1", "L"))
+        self.assertTrue(os.path.exists(os.path.join(self.state_dir, ".hc-worker-missing")))
+
     def test_b4_a_size_the_app_added_still_counts_as_ours(self):
         task, err = self.stop_with(lambda sp, tab: sp[1]["tabs"][1]["root"]["children"][0].update(size={"weight": 1.0}))
         self.assertEqual(self.app_doc()["value"], self.doc)

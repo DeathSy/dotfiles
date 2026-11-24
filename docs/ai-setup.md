@@ -1010,10 +1010,21 @@ default plugins.
         row with the tab's id;
       - it holds the task's root block (the recorded block id, or a block
         showing the task's terminal);
-      - every other block shows a terminal that is gone or finished, or that is
-        the task's own: named `<task>-…` and carrying its `july-launch` label.
+      - every block's terminal is looked up with `hc get` (including the task's
+        own block, whose pane could show another terminal now), and each one
+        must be gone or finished, or the task's own: for the root, the task's
+        name, address and launch label; for the others, named `<task>-…` and
+        carrying its `july-launch` label. A live terminal on another machine
+        (`vps/t3`, from `hc run --on`) is not the task's, and a reference that
+        isn't a terminal address leaves the tab alone. If `hc get` fails or the
+        time runs out, the tab stays recorded and is tried again.
+      - Removing a pane for a finished terminal only drops it from the layout:
+        the terminal itself is not deleted here (cleanup handles the task's
+        own).
       July ships a copy of `hc-worker.py` next to `july_task.py`, so it judges
-      the shapes by the same code that writes them. Cleanup kills the
+      the shapes by the same code that writes them. It uses the repo's source
+      only when that copy is missing, as in the tests. Without either, re-laid
+      tabs are left alone, and a one-time log line says so. Cleanup kills the
       terminals first, so at removal they are normally gone. The `hc get`
       checks count against the settle budget.
     - A tab that was moved or renamed, holds a live terminal that isn't the

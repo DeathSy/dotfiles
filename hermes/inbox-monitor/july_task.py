@@ -359,10 +359,10 @@ def hc_json(*args, **kw):
         raise HcDown(f"hc {args[0]}: unexpected output")
 
 
-def hc_get(address):
+def hc_get(address, timeout=60):
     """The terminal, or None only when hc says it doesn't exist (exit 3, not_found). Any other failure
     raises HcDown: a restarting core must not make every task look gone."""
-    p = hc("get", "--json", address, check=False)
+    p = hc("get", "--json", address, check=False, timeout=timeout)
     try:
         d = json.loads(p.stdout or p.stderr or "{}")
     except ValueError:
@@ -461,7 +461,8 @@ def cleanup(task):
 #   size), or the layout hc-worker makes of it when the session starts workers and its reviewer in the tab
 #   (rows/columns/blocks with weights, judged by hc-worker's own valid_node): the task's root block plus
 #   blocks whose terminals are gone, finished, or the task's own (named "<task>-…" with its launch label).
-#   Anything else (moved, renamed, a live foreign terminal, unknown nodes) is left alone and logged.
+#   Every block's terminal is looked up, the root's too; remote (machine/tN) or malformed refs count as
+#   foreign. Anything else (moved, renamed, a live foreign terminal, unknown nodes) is left alone and logged.
 # - All document work runs in settle_tabs(), outside the state lock and after the terminals are killed,
 #   within a time budget; unfinished work stays recorded and the monitor retries it.
 # - Writes are version-checked (doc.set fails with "conflict" when the app wrote in between) and retried
@@ -612,8 +613,9 @@ def _load_hc_worker():
     """hc-worker's own layout rules (valid_node, blocks), so a tab it re-laid is judged exactly by what it
     writes: the copy installed next to this file, else the repo's source (tests). None if neither exists."""
     import importlib.util
-    for path in (os.path.join(HERE, "hc_worker.py"),
-                 os.path.join(HERE, "..", "..", "nixpkgs", "home-manager", "ai", "hc-worker.py")):
+    shipped = os.path.join(HERE, "hc_worker.py")
+    source = os.path.join(HERE, "..", "..", "nixpkgs", "home-manager", "ai", "hc-worker.py")
+    for path in ([shipped] if os.path.isfile(shipped) else [source]):  # the repo source only without the copy
         if os.path.isfile(path):
             try:
                 spec = importlib.util.spec_from_file_location("hc_worker", path)
@@ -627,6 +629,18 @@ def _load_hc_worker():
 
 
 HC_WORKER = _load_hc_worker()
+
+
+def note_hc_worker_missing():
+    """Log once (a marker in the state dir) that hc-worker's rules are missing, so re-laid tabs stay."""
+    marker = os.path.join(STATE_DIR, ".hc-worker-missing")
+    if not os.path.exists(marker):
+        log("hc-worker's layout rules (hc_worker.py) are missing; tabs it re-laid are left alone")
+        try:
+            os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+            open(marker, "w").close()
+        except OSError:
+            pass
 
 
 def expected_tab(tid, ui, addr):
@@ -672,13 +686,19 @@ def tab_add(tid, ui, addr, project, deadline=None):
     return "none", None, None
 
 
+TERM_ADDR_RE = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9_.-]{0,63}/)?t[0-9a-z]+")  # t7, or machine/t7 (hc run --on)
+
+
 def relaid_tab_ours(tb, tid, ui, addr, launch, deadline=None):
     """A tab hc-worker re-laid for this task's workers (session left, workers stacked right): still July's to
     remove when its tree is only hc-worker's row/column/block nodes with valid weights (hc-worker's own
     valid_node), its root is the row with the tab's id, it holds the task's root block (recorded id or the
     task's terminal), and every other block shows a terminal that is gone or finished, or is one of this
     task's own (named "<task>-…" with the task's launch label). Anything else: not ours to remove."""
-    if HC_WORKER is None or not isinstance(tb, dict) or set(tb) - {"id", "name", "root"} \
+    if HC_WORKER is None:
+        note_hc_worker_missing()
+        return False
+    if not isinstance(tb, dict) or set(tb) - {"id", "name", "root"} \
             or tb.get("id") != ui["tab"] or tb.get("name") != tid:
         return False
     root = tb.get("root")
@@ -687,19 +707,28 @@ def relaid_tab_ours(tb, tid, ui, addr, launch, deadline=None):
     bs = HC_WORKER.blocks(root)
     if not any(b["id"] == ui["block"] or b["content"]["terminal"] == addr for b in bs):
         return False
-    for b in bs:
+    me = {"id": tid, "address": addr, "launch": launch}
+    for b in bs:  # every block's terminal is checked, the root's too (its pane could show another now)
         term = b["content"]["terminal"]
-        if b["id"] == ui["block"] or term == addr:
-            continue
-        if deadline and now() >= deadline:
-            raise DocTimeout("out of time while checking the tab's terminals")
-        g = hc_get(term) if re.fullmatch(r"t[0-9a-z]+", term) else None
+        if not TERM_ADDR_RE.fullmatch(term):
+            return False  # not something hc names: can't tell whose it is
+        if deadline:
+            left = deadline - now()
+            if left <= 0:
+                raise DocTimeout("out of time while checking the tab's terminals")
+            g = hc_get(term, timeout=max(1, min(DOC_CALL_TIMEOUT, left)))
+        else:
+            g = hc_get(term, timeout=DOC_CALL_TIMEOUT)
         if not g or g.get("state") != "live":
-            continue  # gone or finished
+            continue  # gone or finished (the pane goes; a finished terminal itself is not removed here)
+        if b["id"] == ui["block"] or term == addr:
+            if root_ok(me, g):
+                continue  # the task's own session
+            return False  # the task's pane shows somebody else's live terminal now
         labels = g.get("labels") if isinstance(g.get("labels"), dict) else {}
         if (g.get("name") or "").startswith(tid + "-") and launch and labels.get("july-launch") == launch:
             continue  # one of this task's own workers or its reviewer
-        return False  # a live terminal that isn't the task's
+        return False  # a live terminal that isn't the task's (local or on another machine)
     return True
 
 

@@ -144,6 +144,13 @@ def main():
                                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())}) + "\n")
         out({"address": t["address"], "name": t["name"], "state": "live"})
     if cmd == "get":
+        if os.environ.get("FAKE_HC_GET_LOG"):
+            with open(os.environ["FAKE_HC_GET_LOG"], "a") as f:
+                f.write(rest[0] + "\n")
+        if rest[0] == os.environ.get("FAKE_HC_GET_FAIL"):  # this one lookup fails like a restarting core
+            out({"error": {"kind": "unavailable", "message": "core restarting"}}, 1)
+        if os.environ.get("FAKE_HC_GET_SLEEP"):
+            time.sleep(float(os.environ["FAKE_HC_GET_SLEEP"]))
         t = find(s, rest[0])
         after = os.environ.get("FAKE_HC_UNBLOCK_AFTER")  # a blocked status that clears after n gets
         if after and t["status"] and t["status"].get("state") == "blocked":

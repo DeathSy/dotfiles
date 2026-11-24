@@ -25,6 +25,7 @@ m.CLAUDE_JSON = env.get("JT_CLAUDE_JSON", m.CLAUDE_JSON)
 m.START_BUDGET = int(env.get("JT_START_BUDGET", m.START_BUDGET))
 m.MAX_PAGES = int(env.get("JT_MAX_PAGES", m.MAX_PAGES))
 m.RELAY_IDLE = int(env.get("JT_RELAY_IDLE", m.RELAY_IDLE))
+m.TAB_BUDGET = float(env.get("JT_TAB_BUDGET", m.TAB_BUDGET))
 FAIL = set(filter(None, env.get("JT_SLACK_FAIL", "").split(",")))
 
 
