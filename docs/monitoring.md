@@ -70,14 +70,16 @@ textfile directory.
     the file mtime; account label `codex`).
   - **Antigravity (agy):** reads agy's own login from the Keychain (service
     `gemini`, a go-keyring item agy writes) and uses only its short-lived
-    access token; when that expires within 5 minutes it runs `agy models` so
-    agy refreshes its own login (the refresh token is never read out). Calls
+    access token; when that expires within a minute it runs `agy models`
+    (at most every 10 minutes, killed after 60 s) so agy refreshes its own
+    login (the refresh token is never used). Calls
     Google's undocumented `daily-cloudcode-pa.googleapis.com/v1internal:`
     `loadCodeAssist` (for the project id) and `fetchAvailableModels`, whose
     per-model `quotaInfo` (`remainingFraction`, `resetTime`) is grouped into
     two pools: account `gemini` (Gemini models, assumed to include Gemini 4
     Neon, which the list doesn't name) and `claude+gpt` (Claude and GPT-OSS
-    in agy). Window label `5h` (Google resets each pool about every 5 hours on
+    in agy); other ids (internal tab models) are ignored, and a model with
+    only `resetTime` counts as exhausted. Window label `5h` (Google resets each pool about every 5 hours on
     the Ultra plan, observed 2026-11-24). Breaks if agy changes its login
     storage or Google changes that internal API; then `ai_usage_up{provider="agy"} 0`.
 - **Metrics:**

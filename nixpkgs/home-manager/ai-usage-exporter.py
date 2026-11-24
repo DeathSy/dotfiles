@@ -257,14 +257,16 @@ def collect_codex(sessions_dir):
     return {"provider": "codex", "account": "codex", "up": 1, "observed_at": line_ts if line_ts is not None else mtime, "windows": windows}
 
 AGY_BIN = "/opt/homebrew/bin/agy"
-AGY_KEYCHAIN_SERVICE = "gemini"  # agy's own login (go-keyring item), written and refreshed by agy
+AGY_KEYCHAIN = ("gemini", "antigravity")  # agy's own login (go-keyring item: service, account), refreshed by agy
+AGY_REFRESH_STAMP = Path.home() / ".local/state/ai-usage-exporter/agy-refresh"
 CLOUDCODE_URL = "https://daily-cloudcode-pa.googleapis.com/v1internal:"
 
 
 def read_agy_token():
     """Returns (access_token, expiry_seconds) from agy's Keychain login, or None.
-    Only the short-lived access token is used; the refresh token is never read out."""
-    res = subprocess.run(["/usr/bin/security", "find-generic-password", "-w", "-s", AGY_KEYCHAIN_SERVICE],
+    Only the short-lived access token is used; the refresh token is never used."""
+    service, account = AGY_KEYCHAIN
+    res = subprocess.run(["/usr/bin/security", "find-generic-password", "-w", "-s", service, "-a", account],
                          capture_output=True, text=True, timeout=5)
     raw = res.stdout.strip()
     prefix = "go-keyring-base64:"
@@ -272,22 +274,53 @@ def read_agy_token():
         return None
     tok = json.loads(base64.b64decode(raw[len(prefix):])).get("token") or {}
     access = tok.get("access_token")
-    if not isinstance(access, str) or not access.isascii() or not access.isprintable():
+    if not isinstance(access, str) or not access.strip() or not access.isascii() or not access.isprintable():
         return None
     return access, parse_timestamp(tok.get("expiry"))
 
 
+def refresh_agy_login():
+    """Runs `agy models` so agy refreshes its own login; at most once per 10 minutes."""
+    try:
+        if time.time() - AGY_REFRESH_STAMP.stat().st_mtime < 600:
+            return
+    except OSError:
+        pass
+    AGY_REFRESH_STAMP.parent.mkdir(parents=True, exist_ok=True)
+    AGY_REFRESH_STAMP.touch()
+    env = dict(os.environ, PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+    proc = subprocess.Popen([AGY_BIN, "models"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, env=env, start_new_session=True)
+    try:
+        proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, 9)
+        proc.wait()
+        log("agy: login refresh timed out")
+
+
+def agy_pool(model_id):
+    mid = model_id.lower()
+    if mid.startswith("gemini"):
+        return "gemini"
+    if mid.startswith(("claude", "gpt")):
+        return "claude+gpt"
+    return None  # internal tab/autocomplete models
+
+
 def collect_agy():
     """agy's per-model quota from Google, grouped into its pools (Gemini models, and the Claude/GPT-OSS models)."""
+    down = [{"provider": "agy", "account": "agy", "up": 0}]
     got = read_agy_token()
-    if got is None or got[1] is None or got[1] < time.time() + 300:
-        # Let agy refresh its own login rather than handling its refresh token here.
-        env = dict(os.environ, PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
-        subprocess.run([AGY_BIN, "models"], capture_output=True, timeout=60, env=env)
-        got = read_agy_token()
     if got is None:
-        log("agy: no usable login in Keychain")
-        return [{"provider": "agy", "account": "agy", "up": 0}]
+        log("agy: no usable login in Keychain (run agy once to log in)")
+        return down
+    if got[1] is None or got[1] < time.time() + 60:
+        try:
+            refresh_agy_login()
+        except OSError as exc:
+            log(f"agy: login refresh failed ({type(exc).__name__})")
+        got = read_agy_token() or got
     headers = {"Authorization": f"Bearer {got[0]}", "User-Agent": "antigravity"}
     project = http_json(CLOUDCODE_URL + "loadCodeAssist", method="POST", headers=headers,
                         body={"metadata": {"ideType": "ANTIGRAVITY"}}).get("cloudaicompanionProject")
@@ -295,17 +328,21 @@ def collect_agy():
                        body={"project": project}).get("models") or {}
     pools = {}
     for model_id, model in models.items():
-        quota = model.get("quotaInfo") or {}
-        remaining, resets_at = quota.get("remainingFraction"), parse_timestamp(quota.get("resetTime"))
-        if not is_number(remaining) or resets_at is None:
+        pool, quota = agy_pool(model_id), model.get("quotaInfo")
+        if pool is None or not isinstance(quota, dict):
             continue
-        pool = "gemini" if model_id.startswith("gemini") else "claude+gpt"
-        pct = round((1 - float(remaining)) * 100, 1)
+        remaining = quota.get("remainingFraction")
+        if not is_number(remaining):
+            if "resetTime" not in quota:
+                continue
+            remaining = 0  # proto3 JSON omits zero values: an exhausted model has only resetTime
+        pct = round((1 - min(max(float(remaining), 0.0), 1.0)) * 100, 1)
+        resets_at = parse_timestamp(quota.get("resetTime"))
         if pool not in pools or pct > pools[pool][0]:
             pools[pool] = (pct, resets_at)
     if not pools:
         log("agy: no quota info in the model list")
-        return [{"provider": "agy", "account": "agy", "up": 0}]
+        return down
     now = time.time()
     # Google reports one rolling window per pool (about 5 hours on the Ultra plan, 2026-11-24).
     return [{"provider": "agy", "account": pool, "up": 1, "observed_at": now, "windows": {"5h": value}}
