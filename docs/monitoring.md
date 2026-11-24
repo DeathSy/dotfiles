@@ -75,11 +75,11 @@ textfile directory.
     login (the refresh token is never used). Calls
     Google's undocumented `daily-cloudcode-pa.googleapis.com/v1internal:`
     `loadCodeAssist` (for the project id) and `fetchAvailableModels`, whose
-    per-model `quotaInfo` (`remainingFraction`, `resetTime`) is grouped into
-    two pools: account `gemini` (Gemini models, assumed to include Gemini 4
-    Neon, which the list doesn't name) and `claude+gpt` (Claude and GPT-OSS
-    in agy); other ids (internal tab models) are ignored, and a model with
-    only `resetTime` counts as exhausted. Window label `5h` (Google resets each pool about every 5 hours on
+    per-model `quotaInfo` (`remainingFraction`, `resetTime`) is reduced to one
+    row, account `gemini` (the most-used Gemini model; Gemini models share one
+    pool, assumed to include Gemini 4 Neon, which the list doesn't name). agy's
+    Claude/GPT-OSS pool and internal models are ignored by choice, and a model
+    with only `resetTime` counts as exhausted. Window label `5h` (Google resets each pool about every 5 hours on
     the Ultra plan, observed 2026-11-24). Breaks if agy changes its login
     storage or Google changes that internal API; then `ai_usage_up{provider="agy"} 0`.
 - **Metrics:**

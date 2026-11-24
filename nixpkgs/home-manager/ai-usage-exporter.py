@@ -300,16 +300,12 @@ def refresh_agy_login():
 
 
 def agy_pool(model_id):
-    mid = model_id.lower()
-    if mid.startswith("gemini"):
-        return "gemini"
-    if mid.startswith(("claude", "gpt")):
-        return "claude+gpt"
-    return None  # internal tab/autocomplete models
+    # Only agy's Gemini pool is tracked (the user's choice); its Claude/GPT-OSS and internal models are ignored.
+    return "gemini" if model_id.lower().startswith("gemini") else None
 
 
 def collect_agy():
-    """agy's per-model quota from Google, grouped into its pools (Gemini models, and the Claude/GPT-OSS models)."""
+    """agy's Gemini quota pool from Google's per-model quota list."""
     down = [{"provider": "agy", "account": "agy", "up": 0}]
     got = read_agy_token()
     if got is None:
