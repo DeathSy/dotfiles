@@ -36,3 +36,46 @@ Containers in `garage-server`'s Podman VM reach the host loopback listeners via
 |---|---|---|
 | `garage-server` | `host.containers.internal:9100` | local `node_exporter` (`127.0.0.1:9100`) |
 | `garage-hq` | `host.containers.internal:9102` | SSH reverse forward from `garage-hq` (`127.0.0.1:9100`) over Thunderbolt |
+
+## AI usage collector (`garage-hq` only)
+
+- **`org.nix-community.home.ai-usage-exporter`**
+  (`nixpkgs/home-manager/ai-usage-exporter.nix`, `ai-usage-exporter.py`,
+  imported by `garage-hq` only): runs every 5 minutes (`StartInterval = 300`,
+  `RunAtLoad = true`) and atomically writes
+  `~/.local/state/node-exporter/textfile/ai_usage.prom` (via `ai_usage.prom.tmp`
+  then rename) for `node_exporter`'s textfile collector.
+  Log: `~/Library/Logs/ai-usage-exporter.log` (never logs keys, tokens, or full
+  email addresses).
+- **Sources:**
+  - **Claude:** queries the local CLIProxyAPI management API on
+    `http://127.0.0.1:8317` (`GET /v0/management/auth-files`, filtering enabled
+    `type == "claude"` entries, then `POST /v0/management/api-call` to
+    `https://api.anthropic.com/api/oauth/usage` with `$TOKEN$` substitution so
+    the script never sees OAuth tokens). Maps `limits` entries (`session` → `5h`,
+    `weekly_all` → `7d`, `weekly_scoped` → `7d_<model display_name lowercased>`),
+    falling back to `five_hour`/`seven_day` when `limits` is absent. Each
+    account is fetched independently with a 10 s HTTP timeout.
+  - **Codex:** scans `~/.codex/sessions/**/*.jsonl` newest-first by mtime and
+    reads the last line with non-null `rate_limits` (`300` → `5h`, `10080` →
+    `7d`, else `<n>m`; observed time from the line's `timestamp` or the file
+    mtime; account label `codex`).
+- **Metrics:**
+  - `ai_usage_utilization_percent{provider="claude|codex",account="<label>",window="5h|7d|7d_fable|..."}` (`gauge`, 0–100; Claude `account` is the email local part only, never the domain)
+  - `ai_usage_resets_at_seconds{provider,account,window}` (`gauge`, unix seconds)
+  - `ai_usage_observed_at_seconds{provider,account}` (`gauge`, unix seconds)
+  - `ai_usage_up{provider,account}` (`gauge`, `1` on fetch success, `0` on failure)
+  - `ai_usage_collector_last_run_seconds` (`gauge`, unix seconds of the run)
+- **Secret setup:** `pass` entry `ai/cliproxyapi-management-secret` (first line)
+  is synced into the login Keychain as service `ai-usage-exporter`, account
+  `cliproxy-management-secret` on every rebuild via `ai-usage-keychain-sync`
+  (passing the value to `security -i` on stdin, hex-encoded, with
+  `-T /usr/bin/security`, following `hermes.nix`). Rebuild from the console
+  session, or run `ai-usage-keychain-sync` at the console after rebuilding over
+  SSH (when the Keychain refuses writes). Manual one-time fallback at the
+  console if needed:
+  ```sh
+  security add-generic-password -U -s ai-usage-exporter -a cliproxy-management-secret -T /usr/bin/security -w
+  ```
+  Run `ai-usage-exporter --dry-run` to preview the generated `.prom` output on
+  stdout without writing the textfile.

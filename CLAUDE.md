@@ -45,6 +45,7 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/home-manager/raycast.nix` - Raycast's login item and one-shot settings import (imported by `garage.nix` only)
 - `nixpkgs/home-manager/hammerspoon.nix` - Hammerspoon config link and the `space` CLI
 - `nixpkgs/home-manager/herdr.nix` - herdr config and agent-popup script links (imported by `garage-hq.nix` only)
+- `nixpkgs/home-manager/ai-usage-exporter.nix` - Periodic (5 min) collector writing Claude (CLIProxyAPI) and Codex quota metrics to `~/.local/state/node-exporter/textfile/ai_usage.prom`, with `ai-usage-keychain-sync` for the management key (imported by `garage-hq.nix` only; see `docs/monitoring.md`)
 - `nixpkgs/home-manager/node-exporter.nix` - Prometheus `node_exporter` on `127.0.0.1:9100` with textfile collector in `~/.local/state/node-exporter/textfile` (imported by `garage-server.nix` and `garage-hq.nix`, not `garage.nix`; see `docs/monitoring.md`)
 - `nixpkgs/home-manager/node-exporter-tunnel.nix` - SSH reverse forward from garage-hq's `127.0.0.1:9100` to garage-server's `127.0.0.1:9102` through the `garage-server` alias, Thunderbolt bridge only (imported by `garage-hq.nix` only; see `docs/monitoring.md`)
 - `nixpkgs/home-manager/rpa-tunnel.nix` - SSH forward `127.0.0.1:18080` → garage-server's RPA/Steel app (`127.0.0.1:8080`) through the `garage-server` alias, Thunderbolt bridge only, never the network (imported by `garage-hq.nix` only); agents on garage-hq use `http://localhost:18080`, humans the tailnet URL

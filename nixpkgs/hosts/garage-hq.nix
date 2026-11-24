@@ -24,6 +24,7 @@
   home-manager.users.ksotis.imports = [
     ../home-manager/ai/hermes.nix
     ../home-manager/ai/headroom.nix
+    ../home-manager/ai-usage-exporter.nix
     ../home-manager/herdr.nix
     ../home-manager/node-exporter.nix
     ../home-manager/node-exporter-tunnel.nix
