@@ -227,32 +227,29 @@ def collect_codex(sessions_dir):
     if not sessions_dir.is_dir():
         log(f"codex sessions directory not found: {sessions_dir}")
         return down
-    newest = None
+    files = []
     for path in sessions_dir.rglob("*.jsonl"):
         try:
-            mtime = path.stat().st_mtime
+            files.append((path.stat().st_mtime, path))
         except OSError:
             continue
-        if newest is None or mtime > newest[0]:
-            newest = (mtime, path)
-    if newest is None:
-        log("codex: no session files found")
-        return down
-
-    mtime, path = newest
+    # Newest file with a rate_limits line: a just-started session has none yet.
     last_found = None
-    with path.open("r", encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            if '"rate_limits"' not in line:
-                continue
-            try:
-                extracted = extract_codex_rate_limits(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-            if extracted is not None:
-                last_found = extracted
+    for mtime, path in sorted(files, key=lambda f: f[0], reverse=True)[:20]:
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if '"rate_limits"' not in line:
+                    continue
+                try:
+                    extracted = extract_codex_rate_limits(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+                if extracted is not None:
+                    last_found = extracted
+        if last_found is not None:
+            break
     if last_found is None:
-        log("codex: newest session file has no rate_limits")
+        log("codex: no rate_limits in the newest session files")
         return down
     windows, line_ts = last_found
     return {"provider": "codex", "account": "codex", "up": 1, "observed_at": line_ts if line_ts is not None else mtime, "windows": windows}
