@@ -13,5 +13,6 @@
 
   home-manager.users.ksotis.imports = [
     ../home-manager/node-exporter.nix
+    ../home-manager/podman-exporter.nix
   ];
 }
