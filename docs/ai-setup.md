@@ -807,12 +807,10 @@ default plugins.
     `running` again. `stop` or a closed terminal ends it (`stopped`,
     `closed`, `failed`).
     - There is no limit on working tasks (the owner's choice, 2026-11-24).
-      At most 10 tasks can be open in any state; stop finished ones to make
-      room.
-      A second limit covers open tasks in any state (10): each idle one keeps
-      a Claude session open, so a start beyond it is refused with the idle
-      ones listed for `stop`. One task per thread still holds while a task is
-      alive in any state.
+      At most 10 tasks can be open in any state: each idle one keeps a Claude
+      session open, so a start beyond it is refused with the idle ones listed
+      for `stop`. One task per thread still holds while a task is alive in
+      any state.
     - Takeover is read from the Claude transcript: an input after the brief
       that doesn't come from July (`[Slack reply from …]`), hc workers
       (`<hc …>`) or teammates or tools (`<teammate-message>`, `<task-notification>`,
@@ -942,7 +940,7 @@ default plugins.
     dialog (`hc send` without `--force`) and a task that is starting or has
     ended. Each message is labelled `(owner)`, `(colleague)` or "sender
     unknown: not a go". A `waiting` task that gets a message is `running`
-    again, which counts toward the limit.
+    again.
     `status`, `list` and `stop` complete the set. `status` (it shows the last
     reply) and `stop` take only the requester or the owner. `list` shows every
     task's id, project, requester and state to anyone on the list. Outside
