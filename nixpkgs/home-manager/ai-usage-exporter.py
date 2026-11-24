@@ -107,6 +107,7 @@ def http_json(url, *, method="GET", headers=None, body=None):
 
 def claude_account_label(entry):
     name = str(entry.get("name") or "").removeprefix("claude-").removesuffix(".json")
+    name = re.sub(r"^[0-9a-f]{8}-", "", name)  # auth files are named claude-<hex8>-<email>.json
     return name.split("@", 1)[0].strip() or str(entry.get("auth_index") or "")[:8] or "unknown"
 
 
