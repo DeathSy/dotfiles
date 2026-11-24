@@ -61,11 +61,13 @@ textfile directory.
     the script never sees OAuth tokens). Maps `limits` entries (`session` → `5h`,
     `weekly_all` → `7d`, `weekly_scoped` → `7d_<model display_name lowercased>`),
     falling back to `five_hour`/`seven_day` when `limits` is absent. Each
-    account is fetched independently with a 10 s HTTP timeout.
-  - **Codex:** scans `~/.codex/sessions/**/*.jsonl` newest-first by mtime and
-    reads the last line with non-null `rate_limits` (`300` → `5h`, `10080` →
-    `7d`, else `<n>m`; observed time from the line's `timestamp` or the file
-    mtime; account label `codex`).
+    account is fetched independently with a 10 s HTTP timeout (no proxy, no
+    redirects). If the management key is missing/invalid or the account listing
+    fails, emits `ai_usage_up{provider="claude",account="gateway"} 0`.
+  - **Codex:** reads the newest `~/.codex/sessions/**/*.jsonl` by mtime and
+    extracts the last line with a non-null `payload.rate_limits` (`300` → `5h`,
+    `10080` → `7d`, else `<n>m`; observed time from the line's `timestamp` or
+    the file mtime; account label `codex`).
 - **Metrics:**
   - `ai_usage_utilization_percent{provider="claude|codex",account="<label>",window="5h|7d|7d_fable|..."}` (`gauge`, 0–100; Claude `account` is the email local part only, never the domain)
   - `ai_usage_resets_at_seconds{provider,account,window}` (`gauge`, unix seconds)

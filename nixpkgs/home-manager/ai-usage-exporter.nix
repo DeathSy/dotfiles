@@ -81,7 +81,7 @@ in
     };
   };
 
-  home.activation.aiUsageKeychain = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+  home.activation.aiUsageKeychain = lib.hm.dag.entryBetween [ "setupLaunchAgents" ] [ "writeBoundary" ] ''
     if [ -z "''${DRY_RUN_CMD:-}" ]; then
       ${keychainSync}/bin/ai-usage-keychain-sync \
         || errorEcho "ai-usage-exporter: Keychain sync incomplete (see above). Run ai-usage-keychain-sync at the console."
