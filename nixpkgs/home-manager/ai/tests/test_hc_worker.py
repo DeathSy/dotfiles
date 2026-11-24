@@ -55,7 +55,7 @@ class TidyTests(unittest.TestCase):
     def test_observed_shape_1_single_worker_side_by_side(self):
         doc = make_doc(row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.5)]))
         before = copy.deepcopy(doc)
-        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a: a == "t8c")
+        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a, anc: anc == "t2v" and a == "t8c")
         self.assertEqual(status, "tidied")
         self.assertIsNotNone(res)
         self.assertEqual(doc, before)
@@ -77,7 +77,7 @@ class TidyTests(unittest.TestCase):
             blk("p1", "t2v", 0.7),
             col("s_keep", [row("s_inner", [blk("p2", "t8c", 0.5), blk("p3", "t8d", 0.5)], 1.0)], 0.3),
         ]))
-        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a: a in {"t8c", "t8d"})
+        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a, anc: a in {"t8c", "t8d"})
         self.assertEqual(status, "tidied")
         self.assertEqual(res["spaces"][0]["tabs"][0]["root"], row("tb1", [
             blk("p1", "t2v", 0.7),
@@ -95,7 +95,7 @@ class TidyTests(unittest.TestCase):
                 ], 0.5),
             ], 0.3),
         ]))
-        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a: a in {"t8c", "t8d", "t8e"})
+        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a, anc: a in {"t8c", "t8d", "t8e"})
         self.assertEqual(status, "tidied")
         right = res["spaces"][0]["tabs"][0]["root"]["children"][1]
         self.assertEqual(right["id"], "s_col")
@@ -114,43 +114,58 @@ class TidyTests(unittest.TestCase):
                 blk("p4", "t8e", 0.333333343),
             ], 0.300000012),
         ]))
-        self.assertEqual(hw.tidy(doc, "sp1", "tb1", "t2v", lambda a: True), (None, "already_tidy"))
+        self.assertEqual(hw.tidy(doc, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "already_tidy"))
 
     def test_root_size_preserved_and_already_tidy_with_root_size_returns_none(self):
         tidy_with_size = make_doc(row("tb1", [
             blk("p1", "t2v", 0.7),
             col("s_col", [blk("p2", "t8c", 1.0)], 0.3),
         ], weight=1.0))
-        self.assertEqual(hw.tidy(tidy_with_size, "sp1", "tb1", "t2v", lambda a: True), (None, "already_tidy"))
+        self.assertEqual(hw.tidy(tidy_with_size, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "already_tidy"))
 
         untidy_with_size = make_doc(row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.5)], weight=1.0))
-        res, status = hw.tidy(untidy_with_size, "sp1", "tb1", "t2v", lambda a: a == "t8c")
+        res, status = hw.tidy(untidy_with_size, "sp1", "tb1", "t2v", lambda a, anc: a == "t8c")
         self.assertEqual(status, "tidied")
         self.assertEqual(res["spaces"][0]["tabs"][0]["root"]["size"], {"weight": 1.0})
 
+    def test_anchor_falls_back_to_topmost_candidate_with_one_block_in_tab(self):
+        # Main session ended (no block in tab); reviewer is topmost remaining candidate in tab
+        doc = make_doc(row("tb1", [blk("p_rev", "t_rev", 0.5), blk("p_w1", "t_w1", 0.5)]))
+        res, status = hw.tidy(doc, "sp1", "tb1", ["t_rev", "t_main"],
+                              lambda a, anc: anc == "t_rev" and a == "t_w1")
+        self.assertEqual(status, "tidied")
+        new_root = res["spaces"][0]["tabs"][0]["root"]
+        self.assertEqual(new_root["children"][0], blk("p_rev", "t_rev", 0.7))
+        self.assertEqual(new_root["children"][1]["children"], [blk("p_w1", "t_w1", 1.0)])
+
+        # Duplicate block for topmost ancestor is not skipped into a valid layout (ancestor isn't a descendant of child)
+        dup_main = make_doc(row("tb1", [blk("p1", "t_main", 0.3), blk("p2", "t_main", 0.3), blk("p3", "t_rev", 0.4)]))
+        self.assertEqual(hw.tidy(dup_main, "sp1", "tb1", ["t_rev", "t_main"],
+                                 lambda a, anc: False), (None, "refused"))
+
     def test_foreign_terminal_returns_none(self):
         doc = make_doc(row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.25), blk("p3", "t99", 0.25)]))
-        self.assertEqual(hw.tidy(doc, "sp1", "tb1", "t2v", lambda a: a == "t8c"), (None, "refused"))
+        self.assertEqual(hw.tidy(doc, "sp1", "tb1", "t2v", lambda a, anc: a == "t8c"), (None, "refused"))
 
     def test_duplicate_blocks_return_none(self):
         doc_dup_worker = make_doc(row("tb1", [blk("p1", "t2v", 0.4), blk("p2", "t8c", 0.3), blk("p3", "t8c", 0.3)]))
-        self.assertEqual(hw.tidy(doc_dup_worker, "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+        self.assertEqual(hw.tidy(doc_dup_worker, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
         doc_dup_parent = make_doc(row("tb1", [blk("p1", "t2v", 0.4), blk("p2", "t2v", 0.3), blk("p3", "t8c", 0.3)]))
-        self.assertEqual(hw.tidy(doc_dup_parent, "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+        self.assertEqual(hw.tidy(doc_dup_parent, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
     def test_duplicate_space_ids_or_tab_ids_return_none(self):
         dup_spaces = make_doc(
             row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.5)]),
             extra_spaces=[{"id": "sp1", "name": "dup", "folder": "/x", "tabs": []}],
         )
-        self.assertEqual(hw.tidy(dup_spaces, "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+        self.assertEqual(hw.tidy(dup_spaces, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
         dup_tabs = make_doc(
             row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.5)]),
             extra_tabs=[{"id": "tb1", "name": "dup", "root": row("tb1", [blk("px", "t9", 1.0)])}],
         )
-        self.assertEqual(hw.tidy(dup_tabs, "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+        self.assertEqual(hw.tidy(dup_tabs, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
         dup_tabs_other_space = make_doc(
             row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.5)]),
@@ -159,14 +174,14 @@ class TidyTests(unittest.TestCase):
                 {"id": "tb9", "name": "", "root": row("tb9", [blk("py", "t9b", 1.0)])},
             ]}],
         )
-        self.assertEqual(hw.tidy(dup_tabs_other_space, "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+        self.assertEqual(hw.tidy(dup_tabs_other_space, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
     def test_parent_missing_or_only_parent_returns_none(self):
         no_parent = make_doc(row("tb1", [blk("p2", "t8c", 0.5), blk("p3", "t8d", 0.5)]))
-        self.assertEqual(hw.tidy(no_parent, "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+        self.assertEqual(hw.tidy(no_parent, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
         only_parent = make_doc(row("tb1", [blk("p1", "t2v", 1.0)]))
-        self.assertEqual(hw.tidy(only_parent, "sp1", "tb1", "t2v", lambda a: True), (None, "already_tidy"))
+        self.assertEqual(hw.tidy(only_parent, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "already_tidy"))
 
     def test_invalid_tree_cases_return_none(self):
         bad_roots = [
@@ -189,7 +204,7 @@ class TidyTests(unittest.TestCase):
         ]
         for bad in bad_roots:
             with self.subTest(bad=bad):
-                self.assertEqual(hw.tidy(make_doc(bad), "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+                self.assertEqual(hw.tidy(make_doc(bad), "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
     def test_invariant_failure_raises_fail_not_assertion_error(self):
         doc = make_doc(row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.5)]))
@@ -203,13 +218,13 @@ class TidyTests(unittest.TestCase):
 
         with mock.patch.object(copy, "deepcopy", side_effect=corrupt_deepcopy):
             with self.assertRaises(hw.Fail):
-                hw.tidy(doc, "sp1", "tb1", "t2v", lambda a: a == "t8c")
+                hw.tidy(doc, "sp1", "tb1", "t2v", lambda a, anc: a == "t8c")
 
     def test_missing_space_or_tab_returns_none(self):
         doc = make_doc(row("tb1", [blk("p1", "t2v", 0.5), blk("p2", "t8c", 0.5)]))
-        self.assertEqual(hw.tidy(doc, "sp_missing", "tb1", "t2v", lambda a: True), (None, "refused"))
-        self.assertEqual(hw.tidy(doc, "sp1", "tb_missing", "t2v", lambda a: True), (None, "refused"))
-        self.assertEqual(hw.tidy({"bad": 1}, "sp1", "tb1", "t2v", lambda a: True), (None, "refused"))
+        self.assertEqual(hw.tidy(doc, "sp_missing", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
+        self.assertEqual(hw.tidy(doc, "sp1", "tb_missing", "t2v", lambda a, anc: True), (None, "refused"))
+        self.assertEqual(hw.tidy({"bad": 1}, "sp1", "tb1", "t2v", lambda a, anc: True), (None, "refused"))
 
     def test_other_spaces_and_tabs_untouched(self):
         other_tab = {"id": "tb2", "name": "other", "root": row("tb2", [blk("px", "t9a", 1.0)]), "custom": [1, 2]}
@@ -222,7 +237,7 @@ class TidyTests(unittest.TestCase):
             extra_spaces=[other_space],
         )
         doc["extra_top"] = {"keep": True}
-        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a: a == "t8c")
+        res, status = hw.tidy(doc, "sp1", "tb1", "t2v", lambda a, anc: a == "t8c")
         self.assertEqual(status, "tidied")
         self.assertEqual(res["extra_top"], {"keep": True})
         self.assertEqual(res["spaces"][0]["tabs"][1], other_tab)
@@ -230,7 +245,7 @@ class TidyTests(unittest.TestCase):
 
 
 class AnchorAndDescendantTests(unittest.TestCase):
-    def test_find_anchor_walks_same_tab_labels_up_to_depth_4(self):
+    def test_anchor_chain_walks_same_tab_labels_up_to_depth_4(self):
         same = {"herdr.space": "sp1", "herdr.tab": "tb1"}
         other = {"herdr.space": "sp1", "herdr.tab": "tb_other"}
         terms = {
@@ -240,12 +255,11 @@ class AnchorAndDescendantTests(unittest.TestCase):
             "w1": {"parent": "rev", "labels": same},
             "w2": {"parent": "w1", "labels": same},
             "w3": {"parent": "w2", "labels": same},
-            "w4": {"parent": "w3", "labels": same},  # 5 hops from main
+            "w4": {"parent": "w3", "labels": same},
         }
-        # Stops at main because other_tab has different labels
-        self.assertEqual(hw.find_anchor("rev", "sp1", "tb1", terms.get), "main")
-        self.assertEqual(hw.find_anchor("w3", "sp1", "tb1", terms.get), "main")  # 4 hops
-        self.assertEqual(hw.find_anchor("w4", "sp1", "tb1", terms.get), "rev")   # capped at 4 hops
+        self.assertEqual(hw.anchor_chain("rev", "sp1", "tb1", terms.get), ["rev", "main"])
+        self.assertEqual(hw.anchor_chain("w3", "sp1", "tb1", terms.get), ["w3", "w2", "w1", "rev", "main"])
+        self.assertEqual(hw.anchor_chain("w4", "sp1", "tb1", terms.get), ["w4", "w3", "w2", "w1", "rev"])
 
     def test_is_descendant_walks_up_to_depth_4_and_handles_cycles(self):
         terms = {
@@ -332,7 +346,6 @@ class RpcAndEditLoopTests(unittest.TestCase):
         self.assertEqual(run_cmd, ["/fake/hc", "run", "--bg", "--", "echo"])
         self.assertEqual(run_kw["errors"], "replace")
 
-        # End-to-end check that invalid UTF-8 bytes do not raise UnicodeDecodeError
         p = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.stdout.buffer.write(b'\\xff{\"address\":\"t8c\"}\\n')"],
                            capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(p.returncode, 0)
@@ -358,7 +371,7 @@ class RpcAndEditLoopTests(unittest.TestCase):
                 raise hw.DocConflict("doc.set: conflict")
             return {}
 
-        res = hw.edit_doc(lambda v: hw.tidy(v, "sp1", "tb1", "t2v", lambda a: a in {"t8c", "t8d"})[0], rpc=fake_rpc)
+        res = hw.edit_doc(lambda v: hw.tidy(v, "sp1", "tb1", "t2v", lambda a, anc: a in {"t8c", "t8d"})[0], rpc=fake_rpc)
         self.assertEqual(gets, [1, 2])
         self.assertEqual([v for v, _ in sets], [1, 2])
         right = res["spaces"][0]["tabs"][0]["root"]["children"][1]
@@ -377,7 +390,7 @@ class RpcAndEditLoopTests(unittest.TestCase):
             raise hw.DocConflict("doc.set: conflict")
 
         with self.assertRaises(hw.Fail) as ctx:
-            hw.edit_doc(lambda v: hw.tidy(v, "sp1", "tb1", "t2v", lambda a: a == "t8c")[0], rpc=fake_rpc)
+            hw.edit_doc(lambda v: hw.tidy(v, "sp1", "tb1", "t2v", lambda a, anc: a == "t8c")[0], rpc=fake_rpc)
         self.assertEqual(calls, {"get": 5, "set": 5})
         self.assertIn("5 tries", str(ctx.exception))
 
@@ -391,7 +404,7 @@ class RpcAndEditLoopTests(unittest.TestCase):
             return {"version": 1, "value": copy.deepcopy(doc)}
 
         with self.assertRaises(hw.Fail) as ctx:
-            hw.edit_doc(lambda v: hw.tidy(v, "sp1", "tb1", "t2v", lambda a: a == "t8c")[0],
+            hw.edit_doc(lambda v: hw.tidy(v, "sp1", "tb1", "t2v", lambda a, anc: a == "t8c")[0],
                         rpc=slow_rpc, deadline=10.0, clock=lambda: t[0])
         self.assertIn("out of time", str(ctx.exception))
         self.assertEqual(calls, ["doc.get"])
@@ -480,7 +493,6 @@ class CliTests(unittest.TestCase):
             "t_rev": {"address": "t_rev", "parent": "t_main", "labels": same},
             "t_w1": {"address": "t_w1", "parent": "t_rev", "labels": same},
         }
-        # App split t_rev into row [t_rev, t_w1] inside right column
         doc_state = {"version": 2, "value": make_doc(row("tb1", [
             blk("p_main", "t_main", 0.7),
             col("s_col", [row("s_r", [blk("p_rev", "t_rev", 0.5), blk("p_w1", "t_w1", 0.5)], 1.0)], 0.3),
@@ -500,13 +512,11 @@ class CliTests(unittest.TestCase):
             rpc=fake_rpc,
         )
         self.assertEqual((rc, err), (0, ""))
-        # Main session stays left at 0.7; right column has reviewer above stage-2 worker
         self.assertEqual(doc_state["value"]["spaces"][0]["tabs"][0]["root"], row("tb1", [
             blk("p_main", "t_main", 0.7),
             col("s_col", [blk("p_rev", "t_rev", 0.5), blk("p_w1", "t_w1", 0.5)], 0.3),
         ]))
 
-        # --tidy called from reviewer uses the exact same anchor (already tidy -> silent)
         rc2, out2, err2 = self.run_cli(
             ["--tidy"],
             env={"HC_TERMINAL_ID": "t_rev"},
@@ -514,6 +524,119 @@ class CliTests(unittest.TestCase):
             rpc=fake_rpc,
         )
         self.assertEqual((rc2, out2, err2), (0, "", ""))
+
+    def test_reviewer_outliving_main_session_becomes_anchor(self):
+        # t_main finished (labels still on terminal record, but its pane is gone from the tab)
+        same = {"herdr.space": "sp1", "herdr.tab": "tb1"}
+        terms = {
+            "t_main": {"address": "t_main", "state": "exited", "labels": same},
+            "t_rev": {"address": "t_rev", "parent": "t_main", "labels": same},
+            "t_w1": {"address": "t_w1", "parent": "t_rev", "labels": same},
+        }
+        doc_state = {"version": 3, "value": make_doc(row("tb1", [
+            blk("p_rev", "t_rev", 0.5),
+            blk("p_w1", "t_w1", 0.5),
+        ]))}
+
+        def fake_rpc(method, params):
+            if method == "doc.get":
+                return copy.deepcopy(doc_state)
+            doc_state["value"] = params["value"]
+            return {}
+
+        rc, out, err = self.run_cli(
+            ["--name", "w1", "--", "codex"],
+            env={"HC_TERMINAL_ID": "t_rev"},
+            run_hc=lambda a: (0, '{"address":"t_w1"}\n', ""),
+            get_term=terms.get,
+            rpc=fake_rpc,
+        )
+        self.assertEqual((rc, err), (0, ""))
+        final_root = doc_state["value"]["spaces"][0]["tabs"][0]["root"]
+        self.assertEqual(final_root["children"][0], blk("p_rev", "t_rev", 0.7))
+        self.assertEqual(final_root["children"][1]["type"], "column")
+        self.assertEqual(final_root["children"][1]["size"], {"weight": 0.3})
+        self.assertEqual(final_root["children"][1]["children"], [blk("p_w1", "t_w1", 1.0)])
+
+        # --tidy from reviewer also succeeds silently (already tidy with t_rev as anchor)
+        rc2, out2, err2 = self.run_cli(["--tidy"], env={"HC_TERMINAL_ID": "t_rev"}, get_term=terms.get, rpc=fake_rpc)
+        self.assertEqual((rc2, out2, err2), (0, "", ""))
+
+    def test_hc_get_deadline_stops_ancestor_and_descendant_walks_and_caps_timeout(self):
+        same = {"herdr.space": "sp1", "herdr.tab": "tb1"}
+        # (a) Slow get_term during ancestor walk pushes past 20s deadline -> stops before next hc get / RPC
+        t, got, rpcs = [0.0], [], []
+        terms = {
+            "t_rev": {"address": "t_rev", "parent": "t_main", "labels": same},
+            "t_main": {"address": "t_main", "parent": "t_gp", "labels": same},
+            "t_gp": {"address": "t_gp", "labels": same},
+        }
+        doc = make_doc(row("tb1", [blk("p1", "t_main", 0.5), blk("p2", "t_rev", 0.5)]))
+
+        def slow_get_ancestor(addr):
+            got.append((addr, t[0]))
+            if addr == "t_main":
+                t[0] += 21.0
+            return terms.get(addr)
+
+        err_buf = io.StringIO()
+        ok = hw.tidy_tab("sp1", "tb1", "t_rev", caller_info=terms["t_rev"],
+                         rpc=lambda m, p: (rpcs.append(m), {"version": 1, "value": doc})[1],
+                         get_term=slow_get_ancestor, err=err_buf, deadline=20.0, clock=lambda: t[0])
+        self.assertFalse(ok)
+        self.assertEqual([a for a, _ in got], ["t_main"])  # t_gp never started past deadline
+        self.assertEqual(rpcs, [])
+        self.assertIn("out of time", err_buf.getvalue())
+
+        # (b) Slow get_term during is_descendant_of pushes past deadline -> stops before next hc get and doc.set
+        t2, got2, rpcs2 = [0.0], [], []
+        terms2 = {
+            "t_main": {"address": "t_main", "labels": same},
+            "t_w1": {"address": "t_w1", "parent": "t_main"},
+            "t_w2": {"address": "t_w2", "parent": "t_main"},
+        }
+        doc2 = make_doc(row("tb1", [blk("p1", "t_main", 0.4), blk("p2", "t_w1", 0.3), blk("p3", "t_w2", 0.3)]))
+
+        def slow_get_desc(addr):
+            got2.append((addr, t2[0]))
+            if addr == "t_w1":
+                t2[0] += 21.0
+            return terms2.get(addr)
+
+        err_buf2 = io.StringIO()
+        ok2 = hw.tidy_tab("sp1", "tb1", "t_main", caller_info=terms2["t_main"],
+                          rpc=lambda m, p: (rpcs2.append(m), {"version": 1, "value": copy.deepcopy(doc2)})[1],
+                          get_term=slow_get_desc, err=err_buf2, deadline=20.0, clock=lambda: t2[0])
+        self.assertFalse(ok2)
+        self.assertEqual([a for a, _ in got2], ["t_w1"])  # t_w2 never started past deadline
+        self.assertEqual(rpcs2, ["doc.get"])              # doc.set never started
+        self.assertIn("out of time", err_buf2.getvalue())
+
+        # (c) Real hc_get timeout is capped at remaining time (min 1s, max DOC_CALL_TIMEOUT)
+        seen_timeouts = []
+        t3 = [2.0]  # remaining 18s -> cap 10s; then advance to 16.5s (rem 3.5s); then 19.7s (rem 0.3s -> min 1.0s)
+        responses = {
+            "t_w1": json.dumps({"address": "t_w1", "parent": "t_main"}),
+            "t_w2": json.dumps({"address": "t_w2", "parent": "t_main"}),
+            "t_w3": json.dumps({"address": "t_w3", "parent": "t_main"}),
+        }
+        times_after = {"t_w1": 16.5, "t_w2": 19.7, "t_w3": 19.9}
+
+        def fake_subproc(cmd, **kwargs):
+            addr = cmd[2]
+            seen_timeouts.append((addr, kwargs["timeout"]))
+            t3[0] = times_after[addr]
+            return subprocess.CompletedProcess(cmd, 0, stdout=responses[addr], stderr="")
+
+        doc3 = make_doc(row("tb1", [
+            blk("p0", "t_main", 0.25), blk("p1", "t_w1", 0.25), blk("p2", "t_w2", 0.25), blk("p3", "t_w3", 0.25),
+        ]))
+        with mock.patch.object(subprocess, "run", side_effect=fake_subproc):
+            ok3 = hw.tidy_tab("sp1", "tb1", "t_main", caller_info={"address": "t_main", "labels": same},
+                              rpc=lambda m, p: {"version": 1, "value": copy.deepcopy(doc3)} if m == "doc.get" else {},
+                              get_term=hw.hc_get, err=io.StringIO(), deadline=20.0, clock=lambda: t3[0])
+        self.assertTrue(ok3)
+        self.assertEqual(seen_timeouts, [("t_w1", 10), ("t_w2", 3.5), ("t_w3", 1.0)])
 
     def test_template_before_double_dash_gets_flags_and_labels_prepended(self):
         terms = {"t2v": {"address": "t2v", "labels": {"herdr.space": "sp1", "herdr.tab": "tb1"}}}
@@ -547,7 +670,6 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(called, [])
                 self.assertIn("cannot pass", err)
 
-        # Value of --name equal to --parent is allowed (not parsed as --parent flag)
         seen = []
         rc, _, _ = self.run_cli(["--name", "--parent", "--", "echo"],
                                 run_hc=lambda a: (seen.append(a), (0, "no-addr\n", ""))[1],
@@ -587,7 +709,6 @@ class CliTests(unittest.TestCase):
         def slow_connect(payload):
             req = json.loads(payload.splitlines()[1])
             calls.append((req["method"], t[0]))
-            # poll1: t=0..3 (not there), sleep 0.25 -> 3.25; poll2: 3.25..13.25 (appears); edit get: 13.25..21.25 -> past 20s
             t[0] += 3.0 if len(calls) == 1 else (10.0 if len(calls) == 2 else 8.0)
             doc = make_doc(row("tb1", [blk("p1", "t2v", 1.0)])) if len(calls) == 1 else doc_with_worker
             return 0, json.dumps({"jsonrpc": "2.0", "id": 2, "result": {"version": 1, "value": doc}}) + "\n"
@@ -680,7 +801,6 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual((rc, out, err, rpc_calls), (17, '{"error":"nope"}\n', "hc failed\n", []))
 
-        # Negative return code (killed by signal 15 -> 128 + 15 = 143)
         rc2, _, _ = self.run_cli(
             ["--", "sleep"],
             run_hc=lambda a: (-15, "", ""),

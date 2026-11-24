@@ -50,12 +50,12 @@ def doc_call(method, params, *, connect=None):
             return d["result"] if isinstance(d.get("result"), dict) else {}
     raise Fail(f"hc connect: no answer to {method} (exit {rc})")
 
-def hc_get(addr, hc=None):
+def hc_get(addr, hc=None, *, timeout=DOC_CALL_TIMEOUT):
     if not isinstance(addr, str) or not addr or addr.startswith("-"):
         return None
     try:
         p = subprocess.run([hc or hc_path(), "get", addr, "--json"], capture_output=True,
-                           encoding="utf-8", errors="replace", timeout=DOC_CALL_TIMEOUT)
+                           encoding="utf-8", errors="replace", timeout=timeout)
         d = json.loads(p.stdout) if p.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired, ValueError):
         return None
@@ -132,7 +132,7 @@ def find_tab(value, space_id, tab_id):
             found = next(((si, ti, tb) for ti, tb in enumerate(sp["tabs"]) if tb["id"] == tab_id), found)
     return found
 
-def tidy(value, space_id, tab_id, anchor, is_descendant):
+def tidy(value, space_id, tab_id, candidates, is_descendant):
     """Return (new_value, 'tidied') or (None, 'already_tidy'|'refused')."""
     if not doc_shape_ok(value):
         return None, "refused"
@@ -142,13 +142,21 @@ def tidy(value, space_id, tab_id, anchor, is_descendant):
     root = tb["root"]
     if not valid_node(root) or root["type"] != "row" or root["id"] != tab_id:
         return None, "refused"
+    chain = [candidates] if isinstance(candidates, str) else list(candidates)
     all_b = blocks(root)
+    counts = {}
+    for b in all_b:
+        t = b["content"]["terminal"]
+        counts[t] = counts.get(t, 0) + 1
+    anchor = next((c for c in reversed(chain) if counts.get(c) == 1), None)
+    if anchor is None:
+        return None, "refused"
     ablocks = [b for b in all_b if b["content"]["terminal"] == anchor]
     wblocks = [b for b in all_b if b["content"]["terminal"] != anchor]
-    if len(ablocks) == 1 and not wblocks:
+    if not wblocks:
         return None, "already_tidy"
     waddrs = [b["content"]["terminal"] for b in wblocks]
-    if len(ablocks) != 1 or len(waddrs) != len(set(waddrs)) or not all(is_descendant(a) for a in waddrs):
+    if len(waddrs) != len(set(waddrs)) or not all(is_descendant(a, anchor) for a in waddrs):
         return None, "refused"
     existing = root["children"][1] if len(root["children"]) >= 2 else None
     col_id = existing["id"] if existing and existing["type"] == "column" else "s" + secrets.token_hex(16)
@@ -229,13 +237,13 @@ def ancestors(start, get_term):
         yield p
         cur = p
 
-def find_anchor(start, space_id, tab_id, get_term):
-    anchor = start
+def anchor_chain(start, space_id, tab_id, get_term):
+    chain = [start]
     for p in ancestors(start, get_term):
         if tab_labels(get_term(p)) != (space_id, tab_id):
             break
-        anchor = p
-    return anchor
+        chain.append(p)
+    return chain
 
 def is_descendant_of(addr, anchor, get_term):
     return anchor in ancestors(addr, get_term)
@@ -281,14 +289,18 @@ def tidy_tab(space_id, tab_id, caller, *, caller_info=None, rpc=doc_call, get_te
     cache, status = ({caller: caller_info} if caller_info is not None else {}), [None]
     def cached_get(addr):
         if addr not in cache:
-            cache[addr] = get_term(addr)
+            _check_deadline(deadline, clock)
+            if get_term is hc_get and deadline is not None:
+                cache[addr] = hc_get(addr, timeout=max(1.0, min(DOC_CALL_TIMEOUT, deadline - clock())))
+            else:
+                cache[addr] = get_term(addr)
         return cache[addr]
-    anchor = find_anchor(caller, space_id, tab_id, cached_get)
-    def change(v):
-        new, st = tidy(v, space_id, tab_id, anchor, lambda a: is_descendant_of(a, anchor, cached_get))
-        status[0] = st
-        return new
     try:
+        candidates = anchor_chain(caller, space_id, tab_id, cached_get)
+        def change(v):
+            new, st = tidy(v, space_id, tab_id, candidates, lambda a, anc: is_descendant_of(a, anc, cached_get))
+            status[0] = st
+            return new
         edit_doc(change, rpc=rpc, deadline=deadline, clock=clock)
     except Fail as e:
         (err or sys.stderr).write(f"{PROG}: {e}\n")
