@@ -199,16 +199,15 @@ class SenderTests(Base):
         rc, body, _ = self.run_cli("status", "--task", "july-pcs-ab12", slack={"actor": OWNER})
         self.assertEqual(rc, 0, body)
 
-    def test_s8_reopen_respects_cap(self):
+    def test_s8_reopen_has_no_working_cap(self):
         a = self.add_root()
         self.add_task(address=a, state="waiting", requester=COLL)
         for i in range(3):
             self.add_task(tid=f"july-pcs-ff0{i}", address=self.add_root(f"july-pcs-ff0{i}"),
                           thread=f"1795400001.00000{i}")
         rc, body, _ = self.run_cli("send", "one more thing", slack={"actor": COLL})
-        self.assertEqual(rc, 1)
-        self.assertIn("tasks are working", body["error"])
-        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "waiting")
+        self.assertEqual(rc, 0, body)  # 3 others working: no limit on working tasks
+        self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "running")
 
     def test_a9_send_refused_while_starting_or_after_failure(self):
         a = self.add_root()
@@ -1304,7 +1303,7 @@ class LifecycleTests(Base):
         self.run_cli("monitor")
         self.assertEqual(self.tasks()["july-pcs-ab12"]["state"], "takeover")  # the owner's own `!` command
 
-    def test_a_resumed_task_counts_toward_the_cap(self):
+    def test_no_cap_on_working_tasks(self):
         for i in range(2):
             self.add_task(tid=f"july-pcs-dd0{i}", address=self.add_root(f"july-pcs-dd0{i}"), thread=f"1795400020.00000{i}")
         t0 = time.time() - 3000
@@ -1320,8 +1319,7 @@ class LifecycleTests(Base):
         self.run_cli("monitor")  # it resumed: 3 working now
         self.assertEqual(self.tasks()["july-pcs-dd02"]["state"], "running")
         rc, body, _ = self.run_cli("start", "pcs", "--", "x", slack={"actor": OWNER, "thread": "1795400021.000001"})
-        self.assertEqual(rc, 1)
-        self.assertIn("tasks are working", body["error"])
+        self.assertEqual(rc, 0, body)  # 3 working: still starts
 
     def test_a_total_cap_on_open_tasks(self):
         for i in range(10):

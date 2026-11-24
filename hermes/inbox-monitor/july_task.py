@@ -43,7 +43,6 @@ CLAUDE_JSON = os.path.join(HOME, ".claude.json")  # Claude Code's own state (tru
 START_WAIT = 120           # Hermes' terminal tool gives a command 180 s
 DIALOG_WAIT = 10           # a dialog at start is watched this long (within START_WAIT) before the start fails
 
-MAX_RUNNING = 3            # tasks working at once (starting/running; waiting and taken-over ones don't count)
 MAX_LIVE = 10              # tasks alive in any state (idle ones keep a Claude session open until stopped)
 START_BUDGET = 165         # a whole `start`, tab work included, stays under Hermes' 180 s command limit
 RELAY_IDLE = 900           # a turn that ended without a post is relayed (and the task set waiting) after this
@@ -189,7 +188,7 @@ def locked():
 
 # Task states: starting -> running (working on its own) -> waiting (reported done or blocked, or went idle; it
 # stays in its herdr tab for the owner) -> takeover (the owner typed into it). stop or a closed terminal end
-# it: stopped / closed / failed. Only starting and running count against MAX_RUNNING.
+# it: stopped / closed / failed. No limit on working tasks (the owner's choice, 2026-11-24); MAX_LIVE caps open ones.
 WORKING = ("starting", "running")
 LIVE = ("starting", "running", "waiting", "takeover")
 ENDED = ("stopped", "closed", "failed")
@@ -207,12 +206,6 @@ def check_capacity(st, channel, thread, exclude=None):
         idle = [t["id"] for t in live if t["state"] in ("waiting", "takeover")]
         raise Fail(f"{len(live)} tasks are open (the limit is {MAX_LIVE}); stop finished ones first"
                    + (f" (idle: {', '.join(idle)})" if idle else ""))
-    # A waiting task that resumed (its reviewer reported back) is working again and counts here too: it can't
-    # be paused, but new starts wait until the count is under the limit. Taken-over tasks are the owner's.
-    working = [t for t in live if t["state"] in WORKING]
-    if len(working) >= MAX_RUNNING:
-        raise Fail(f"{len(working)} tasks are working (the limit is {MAX_RUNNING}): "
-                   + ", ".join(t["id"] for t in working) + ". Wait for one to finish or stop one.")
 
 
 # ── Slack (as July, the bot) ──────────────────────────────────────────────────
@@ -1160,7 +1153,7 @@ def cmd_start(a):
     if state in ENDED or state == "gone":
         raise Fail(f"the task changed while starting ({state}); see july-task list")
     out({"started": task["id"], "terminal": task["address"], "cwd": task["cwd"], "requester": ctx["actor_name"],
-         "running": count, "limit": MAX_RUNNING})
+         "running": count})
 
 
 def announce(st, task):
@@ -1296,8 +1289,6 @@ def cmd_send(a):
             raise Fail(f"{t['id']}'s session isn't running any more; start a new task")
         if status_of(g) in ("blocked", "error"):
             raise Fail(f"{t['id']} is waiting at a dialog only Kittipong can answer; it can't take messages now")
-        if t["state"] == "waiting":  # it starts working again: that counts against the limit
-            check_capacity(st, t["channel"], t["thread_ts"], exclude=t["id"])
         # A label only: the session's merge gate is owner-go, which reads Slack itself.
         if ctx["platform"] != "slack":
             who = "the owner's terminal (not Slack: not a go)"
@@ -1353,7 +1344,7 @@ def cmd_list(a):
         rows = [{"task": t["id"], "project": t["project"], "requester": t["requester_name"], "state": t["state"],
                  "age": ago(t["started_at"]), "mine": bool(ctx["actor"]) and t["requester"] == ctx["actor"]}
                 for t in sorted(st["tasks"].values(), key=lambda x: x["started_at"])]
-        out({"tasks": rows, "running": len(running(st)), "limit": MAX_RUNNING})
+        out({"tasks": rows, "running": len(running(st))})
 
 
 def cmd_stop(a):

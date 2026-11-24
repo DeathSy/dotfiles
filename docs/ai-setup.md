@@ -806,11 +806,9 @@ default plugins.
     whose session starts working again, e.g. its reviewer reported back, is
     `running` again. `stop` or a closed terminal ends it (`stopped`,
     `closed`, `failed`).
-    - Only `starting` and `running` count toward the limit of 3, so tasks
-      waiting for takeover don't block new ones. Taken-over tasks don't count
-      either: the owner drives them. A waiting task that resumes on its own
-      (its reviewer reported back) counts again. It can't be paused, so the
-      count can briefly exceed 3, and new starts are refused until it's under.
+    - There is no limit on working tasks (the owner's choice, 2026-11-24).
+      At most 10 tasks can be open in any state; stop finished ones to make
+      room.
       A second limit covers open tasks in any state (10): each idle one keeps
       a Claude session open, so a start beyond it is refused with the idle
       ones listed for `stop`. One task per thread still holds while a task is
@@ -1069,7 +1067,7 @@ default plugins.
     requester and thread checks are guards against mix-ups, not a boundary.
     The model writes the command line and could set `HERMES_SESSION_*` itself,
     and a colleague already has July's terminal (above). What limits the risk:
-    one confirmed task per thread, at most 3 running, the owner's DM for every
+    one confirmed task per thread, at most 10 open, the owner's DM for every
     colleague task, dialogs that only the owner can answer, and every action
     visible in the thread and in the herdr terminal (`hc attach <task>`).
     Trusting a repo at start (`claude-trust-repo`, for mapped projects) also
