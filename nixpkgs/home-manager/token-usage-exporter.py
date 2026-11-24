@@ -130,19 +130,18 @@ def pb_get(buf, *path):
 
 
 def agy_generation(blob):
-    """One agy generation (gen_metadata.data). Field meanings inferred 2026-11-24 from agy 1.5.14:
-    1.4.2 new input tokens, 1.4.3 output tokens (thinking 1.4.9 + text 1.4.10), 1.9.10.1 context
-    used after the turn (cache read is estimated as context - input - output), 1.19 model."""
+    """One agy generation (gen_metadata.data). Field 1.4 looks like Codeium's ModelUsageStats
+    (inferred from agy 1.5.14, 2026-11-24): 2 input, 3 output, 4 cache write, 5 cache read
+    (proto3 leaves zeros off the wire, so a missing count is 0); 1.19 is the model."""
     try:
-        new_in, out, ctx = pb_get(blob, 1, 4, 2), pb_get(blob, 1, 4, 3), pb_get(blob, 1, 9, 10, 1)
-        model = pb_get(blob, 1, 19)
+        usage, model = pb_get(blob, 1, 4), pb_get(blob, 1, 19)
+        if not isinstance(usage, bytes):
+            return None
+        f = {k: v for k, v in pb_fields(usage) if isinstance(v, int)}
     except IndexError:
         return None
-    if not isinstance(new_in, int) or not isinstance(out, int):
-        return None
-    cache = ctx - new_in - out if isinstance(ctx, int) and ctx > new_in + out else 0
     return (model.decode("utf-8", "replace") if isinstance(model, bytes) else "gemini"), {
-        "input": new_in, "output": out, "cache_read": cache}
+        "input": f.get(2, 0), "output": f.get(3, 0), "cache_write": f.get(4, 0), "cache_read": f.get(5, 0)}
 
 
 def scan_agy(files, totals, first_run, since):
@@ -159,8 +158,10 @@ def scan_agy(files, totals, first_run, since):
         entry = files.get(key)
         if entry is not None and mtime < since:
             continue
+        if entry is None and mtime < time.time() - 30 * 86400:
+            continue  # pruned and untouched: don't reopen it every run
         try:
-            db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            db = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=2)
             try:
                 if entry is None:
                     start = -1
@@ -248,7 +249,7 @@ def esc(v):
 
 
 def render(totals):
-    lines = ["# HELP ai_tokens_total Tokens used, counted from local Claude Code and Codex session logs.",
+    lines = ["# HELP ai_tokens_total Tokens used, counted from local Claude Code, Codex and agy session logs.",
              "# TYPE ai_tokens_total counter"]
     for k, n in sorted(totals.items()):
         provider, model, kind = k.split("|")

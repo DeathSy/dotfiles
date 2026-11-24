@@ -58,10 +58,11 @@ since the last scan are read from the start, skipping Claude records older than
 the file (resumed and forked sessions copy earlier messages with the same ids).
 agy (Antigravity) generations come from new `gen_metadata` rows in
 `~/.gemini/antigravity-cli/conversations/*.db` (read-only SQLite, last row per
-database kept in the state); the protobuf fields were inferred from agy 1.5.14
-(new input, output, and context used, with cache read estimated as context
-minus input minus output), and agy is counted from 2026-11-24 only (its records
-carry no timestamps, so there is no history). If the state file is lost, counting restarts (a counter reset, which
+database kept in the state); their usage block was inferred from agy 1.5.14
+to follow Codeium's ModelUsageStats layout (input, output, cache write, cache
+read; missing counts are 0). agy history before 2026-11-24 16:10 was loaded
+once into Prometheus by joining each generation to its step's timestamp.
+If the state file is lost, counting restarts (a counter reset, which
 `increase()` handles). History before 2026-11-24 was loaded once into
 Prometheus as `instance="backfill"` series. Log: `~/Library/Logs/token-usage-exporter.log`.
 
