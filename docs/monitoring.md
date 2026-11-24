@@ -37,6 +37,12 @@ Containers in `garage-server`'s Podman VM reach the host loopback listeners via
 | `garage-server` | `host.containers.internal:9100` | local `node_exporter` (`127.0.0.1:9100`) |
 | `garage-hq` | `host.containers.internal:9102` | SSH reverse forward from `garage-hq` (`127.0.0.1:9100`) over Thunderbolt |
 
+While `garage-hq`'s exporter is down, `garage-server:9102` still accepts
+connections (the tunnel log shows `connect_to 127.0.0.1 port 9100: failed`), so
+a down `garage-hq` target can mean either the tunnel or the exporter. Every
+container in the shared VM can read these ports, so put nothing sensitive in the
+textfile directory.
+
 ## AI usage collector (`garage-hq` only)
 
 - **`org.nix-community.home.ai-usage-exporter`**

@@ -17,6 +17,8 @@ in {
         "${lib.getExe pkgs.prometheus-node-exporter}"
         "--web.listen-address=127.0.0.1:9100"
         "--collector.textfile.directory=${textfileDir}"
+        # Fails on every scrape on Apple silicon ("no CPU power status has been recorded").
+        "--no-collector.thermal"
       ];
       RunAtLoad = true;
       KeepAlive = true;
