@@ -11,7 +11,8 @@ dashboard and the apps). This checks only our invariants, from a spec that ai/he
                (com.nousresearch.hermes.runtime.*); dashboard and API server listening on loopback only.
 
 Modes: no flag changes nothing. --fix (activation, at every rebuild) applies every rule, the defaults,
-.env and the file fixes, and restarts the gateway the same way when a changed setting needs it. --auto (the launchd agent: every 30 min and when config.yaml/.env change) applies
+.env and the file fixes, and requests a graceful gateway restart in the background (it doesn't wait) when
+a changed setting is read only at gateway start. --auto (the launchd agent: every 30 min and when config.yaml/.env change) applies
 only the rules marked auto (the security subset) and .env, DMs the owner what it restored, and restarts
 the gateway gracefully when a restored setting is read only at gateway start (slack.*, platforms.*,
 mcp_servers.*, secrets.*, .env). --alert DMs the owner about problems unchanged for 20 minutes (over at least two runs), and once
@@ -410,9 +411,25 @@ for name, port, need in (("dashboard", spec.get("dashboard_port"), True), ("API 
         problems.append(f"{name} listens beyond loopback on port {port} ({', '.join(sorted(set(bad)))})")
 
 # ── report ──────────────────────────────────────────────────────────────────
-if restart and (a.auto or a.fix):
-    # Graceful: `hermes gateway restart` drains running turns, then launchd starts the job again. Also at
-    # activation (--fix), or a rebuild that changes a start-read setting leaves the old one running.
+if restart and a.fix and not a.auto and "gateway" in restart:
+    # At a rebuild a start-read setting changed: request the same graceful restart, in the background.
+    # `hermes gateway restart` waits for running turns to drain (up to ~30 min), which must not stall the
+    # rebuild; activation's PATH also lacks /bin, where the CLI looks up launchctl by bare name.
+    restart.discard("gateway")
+    if not job_pid:
+        changes.append("gateway not restarted: its launchd job isn't running")
+    else:
+        try:
+            log = open(os.path.expanduser("~/Library/Logs/hermes-config-check.log"), "a")
+            subprocess.Popen([spec["hermes_bin"], "gateway", "restart"], stdin=subprocess.DEVNULL, stdout=log,
+                             stderr=log, start_new_session=True,
+                             env=dict(os.environ, PATH="/usr/bin:/bin:/usr/sbin:/sbin:" + os.environ.get("PATH", "")))
+            changes.append("gateway restart requested (drains running turns first; log: "
+                           "~/Library/Logs/hermes-config-check.log)")
+        except OSError as e:
+            changes.append(f"gateway restart FAILED ({e.__class__.__name__}; run: hermes gateway restart)")
+if restart and a.auto:
+    # Graceful: `hermes gateway restart` drains running turns, then launchd starts the job again.
     if "gateway" in restart and not job_pid:
         changes.append("gateway not restarted: its launchd job isn't running")
     elif "gateway" in restart:
