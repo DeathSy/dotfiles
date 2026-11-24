@@ -20,11 +20,15 @@ host metrics from both always-on Macs without opening any network port.
   root) to `mac_temp.prom` in the textfile directory, because node_exporter's
   thermal collector can't read Apple silicon temperatures.
   Log: `~/Library/Logs/mac-temp-exporter.log`.
-- **`org.nix-community.home.podman-exporter`** (`nixpkgs/home-manager/podman-exporter.nix`,
-  `garage-server` only): every 60 s runs `podman ps -a` against the local
-  Podman VM and writes `podman_containers{state="running|exited|other"}` and
-  `podman_up` (0 when the VM is unreachable) to `podman.prom` in the textfile
-  directory. Log: `~/Library/Logs/podman-exporter.log`.
+- **`org.nix-community.home.podman-exporter`** (`nixpkgs/home-manager/podman-exporter.nix`
+  and `.py`, `garage-server` only): every 60 s runs `podman ps -a` and
+  `podman stats --no-stream` against the local Podman VM and writes
+  `podman_up` (0 when the VM is unreachable), `podman_containers{state}`, and
+  per container (`name` label) `podman_container_info{name,state,image}`,
+  `podman_container_started_seconds`, `podman_container_cpu_seconds_total`
+  (rate it for CPU use), `podman_container_memory_bytes` and
+  `podman_container_pids` to `podman.prom` in the textfile directory.
+  Log: `~/Library/Logs/podman-exporter.log`.
 - **`org.nix-community.home.node-exporter-tunnel`**
   (`nixpkgs/home-manager/node-exporter-tunnel.nix`, imported by `garage-hq`
   only): runs Apple's
