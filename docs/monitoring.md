@@ -48,14 +48,17 @@ host metrics from both always-on Macs without opening any network port.
 runs every 60 s and counts tokens appended to `~/.claude/projects/**/*.jsonl`
 (Claude Code: `message.usage` per reply, deduplicated by `message.id`) and
 `~/.codex/sessions/**/*.jsonl` (Codex: `last_token_usage` of each
-`token_count` event, model from `turn_context`) since its last run, using a
-byte offset per file in `~/.local/state/token-usage-exporter/state.json`. It
-writes the running totals as
-`ai_tokens_total{provider,model,type="input|output|cache_read|cache_write"}`
+`token_count` event, repeats with an unchanged `total_token_usage` skipped,
+model from `turn_context`) since its last run, using a byte offset per file in
+`~/.local/state/token-usage-exporter/state.json`. It writes the running totals
+as `ai_tokens_total{client="claude-code|codex",model,type="input|output|cache_read|cache_write"}`
 (a counter; graph it with `increase()`) to `ai_tokens.prom` in the textfile
-directory. Files seen for the first time start at their end, so totals count
-from the first run; if the state file is lost, counting restarts (a counter
-reset, which `increase()` handles). Log: `~/Library/Logs/token-usage-exporter.log`.
+directory. On the first run every file starts at its end; later, files born
+since the last scan are read from the start, skipping Claude records older than
+the file (resumed and forked sessions copy earlier messages with the same ids).
+If the state file is lost, counting restarts (a counter reset, which
+`increase()` handles). History before 2026-11-24 was loaded once into
+Prometheus as `instance="backfill"` series. Log: `~/Library/Logs/token-usage-exporter.log`.
 
 ## Scraping from the Podman VM
 

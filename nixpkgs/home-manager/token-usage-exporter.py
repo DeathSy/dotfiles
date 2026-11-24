@@ -7,22 +7,39 @@ Reads only what was appended since the last run (byte offset per file) from
   ~/.claude/projects/**/*.jsonl  (Claude Code: message.usage per reply, deduped by message.id)
   ~/.codex/sessions/**/*.jsonl   (Codex: token_count events, last_token_usage per turn)
 and keeps monotonic totals in the state file, written as
-  ai_tokens_total{provider,model,type="input|output|cache_read|cache_write"}  (counter)
-Files seen for the first time start at their end, so totals count from the first run on.
+  ai_tokens_total{client="claude-code|codex",model,type="input|output|cache_read|cache_write"}  (counter)
+On the first run every file starts at its end. Later, a file born since the last scan is read from
+the start (skipping Claude records older than the file: resumed/forked sessions copy earlier
+messages); an older file seen for the first time (e.g. after the 30-day prune) starts at its end.
 """
 
 import json
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 HOME = Path.home()
-SOURCES = {"claude": HOME / ".claude/projects", "codex": HOME / ".codex/sessions"}
-RECENT_IDS = 200  # Claude writes one line per content block with the same message id; keep a short memory
+SOURCES = {"claude-code": HOME / ".claude/projects", "codex": HOME / ".codex/sessions"}
+RECENT_IDS = 20  # Claude writes one line per content block with the same message id, consecutively
 
 
-def claude_usage(rec, seen):
+def record_time(rec):
+    t = rec.get("timestamp") if isinstance(rec, dict) else None
+    if not isinstance(t, str):
+        return None
+    try:
+        return datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def claude_usage(rec, seen, not_before=None):
+    if not_before is not None:
+        t = record_time(rec)
+        if t is not None and t < not_before:
+            return None  # a message copied in from an earlier session
     msg = rec.get("message") if isinstance(rec, dict) else None
     usage = msg.get("usage") if isinstance(msg, dict) else None
     mid = msg.get("id") if isinstance(msg, dict) else None
@@ -50,9 +67,13 @@ def codex_usage(rec, state):
         return None
     if payload.get("type") != "token_count":
         return None
-    last = (payload.get("info") or {}).get("last_token_usage")
+    info = payload.get("info") or {}
+    last, total = info.get("last_token_usage"), info.get("total_token_usage")
     if not isinstance(last, dict):
         return None
+    if total is not None and total == state.get("total"):
+        return None  # Codex sometimes repeats a token_count event unchanged
+    state["total"] = total
     cached = last.get("cached_input_tokens") or 0
     return state.get("model") or "codex", {
         "input": (last.get("input_tokens") or 0) - cached,  # OpenAI's input_tokens includes cached ones
@@ -64,6 +85,7 @@ def codex_usage(rec, state):
 
 def scan(state):
     files, totals = state.setdefault("files", {}), state.setdefault("totals", {})
+    first_run = "last_scan" not in state
     since = state.get("last_scan", 0) - 120
     for provider, root in SOURCES.items():
         if not root.is_dir():
@@ -75,16 +97,23 @@ def scan(state):
                 continue
             key = str(path)
             entry = files.get(key)
+            born = getattr(st, "st_birthtime", st.st_mtime)
             if entry is None:
-                files[key] = {"offset": st.st_size, "ino": st.st_ino, "mtime": st.st_mtime}
-                continue
+                if first_run or born < since:
+                    files[key] = {"offset": st.st_size, "ino": st.st_ino, "mtime": st.st_mtime}
+                    continue
+                entry = files[key] = {"offset": 0, "ino": st.st_ino, "mtime": 0, "from_start": True}
             if st.st_mtime < since and st.st_size == entry["offset"]:
                 continue
             if st.st_ino != entry.get("ino") or st.st_size < entry["offset"]:
                 entry.update(offset=0, ino=st.st_ino, seen=[], ctx={})  # replaced or truncated file
-            with path.open("rb") as fh:
-                fh.seek(entry["offset"])
-                data = fh.read()
+            try:
+                with path.open("rb") as fh:
+                    fh.seek(entry["offset"])
+                    data = fh.read()
+            except OSError:
+                continue
+            not_before = born - 120 if entry.get("from_start") else None
             end = data.rfind(b"\n") + 1  # only complete lines; a half-written line waits for the next run
             seen, ctx = entry.setdefault("seen", []), entry.setdefault("ctx", {})
             for line in data[:end].splitlines():
@@ -94,7 +123,7 @@ def scan(state):
                     rec = json.loads(line)
                 except ValueError:
                     continue
-                got = claude_usage(rec, seen) if provider == "claude" else codex_usage(rec, ctx)
+                got = claude_usage(rec, seen, not_before) if provider == "claude-code" else codex_usage(rec, ctx)
                 if got is None:
                     continue
                 model, counts = got
@@ -120,7 +149,7 @@ def render(totals):
              "# TYPE ai_tokens_total counter"]
     for k, n in sorted(totals.items()):
         provider, model, kind = k.split("|")
-        lines.append(f'ai_tokens_total{{provider="{esc(provider)}",model="{esc(model)}",type="{esc(kind)}"}} {int(n)}')
+        lines.append(f'ai_tokens_total{{client="{esc(provider)}",model="{esc(model)}",type="{esc(kind)}"}} {int(n)}')
     return "\n".join(lines) + "\n"
 
 
