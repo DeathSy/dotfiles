@@ -461,8 +461,10 @@ def cleanup(task):
 #   size), or the layout hc-worker makes of it when the session starts workers and its reviewer in the tab
 #   (rows/columns/blocks with weights, judged by hc-worker's own valid_node): the task's root block plus
 #   blocks whose terminals are gone, finished, or the task's own (named "<task>-…" with its launch label).
-#   Every block's terminal is looked up, the root's too; remote (machine/tN) or malformed refs count as
-#   foreign. Anything else (moved, renamed, a live foreign terminal, unknown nodes) is left alone and logged.
+#   Every block's terminal is looked up, the root's too, remote ones (machine/tN) included: a live remote
+#   pane keeps the tab, an unreachable host means try again later. Only refs that aren't terminal addresses
+#   count as foreign without a lookup. Anything else (moved, renamed, a live foreign terminal, unknown
+#   nodes) is left alone and logged.
 # - All document work runs in settle_tabs(), outside the state lock and after the terminals are killed,
 #   within a time budget; unfinished work stays recorded and the monitor retries it.
 # - Writes are version-checked (doc.set fails with "conflict" when the app wrote in between) and retried
@@ -615,19 +617,23 @@ def _load_hc_worker():
     import importlib.util
     shipped = os.path.join(HERE, "hc_worker.py")
     source = os.path.join(HERE, "..", "..", "nixpkgs", "home-manager", "ai", "hc-worker.py")
+    global HC_WORKER_ERROR
     for path in ([shipped] if os.path.isfile(shipped) else [source]):  # the repo source only without the copy
         if os.path.isfile(path):
             try:
                 spec = importlib.util.spec_from_file_location("hc_worker", path)
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
-                if callable(getattr(mod, "valid_node", None)) and callable(getattr(mod, "blocks", None)):
-                    return mod
-            except Exception:
+            except Exception as e:  # present but not loadable (e.g. newer syntax than this Python): say why
+                HC_WORKER_ERROR = f"{os.path.basename(path)} didn't load ({e.__class__.__name__}: {str(e)[:160]})"
                 continue
+            if callable(getattr(mod, "valid_node", None)) and callable(getattr(mod, "blocks", None)):
+                return mod
+            HC_WORKER_ERROR = f"{os.path.basename(path)} has no valid_node/blocks"
     return None
 
 
+HC_WORKER_ERROR = None
 HC_WORKER = _load_hc_worker()
 
 
@@ -643,7 +649,8 @@ def note_hc_worker_missing():
     """Log once (a marker in the state dir) that hc-worker's rules are missing, so re-laid tabs stay."""
     marker = os.path.join(STATE_DIR, ".hc-worker-missing")
     if not os.path.exists(marker):
-        log("hc-worker's layout rules (hc_worker.py) are missing; tabs it re-laid are left alone")
+        log(f"hc-worker's layout rules: {HC_WORKER_ERROR or 'hc_worker.py is missing'}; tabs it re-laid are "
+            "left alone")
         try:
             os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
             open(marker, "w").close()
@@ -708,7 +715,7 @@ def blocks_ours(bs, tid, ui, addr, launch, deadline=None):
             left = deadline - now()
             if left <= 0:
                 raise DocTimeout("out of time while checking the tab's terminals")
-            g = hc_get(term, timeout=max(1, min(DOC_CALL_TIMEOUT, left)))
+            g = hc_get(term, timeout=min(DOC_CALL_TIMEOUT, left))  # never past the deadline
         else:
             g = hc_get(term, timeout=DOC_CALL_TIMEOUT)
         if not g or g.get("state") != "live":

@@ -1142,6 +1142,41 @@ class AppTabTests(Base):
         m.tab_ours({"id": "tbX", "name": "x", "root": {}}, "july-pcs-ab12", {"tab": "tbX", "block": "pdX"}, "t1", "L")
         self.assertFalse(os.path.exists(marker))
 
+    def test_an_unreachable_remote_host_means_try_later(self):
+        task = self.stopped_with_relaid(lambda task: [self.add_remote()])
+        rc, body, err = self.run_cli("monitor", extra={"FAKE_HC_GET_FAIL": "vps/t3"})
+        self.assertTrue(self.tasks()[task["id"]]["ui_tab"]["remove"])  # recorded, not "left"
+        self.assertNotIn("left alone", err)
+
+    def test_a_present_but_unloadable_hc_worker_is_logged_with_its_error(self):
+        import contextlib, io
+        d = tempfile.mkdtemp(dir=self.d)
+        shutil.copy(CLI, os.path.join(d, "july_task.py"))
+        with open(os.path.join(d, "hc_worker.py"), "w") as f:
+            f.write("def broken(:\n")
+        spec = importlib.util.spec_from_file_location("july_task_broken", os.path.join(d, "july_task.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        self.assertIsNone(m.HC_WORKER)
+        m.STATE_DIR = self.state_dir
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            m.note_hc_worker_missing()
+            m.note_hc_worker_missing()
+        self.assertEqual(buf.getvalue().count("hc_worker.py didn't load (SyntaxError"), 1)
+        self.assertNotIn("is missing", buf.getvalue())
+
+    def test_lookups_never_run_past_the_deadline(self):
+        m = load_module()
+        seen = []
+        m.hc_get = lambda addr, timeout=60: seen.append(timeout) or None
+        bs = [{"type": "block", "id": "pdX", "content": {"terminal": "t1"}},
+              {"type": "block", "id": "pdW", "content": {"terminal": "t9"}}]
+        m.blocks_ours(bs, "july-pcs-ab12", {"tab": "tbX", "block": "pdX"}, "t1", "L", deadline=m.now() + 0.4)
+        self.assertTrue(seen and all(0 < t <= 0.4 for t in seen), seen)
+        with self.assertRaises(m.DocTimeout):
+            m.blocks_ours(bs, "july-pcs-ab12", {"tab": "tbX", "block": "pdX"}, "t1", "L", deadline=m.now() - 1)
+
     def test_s4_without_hc_workers_rules_a_relaid_tab_stays(self):
         m = load_module()
         m.STATE_DIR = self.state_dir

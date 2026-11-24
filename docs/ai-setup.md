@@ -1018,17 +1018,21 @@ default plugins.
         own block, whose pane could show another terminal now), and each one
         must be gone or finished, or the task's own: for the root, the task's
         name, address and launch label; for the others, named `<task>-…` and
-        carrying its `july-launch` label. A live terminal on another machine
-        (`vps/t3`, from `hc run --on`) is not the task's, and a reference that
-        isn't a terminal address leaves the tab alone. If `hc get` fails or the
-        time runs out, the tab stays recorded and is tried again.
+        carrying its `july-launch` label. Panes on another machine (`vps/t3`,
+        from `hc run --on`) are looked up there too: a live one keeps the tab,
+        and an unreachable host means the tab stays recorded and is tried
+        again later. Only a reference that isn't a terminal address keeps the
+        tab without a lookup. If `hc get` fails or the time runs out, the tab
+        stays recorded and is tried again; no lookup runs past the deadline.
       - Removing a pane for a finished terminal only drops it from the layout:
         the terminal itself is not deleted here (cleanup handles the task's
         own).
       July ships a copy of `hc-worker.py` next to `july_task.py`, so it judges
       the shapes by the same code that writes them. It uses the repo's source
       only when that copy is missing, as in the tests. Without either, re-laid
-      tabs are left alone, and a one-time log line says so. The log marker is
+      tabs are left alone, and a one-time log line says so. If the file is there
+      but doesn't load (e.g. syntax newer than `/usr/bin/python3` 3.9), the
+      line gives the error class and message instead of "missing". The log marker is
       cleared once the rules load again, so a later loss is logged again. Cleanup kills the
       terminals first, so at removal they are normally gone. The `hc get`
       checks count against the settle budget.
