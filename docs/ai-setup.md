@@ -441,7 +441,8 @@ launched through `osascript`). The repo adds around it:
   toolset allowlists, Slack admin gating, the owner's API-posted Slack
   messages, approvals, dashboard sign-in, the skills, loopback API server in
   `.env`). Activation runs it with `--fix` on
-  every rebuild. launchd runs it every 30 minutes and whenever `config.yaml`
+  every rebuild, and restarts the gateway the same graceful way when a
+  setting it changed is read only at gateway start. launchd runs it every 30 minutes and whenever `config.yaml`
   or `.env` change (`--auto`): it restores the security subset at once (Slack
   gating, `platforms.slack.extra.api_human_users`, approvals, toolset lists, MCP servers, secrets helper, dashboard
   sign-in, `.env`), DMs the owner what it restored, and restarts the gateway

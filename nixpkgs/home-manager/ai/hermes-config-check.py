@@ -11,7 +11,7 @@ dashboard and the apps). This checks only our invariants, from a spec that ai/he
                (com.nousresearch.hermes.runtime.*); dashboard and API server listening on loopback only.
 
 Modes: no flag changes nothing. --fix (activation, at every rebuild) applies every rule, the defaults,
-.env and the file fixes. --auto (the launchd agent: every 30 min and when config.yaml/.env change) applies
+.env and the file fixes, and restarts the gateway the same way when a changed setting needs it. --auto (the launchd agent: every 30 min and when config.yaml/.env change) applies
 only the rules marked auto (the security subset) and .env, DMs the owner what it restored, and restarts
 the gateway gracefully when a restored setting is read only at gateway start (slack.*, platforms.*,
 mcp_servers.*, secrets.*, .env). --alert DMs the owner about problems unchanged for 20 minutes (over at least two runs), and once
@@ -410,8 +410,9 @@ for name, port, need in (("dashboard", spec.get("dashboard_port"), True), ("API 
         problems.append(f"{name} listens beyond loopback on port {port} ({', '.join(sorted(set(bad)))})")
 
 # ── report ──────────────────────────────────────────────────────────────────
-if restart and a.auto:
-    # Graceful: `hermes gateway restart` drains running turns, then launchd starts the job again.
+if restart and (a.auto or a.fix):
+    # Graceful: `hermes gateway restart` drains running turns, then launchd starts the job again. Also at
+    # activation (--fix), or a rebuild that changes a start-read setting leaves the old one running.
     if "gateway" in restart and not job_pid:
         changes.append("gateway not restarted: its launchd job isn't running")
     elif "gateway" in restart:
