@@ -27,6 +27,8 @@ BLOCKED = [
     "herdr-core --json keys x enter", "herdr-core",
     "find . -name x -exec hc send july-x go \\;", "find . -execdir herdr-core send x go \\;",
     "noglob hc send july-x go", "watch -n 5 hc send july-x go", "xargs -n1 herdr tab close",
+    "hc-worker --name w -- codex", "hc-worker --tidy", "/etc/profiles/per-user/me/bin/hc-worker -- echo",
+    "xargs hc-worker --tidy",
 ]
 ALLOWED = [
     "hc ls", "hc get july-x", "hc read july-x --lines 20", "hc --json read july-x", "hc wait july-x", "hc templates",
@@ -54,15 +56,18 @@ class RuleList(unittest.TestCase):
         for v in ("pane", "tab", "workspace"):
             self.assertIn(f"herdr {v}*", RULES)
         self.assertIn("hc", RULES)  # bare hc: the picker, which attaches
+        self.assertIn("hc-worker*", RULES)
         for v in ("send", "keys", "run", "kill", "attach"):
             self.assertIn(f"herdr-core {v}*", RULES)  # ~/.local/bin/hc is a link to herdr-core
         for w in ("xargs", "*-exec", "noglob", "watch"):
             for exe in ("hc", "herdr", "herdr-core"):
                 self.assertIn(f"{w}*{exe} *", RULES)
+            self.assertIn(f"{w}*hc-worker*", RULES)
         self.assertTrue(all(isinstance(r, str) and r == r.strip() and r for r in RULES))
 
     def test_plain_forms(self):
-        for cmd in ("hc send july-x go", "hc --json send x y", "hc kill x", "herdr tab close", "hc"):
+        for cmd in ("hc send july-x go", "hc --json send x y", "hc kill x", "herdr tab close", "hc",
+                    "hc-worker --name w -- codex", "hc-worker --tidy"):
             self.assertTrue(plain_match(cmd), cmd)
         for cmd in ("hc ls", "hc read july-x", "hc --json read x", "july-task send x", "herdr status"):
             self.assertFalse(plain_match(cmd), cmd)
