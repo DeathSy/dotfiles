@@ -14,6 +14,12 @@ host metrics from both always-on Macs without opening any network port.
   starts the agent; custom `.prom` files such as AI-usage metrics can be dropped
   there). Kept alive by launchd (30 s restart throttle).
   Log: `~/Library/Logs/node-exporter.log`.
+- **`org.nix-community.home.mac-temp-exporter`** (also in `node-exporter.nix`,
+  both Macs): every 30 s writes `mac_cpu_temp_celsius` (hottest `PMU tdie*`
+  CPU die sensor, read through the IOHIDEventSystem API like Stats does, no
+  root) to `mac_temp.prom` in the textfile directory, because node_exporter's
+  thermal collector can't read Apple silicon temperatures.
+  Log: `~/Library/Logs/mac-temp-exporter.log`.
 - **`org.nix-community.home.node-exporter-tunnel`**
   (`nixpkgs/home-manager/node-exporter-tunnel.nix`, imported by `garage-hq`
   only): runs Apple's

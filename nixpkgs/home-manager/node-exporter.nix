@@ -28,6 +28,24 @@ in {
     };
   };
 
+  # Apple silicon CPU temperature (node_exporter's thermal collector can't read it):
+  # writes mac_cpu_temp_celsius to the textfile directory every 30 s, no root needed.
+  launchd.agents.mac-temp-exporter = {
+    enable = true;
+    config = {
+      ProgramArguments = [
+        "${pkgs.python3}/bin/python3"
+        "-I"
+        "${./mac-temp-exporter.py}"
+        "${textfileDir}/mac_temp.prom"
+      ];
+      RunAtLoad = true;
+      StartInterval = 30;
+      StandardOutPath = "${home}/Library/Logs/mac-temp-exporter.log";
+      StandardErrorPath = "${home}/Library/Logs/mac-temp-exporter.log";
+    };
+  };
+
   # Ensure the textfile collector directory exists before launchd starts the agent.
   home.activation.nodeExporterTextfileDir = lib.hm.dag.entryBefore [ "setupLaunchAgents" ] ''
     run mkdir -p "${textfileDir}"
