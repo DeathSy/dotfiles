@@ -631,6 +631,14 @@ def _load_hc_worker():
 HC_WORKER = _load_hc_worker()
 
 
+def clear_hc_worker_missing():
+    """hc-worker's rules are back: a later loss is logged again."""
+    try:
+        os.remove(os.path.join(STATE_DIR, ".hc-worker-missing"))
+    except OSError:
+        pass
+
+
 def note_hc_worker_missing():
     """Log once (a marker in the state dir) that hc-worker's rules are missing, so re-laid tabs stay."""
     marker = os.path.join(STATE_DIR, ".hc-worker-missing")
@@ -689,24 +697,8 @@ def tab_add(tid, ui, addr, project, deadline=None):
 TERM_ADDR_RE = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9_.-]{0,63}/)?t[0-9a-z]+")  # t7, or machine/t7 (hc run --on)
 
 
-def relaid_tab_ours(tb, tid, ui, addr, launch, deadline=None):
-    """A tab hc-worker re-laid for this task's workers (session left, workers stacked right): still July's to
-    remove when its tree is only hc-worker's row/column/block nodes with valid weights (hc-worker's own
-    valid_node), its root is the row with the tab's id, it holds the task's root block (recorded id or the
-    task's terminal), and every other block shows a terminal that is gone or finished, or is one of this
-    task's own (named "<task>-…" with the task's launch label). Anything else: not ours to remove."""
-    if HC_WORKER is None:
-        note_hc_worker_missing()
-        return False
-    if not isinstance(tb, dict) or set(tb) - {"id", "name", "root"} \
-            or tb.get("id") != ui["tab"] or tb.get("name") != tid:
-        return False
-    root = tb.get("root")
-    if not HC_WORKER.valid_node(root) or root.get("type") != "row" or root.get("id") != ui["tab"]:
-        return False
-    bs = HC_WORKER.blocks(root)
-    if not any(b["id"] == ui["block"] or b["content"]["terminal"] == addr for b in bs):
-        return False
+def blocks_ours(bs, tid, ui, addr, launch, deadline=None):
+    """Every block's terminal, the root's too, is gone, finished or this task's own; hc get for each."""
     me = {"id": tid, "address": addr, "launch": launch}
     for b in bs:  # every block's terminal is checked, the root's too (its pane could show another now)
         term = b["content"]["terminal"]
@@ -732,6 +724,38 @@ def relaid_tab_ours(tb, tid, ui, addr, launch, deadline=None):
     return True
 
 
+def relaid_tab_ours(tb, tid, ui, addr, launch, deadline=None):
+    """A tab hc-worker re-laid for this task's workers (session left, workers stacked right): still July's to
+    remove when its tree is only hc-worker's row/column/block nodes with valid weights (hc-worker's own
+    valid_node), its root is the row with the tab's id, it holds the task's root block (recorded id or the
+    task's terminal), and every other block shows a terminal that is gone or finished, or is one of this
+    task's own (named "<task>-…" with the task's launch label). Anything else: not ours to remove."""
+    if HC_WORKER is None:
+        note_hc_worker_missing()
+        return False
+    if not isinstance(tb, dict) or set(tb) - {"id", "name", "root"} \
+            or tb.get("id") != ui["tab"] or tb.get("name") != tid:
+        return False
+    root = tb.get("root")
+    if not HC_WORKER.valid_node(root) or root.get("type") != "row" or root.get("id") != ui["tab"]:
+        return False
+    bs = HC_WORKER.blocks(root)
+    if not any(b["id"] == ui["block"] or b["content"]["terminal"] == addr for b in bs):
+        return False
+    return blocks_ours(bs, tid, ui, addr, launch, deadline)
+
+
+def tab_ours(tb, tid, ui, addr, launch, deadline=None):
+    """Whether the recorded tab still holds only this task. With hc-worker's rules both layouts (July's one
+    block, hc-worker's re-laid tree) are judged by relaid_tab_ours; without them only July's exact layout, and
+    its one terminal is still looked up (the address may belong to another terminal now)."""
+    if HC_WORKER is not None:
+        clear_hc_worker_missing()
+        return relaid_tab_ours(tb, tid, ui, addr, launch, deadline)
+    note_hc_worker_missing()
+    return is_our_tab(tb, tid, ui, addr) and blocks_ours(tb["root"]["children"], tid, ui, addr, launch, deadline)
+
+
 def tab_remove(tid, ui, addr, deadline=None, launch=None):
     """Delete the recorded tab in the recorded space, if it is still exactly what July wrote, or a layout
     hc-worker made of it holding only this task's terminals (relaid_tab_ours). Returns "removed", "gone"
@@ -743,8 +767,7 @@ def tab_remove(tid, ui, addr, deadline=None, launch=None):
             for tb in list(sp["tabs"]):
                 if tb.get("id") != ui["tab"]:
                     continue
-                if (ui.get("space") and sp["id"] != ui["space"]) or not (
-                        is_our_tab(tb, tid, ui, addr) or relaid_tab_ours(tb, tid, ui, addr, launch, deadline)):
+                if (ui.get("space") and sp["id"] != ui["space"]) or not tab_ours(tb, tid, ui, addr, launch, deadline):
                     outcome.append("left")
                     return None
                 sp["tabs"].remove(tb)

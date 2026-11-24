@@ -1112,6 +1112,36 @@ class AppTabTests(Base):
         self.assertNotIn(task["ui_tab"]["tab"], ids)
         self.assertIn("tbAPPWROTE", ids)  # the app's concurrent write kept
 
+    def test_a_one_block_tab_whose_root_address_was_reused_is_left(self):
+        for extra in ({}, {"JT_NO_HC_WORKER": "1"}):
+            addr, task, _ = self.start()
+            s = self.hc()  # cleanup removed the root earlier; its address now belongs to someone else
+            s["terminals"] = [t for t in s["terminals"] if t["address"] != addr]
+            s["terminals"].append({"address": addr, "name": "owners-shell", "state": "live", "parent": None,
+                                   "labels": {}, "argv": ["/bin/zsh"], "status": None, "status_ms": 0,
+                                   "created_ms": 0, "exit_code": None, "screen": "", "inbox": [], "keys": []})
+            wj(self.hc_state, s)
+            rc, body, err = self.run_cli("stop", slack={"actor": OWNER}, extra=extra)
+            self.assertEqual(rc, 0, body)
+            self.assertIn(task["ui_tab"]["tab"], self.tab_ids(), extra)
+            self.assertIn("left alone", err, extra)
+            self.set_doc(self.doc)
+
+    def test_without_hc_workers_rules_july_s_own_layout_is_still_removed(self):
+        addr, task, _ = self.start()
+        rc, body, err = self.run_cli("stop", slack={"actor": OWNER}, extra={"JT_NO_HC_WORKER": "1"})
+        self.assertEqual(self.app_doc()["value"], self.doc)
+        self.assertIn("missing", err)  # logged once
+
+    def test_the_missing_marker_is_cleared_when_the_rules_load(self):
+        m = load_module()
+        m.STATE_DIR = self.state_dir
+        marker = os.path.join(self.state_dir, ".hc-worker-missing")
+        open(marker, "w").close()
+        self.assertIsNotNone(m.HC_WORKER)
+        m.tab_ours({"id": "tbX", "name": "x", "root": {}}, "july-pcs-ab12", {"tab": "tbX", "block": "pdX"}, "t1", "L")
+        self.assertFalse(os.path.exists(marker))
+
     def test_s4_without_hc_workers_rules_a_relaid_tab_stays(self):
         m = load_module()
         m.STATE_DIR = self.state_dir

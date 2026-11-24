@@ -1000,7 +1000,11 @@ default plugins.
     - Removal deletes the recorded tab only in the recorded space, only with
       the task's name, and only while it holds nothing but this task. That
       means either the one-row, one-block layout July wrote (the app may add a
-      `size` to the block), or the layout `hc-worker` makes of it.
+      `size` to the block), or the layout `hc-worker` makes of it. Both are
+      judged by the same rules below, so even a one-block tab's terminal is
+      looked up: an address reused by another live terminal keeps the tab.
+      Without `hc-worker`'s rules, only July's exact layout is accepted, and
+      its terminal is still looked up.
     - `hc-worker` copies the task root's `herdr.space`/`herdr.tab` labels, so
       the session's workers and reviewer open as panes in its tab. It then
       re-lays the tab: the session on the left at 70%, the rest stacked on the
@@ -1024,7 +1028,8 @@ default plugins.
       July ships a copy of `hc-worker.py` next to `july_task.py`, so it judges
       the shapes by the same code that writes them. It uses the repo's source
       only when that copy is missing, as in the tests. Without either, re-laid
-      tabs are left alone, and a one-time log line says so. Cleanup kills the
+      tabs are left alone, and a one-time log line says so. The log marker is
+      cleared once the rules load again, so a later loss is logged again. Cleanup kills the
       terminals first, so at removal they are normally gone. The `hc get`
       checks count against the settle budget.
     - A tab that was moved or renamed, holds a live terminal that isn't the
