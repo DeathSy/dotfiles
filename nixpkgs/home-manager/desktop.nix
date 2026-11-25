@@ -10,7 +10,7 @@
   options.dotfiles.desktop.browser = lib.mkOption {
     type = lib.types.str;
     default = "com.apple.Safari";
-    description = "Bundle id of the default handler for web links and HTML files. A host that installs another browser sets it.";
+    description = "Bundle id of the default handler for web links and HTML files. Defaults to Safari; garage sets Chrome and garage-hq sets URL Catcher (dev.ksotis.url-catcher). macOS asks once at the console to confirm a browser change.";
   };
 
   options.dotfiles.desktop.mailClient = lib.mkOption {

@@ -41,7 +41,8 @@ This dotfiles repository uses a modular Nix flake configuration to manage:
 - `nixpkgs/nix-darwin/ai-hub.nix` - The AI hub role, imported by a host file: the CLIProxyAPI gateway for every Mac and `never-sleep.nix` (the Mac never sleeps). Headroom (`nixpkgs/home-manager/ai/headroom.nix`) is a separate import in the host file
 - `nixpkgs/nix-darwin/jankyborders.nix` - JankyBorders, a border around the focused window (imported by `garage.nix` only)
 - `nixpkgs/home-manager/home.nix` - User packages, dotfile linking, services
-- `nixpkgs/home-manager/desktop.nix` - Login items (`dotfiles.desktop.loginApps`: the shared ones here, host-only ones in `nixpkgs/hosts/<host>.nix`) and default browser/mail/PDF handlers (`dotfiles.desktop.browser` is Safari unless the host sets it; garage uses Chrome)
+- `nixpkgs/home-manager/desktop.nix` - Login items (`dotfiles.desktop.loginApps`: the shared ones here, host-only ones in `nixpkgs/hosts/<host>.nix`) and default browser/mail/PDF handlers (`dotfiles.desktop.browser` is Safari unless the host sets it; garage uses Chrome, garage-hq uses URL Catcher)
+- `nixpkgs/home-manager/url-catcher.nix` - Tiny background app (`URL Catcher.app`, `url-catcher.m`) set as garage-hq's default `http`/`https`/HTML handler so CLI `open` calls don't launch Safari (imported by `garage-hq.nix` only). Logs caught URLs with sender PID/process name to `~/Library/Logs/url-catcher.log`, posts a notification, and quits after a few idle seconds; macOS asks once at the console to confirm the default-browser change
 - `nixpkgs/home-manager/raycast.nix` - Raycast's login item and one-shot settings import (imported by `garage.nix` only)
 - `nixpkgs/home-manager/hammerspoon.nix` - Hammerspoon config link and the `space` CLI
 - `nixpkgs/home-manager/herdr.nix` - herdr config and agent-popup script links (imported by `garage-hq.nix` only)

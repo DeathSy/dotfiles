@@ -30,5 +30,6 @@
     ../home-manager/node-exporter.nix
     ../home-manager/node-exporter-tunnel.nix
     ../home-manager/rpa-tunnel.nix
+    ../home-manager/url-catcher.nix
   ];
 }
