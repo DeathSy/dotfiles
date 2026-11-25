@@ -4,13 +4,14 @@
 #import <Cocoa/Cocoa.h>
 #import <fcntl.h>
 #import <libproc.h>
+#import <sys/stat.h>
 #import <unistd.h>
 
 static const NSTimeInterval kIdleTimeout = 3.0;
 
 static NSString *sanitize(NSString *s) {
-    NSCharacterSet *bad = [NSCharacterSet characterSetWithCharactersInString:@"\r\n\t"];
-    return [[s componentsSeparatedByCharactersInSet:bad] componentsJoinedByString:@" "];
+    NSCharacterSet *ctrl = [NSCharacterSet controlCharacterSet];
+    return [[s componentsSeparatedByCharactersInSet:ctrl] componentsJoinedByString:@" "];
 }
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
@@ -40,7 +41,6 @@ static NSString *sanitize(NSString *s) {
 
 - (void)recordURL:(NSString *)url fromEvent:(NSAppleEventDescriptor *)event {
     if (!url.length) return;
-
     NSString *pidStr = @"?";
     NSString *procName = @"?";
     NSAppleEventDescriptor *pidDesc = [event attributeDescriptorForKeyword:keySenderPIDAttr];
@@ -58,37 +58,38 @@ static NSString *sanitize(NSString *s) {
             if (name.length) procName = sanitize(name);
         }
     }
-
     NSString *cleanURL = sanitize(url);
     NSString *line = [NSString stringWithFormat:@"%@\t%@\t%@\t%@\n",
                       [self.iso stringFromDate:[NSDate date]], pidStr, procName, cleanURL];
-
     NSString *logDir = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Logs"];
     [[NSFileManager defaultManager] createDirectoryAtPath:logDir
                               withIntermediateDirectories:YES
                                                attributes:nil
                                                     error:nil];
     NSString *logPath = [logDir stringByAppendingPathComponent:@"url-catcher.log"];
-    int fd = open(logPath.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+    // 0600 (and fchmod on existing files): URLs may carry OAuth code/state values.
+    int fd = open(logPath.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
     if (fd >= 0) {
+        (void)fchmod(fd, 0600);
         NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
-        if (write(fd, data.bytes, data.length) < 0) {}
+        (void)write(fd, data.bytes, data.length);
         close(fd);
     }
-
-    // Pass URL via argv so it is never interpolated into AppleScript.
+    // Show only the host in notifications (full URL stays in the 0600 log),
+    // passed via argv so it is never interpolated into AppleScript.
+    NSString *host = [NSURL URLWithString:cleanURL].host;
+    NSString *what = host.length ? host : @"file";
     NSTask *task = [[NSTask alloc] init];
     task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/osascript"];
     task.arguments = @[
         @"-e", @"on run argv",
         @"-e", @"display notification (item 1 of argv) with title \"URL caught\"",
         @"-e", @"end run",
-        cleanURL
+        what
     ];
     task.standardOutput = [NSFileHandle fileHandleWithNullDevice];
     task.standardError = [NSFileHandle fileHandleWithNullDevice];
     [task launchAndReturnError:nil];
-
     [self resetQuitTimer];
 }
 
@@ -97,27 +98,16 @@ static NSString *sanitize(NSString *s) {
     [self recordURL:[[event paramDescriptorForKeyword:keyDirectObject] stringValue] fromEvent:event];
 }
 
-- (void)recordDocDescriptor:(NSAppleEventDescriptor *)desc fromEvent:(NSAppleEventDescriptor *)event {
-    NSURL *fileURL = desc.fileURLValue;
-    if (fileURL) {
-        [self recordURL:fileURL.absoluteString fromEvent:event];
-    } else if (desc.stringValue.length) {
-        NSString *s = desc.stringValue;
-        NSString *url = [s hasPrefix:@"/"] ? [NSURL fileURLWithPath:s].absoluteString : s;
-        [self recordURL:url fromEvent:event];
-    }
-}
-
 - (void)handleOpenDocs:(NSAppleEventDescriptor *)event
         withReplyEvent:(__unused NSAppleEventDescriptor *)reply {
     NSAppleEventDescriptor *direct = [event paramDescriptorForKeyword:keyDirectObject];
     if (!direct) return;
     if (direct.descriptorType == typeAEList) {
         for (NSInteger i = 1; i <= direct.numberOfItems; i++) {
-            [self recordDocDescriptor:[direct descriptorAtIndex:i] fromEvent:event];
+            [self recordURL:[direct descriptorAtIndex:i].fileURLValue.absoluteString fromEvent:event];
         }
     } else {
-        [self recordDocDescriptor:direct fromEvent:event];
+        [self recordURL:direct.fileURLValue.absoluteString fromEvent:event];
     }
 }
 

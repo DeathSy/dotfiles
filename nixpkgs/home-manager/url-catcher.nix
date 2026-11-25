@@ -60,13 +60,12 @@ let
   app = pkgs.runCommandCC "url-catcher" { } ''
     bundle="$out/Applications/URL Catcher.app"
     mkdir -p "$bundle/Contents/MacOS"
+    # The arm64 linker ad-hoc signs the binary automatically (pure/sandbox-safe).
     "$CC" -fobjc-arc -O2 -Wall -Wextra \
       -framework Cocoa \
       ${./url-catcher.m} \
       -o "$bundle/Contents/MacOS/url-catcher"
     cp ${infoPlist} "$bundle/Contents/Info.plist"
-    # System codesign seals the whole .app bundle (pkgs.darwin.sigtool only signs Mach-O binaries).
-    /usr/bin/codesign --force --sign - "$bundle"
   '';
 in {
   dotfiles.desktop.browser = bundleId;
@@ -82,7 +81,7 @@ in {
       run rm -rf "$dst"
       run cp -R "$src" "$dst"
       run chmod -R u+w "$dst"
-      run /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$dst"
     fi
+    run /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$dst" || true
   '';
 }
