@@ -31,18 +31,20 @@ host metrics from both always-on Macs without opening any network port.
   Log: `~/Library/Logs/podman-exporter.log`.
 - **`org.nix-community.home.network-probe`** (`nixpkgs/home-manager/network-probe.nix`
   and `.py`, `garage-server` only): every 30 s runs four parallel probes —
-  `router` (ping the LAN default gateway), `internet` (ping `1.1.1.1` then
-  `8.8.8.8` bound to the LAN interface, bypassing WARP), `dns` (`dig` against
-  the gateway's DNS forwarder), and `https` (`curl` to
+  `router` (ping the `en0` default gateway via `route -n get -ifscope en0 default`),
+  `internet` (ping `1.1.1.1` then `8.8.8.8`, bypassing WARP), `dns` (`dig` against
+  that gateway's DNS forwarder), and `https` (`curl` to
   `www.google.com/generate_204` over the normal system path) — and writes
-  `network_probe_success{probe}`, `network_probe_duration_seconds{probe}`, and
-  `network_probe_last_run_seconds` to `network.prom` in the textfile directory.
-  Runs on `garage-server` because it is always on and scraped locally by
-  Prometheus, so samples survive an internet outage. It reaches the Deco over
-  Wi-Fi (`en0`), so a failed `router` probe can also mean its own Wi-Fi dropped;
-  `dns` can
-  still pass for up to the record's TTL from the Deco's cache, making `internet`
-  the primary outage signal.
+  `network_probe_success{probe}`, `network_probe_duration_seconds{probe}` (ping
+  RTT for `router`/`internet`, wall time for `dns`/`https`; emitted only on
+  success), and `network_probe_last_run_seconds` to `network.prom` in the
+  textfile directory. The gateway lookup and pings bind to `en0` (never a WARP
+  `utun`), and pings use `-c 3 -o -t 2` to retry on single-packet loss while
+  exiting on the first reply. Runs on `garage-server` because it is always on
+  and scraped locally by Prometheus, so samples survive an internet outage. It
+  reaches the Deco over Wi-Fi (`en0`), so a failed `router` probe can also mean
+  its own Wi-Fi dropped; `dns` can still pass for up to the record's TTL from
+  the Deco's cache, making `internet` the primary outage signal.
   Log: `~/Library/Logs/network-probe.log`.
 - **`org.nix-community.home.node-exporter-tunnel`**
   (`nixpkgs/home-manager/node-exporter-tunnel.nix`, imported by `garage-hq`

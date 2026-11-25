@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Probe LAN router, internet link, router DNS, and HTTPS into a node_exporter textfile.
 
-Usage: network-probe [--dry-run] [<output.prom>]
+Usage: network-probe [--interface IFACE] [--dry-run] [<output.prom>]
 Metrics: network_probe_success{probe}, network_probe_duration_seconds{probe},
 network_probe_last_run_seconds (probes: router, internet, dns, https).
 """
@@ -20,10 +20,12 @@ ROUTE = "/sbin/route"
 DIG = "/usr/bin/dig"
 CURL = "/usr/bin/curl"
 
+DEFAULT_INTERFACE = "en0"
 PROBES = ("router", "internet", "dns", "https")
 INTERNET_TARGETS = ("1.1.1.1", "8.8.8.8")
 DNS_QUERY_HOST = "www.google.com"
 HTTPS_URL = "https://www.google.com/generate_204"
+PING_RTT_RE = re.compile(r"\btime=([0-9]+(?:\.[0-9]+)?)\s*ms\b")
 
 
 def log(msg):
@@ -35,70 +37,70 @@ def first_line(text):
     return lines[0][:160] if lines else ""
 
 
-def get_default_route():
-    """Return (gateway, interface, error) from `/sbin/route -n get default`."""
+def get_default_gateway(interface):
+    """Return (gateway, error) from `/sbin/route -n get -ifscope <interface> default`."""
     try:
         res = subprocess.run(
-            [ROUTE, "-n", "get", "default"],
+            [ROUTE, "-n", "get", "-ifscope", interface, "default"],
             capture_output=True, text=True, timeout=2,
         )
     except Exception as exc:
-        return None, None, f"route lookup failed ({type(exc).__name__})"
+        return None, f"route lookup on {interface} failed ({type(exc).__name__})"
     if res.returncode != 0:
         detail = first_line(res.stderr or res.stdout)
-        return None, None, f"route lookup rc={res.returncode}" + (f": {detail}" if detail else "")
-    gateway = interface = None
+        return None, f"route lookup on {interface} rc={res.returncode}" + (f": {detail}" if detail else "")
+    gateway = None
     for line in res.stdout.splitlines():
         if ":" not in line:
             continue
         key, val = (part.strip() for part in line.split(":", 1))
         if key == "gateway" and val:
             gateway = val
-        elif key == "interface" and val:
-            interface = val
-    if not gateway or not interface:
-        return gateway, interface, f"route missing gateway={gateway!r} interface={interface!r}"
-    return gateway, interface, None
+            break
+    if not gateway:
+        return None, f"route on {interface} missing gateway"
+    return gateway, None
 
 
 def run_ping(interface, target):
     t0 = time.monotonic()
     try:
         res = subprocess.run(
-            [PING, "-c", "1", "-t", "2", "-b", interface, target],
+            [PING, "-c", "3", "-o", "-t", "2", "-b", interface, target],
             capture_output=True, text=True, timeout=3,
         )
-        dur = time.monotonic() - t0
+        wall = time.monotonic() - t0
     except Exception as exc:
-        return False, time.monotonic() - t0, f"ping {target} ({type(exc).__name__})"
+        return False, None, f"ping {target} ({type(exc).__name__})"
     if res.returncode == 0:
+        match = PING_RTT_RE.search(res.stdout)
+        dur = float(match.group(1)) / 1000.0 if match else wall
         return True, dur, None
     detail = first_line(res.stderr)
-    return False, dur, f"ping {target} rc={res.returncode}" + (f": {detail}" if detail else "")
+    return False, None, f"ping {target} rc={res.returncode}" + (f": {detail}" if detail else "")
 
 
 def probe_router(gateway, interface):
     if not gateway or not interface:
-        return False, 0.0, "no default gateway/interface"
+        return False, None, f"no default gateway on {interface}"
     return run_ping(interface, gateway)
 
 
 def probe_internet(interface):
     if not interface:
-        return False, 0.0, "no default interface"
-    t_total = time.monotonic()
+        return False, None, "no interface specified"
     errors = []
     for target in INTERNET_TARGETS:
         ok, dur, err = run_ping(interface, target)
         if ok:
             return True, dur, None
         errors.append(err)
-    return False, time.monotonic() - t_total, "; ".join(errors)
+    return False, None, "; ".join(errors)
 
 
 def probe_dns(gateway):
     if not gateway:
-        return False, 0.0, "no default gateway"
+        return False, None, "no default gateway"
     t0 = time.monotonic()
     try:
         res = subprocess.run(
@@ -107,17 +109,17 @@ def probe_dns(gateway):
         )
         dur = time.monotonic() - t0
     except Exception as exc:
-        return False, time.monotonic() - t0, f"dig @{gateway} ({type(exc).__name__})"
+        return False, None, f"dig @{gateway} ({type(exc).__name__})"
     if res.returncode != 0:
         detail = first_line(res.stderr or res.stdout)
-        return False, dur, f"dig @{gateway} rc={res.returncode}" + (f": {detail}" if detail else "")
+        return False, None, f"dig @{gateway} rc={res.returncode}" + (f": {detail}" if detail else "")
     status_match = re.search(r"\bstatus:\s*([A-Z0-9]+)\b", res.stdout)
     answer_match = re.search(r"\bANSWER:\s*(\d+)\b", res.stdout)
     status = status_match.group(1) if status_match else "UNKNOWN"
     answers = int(answer_match.group(1)) if answer_match else 0
     if status == "NOERROR" and answers >= 1:
         return True, dur, None
-    return False, dur, f"dig @{gateway} status={status} answers={answers}"
+    return False, None, f"dig @{gateway} status={status} answers={answers}"
 
 
 def probe_https():
@@ -129,20 +131,19 @@ def probe_https():
         )
         dur = time.monotonic() - t0
     except Exception as exc:
-        return False, time.monotonic() - t0, f"curl ({type(exc).__name__})"
+        return False, None, f"curl ({type(exc).__name__})"
     code = res.stdout.strip()
     if res.returncode == 0 and code == "204":
         return True, dur, None
     detail = first_line(res.stderr)
-    return False, dur, f"curl rc={res.returncode} http={code or 'none'}" + (f": {detail}" if detail else "")
+    return False, None, f"curl rc={res.returncode} http={code or 'none'}" + (f": {detail}" if detail else "")
 
 
 def safe_run(fn, *args):
-    t0 = time.monotonic()
     try:
         return fn(*args)
     except Exception as exc:
-        return False, time.monotonic() - t0, f"unexpected error ({type(exc).__name__})"
+        return False, None, f"unexpected error ({type(exc).__name__})"
 
 
 def render(results, last_run):
@@ -151,18 +152,22 @@ def render(results, last_run):
         for name in PROBES
     ]
     duration_lines = [
-        f'network_probe_duration_seconds{{probe="{name}"}} {results[name][1]:.4f}'
+        f'network_probe_duration_seconds{{probe="{name}"}} {results[name][1]:.6f}'
         for name in PROBES
+        if results[name][0] and results[name][1] is not None
     ]
     families = [
         ("network_probe_success", "Whether the network probe succeeded (1) or failed (0).", success_lines),
-        ("network_probe_duration_seconds", "Wall-clock duration of the network probe in seconds.", duration_lines),
+        ("network_probe_duration_seconds",
+         "Round-trip (ping) or wall-clock (dns, https) time of the last successful probe in seconds.",
+         duration_lines),
         ("network_probe_last_run_seconds", "Unix timestamp of the last network probe run.",
          [f"network_probe_last_run_seconds {int(last_run)}"]),
     ]
     out = []
     for name, help_text, samples in families:
-        out += [f"# HELP {name} {help_text}", f"# TYPE {name} gauge", *samples]
+        if samples:
+            out += [f"# HELP {name} {help_text}", f"# TYPE {name} gauge", *samples]
     return "\n".join(out) + "\n"
 
 
@@ -180,11 +185,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Export LAN/WAN/DNS/HTTPS probe metrics to node_exporter textfile.")
     parser.add_argument("output", nargs="?", help="Destination .prom file path (required unless --dry-run).")
     parser.add_argument("--dry-run", action="store_true", help="Print Prometheus metrics to stdout instead of writing.")
+    parser.add_argument(
+        "--interface", default=DEFAULT_INTERFACE,
+        help=f"Network interface to bind probes and gateway lookup to (default: {DEFAULT_INTERFACE}).",
+    )
     args = parser.parse_args(argv)
     if not args.dry_run and not args.output:
         parser.error("output path is required unless --dry-run is set")
 
-    gateway, interface, route_err = get_default_route()
+    interface = args.interface
+    gateway, route_err = get_default_gateway(interface)
     if route_err:
         log(route_err)
 

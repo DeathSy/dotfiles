@@ -14,6 +14,8 @@ in
         "${pkgs.python3}/bin/python3"
         "-I"
         "${./network-probe.py}"
+        "--interface"
+        "en0"
         "${home}/.local/state/node-exporter/textfile/network.prom"
       ];
       RunAtLoad = true;
