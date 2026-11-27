@@ -68,7 +68,7 @@ runs every 60 s and counts tokens appended to `~/.claude/projects/**/*.jsonl`
 `token_count` event, repeats with an unchanged `total_token_usage` skipped,
 model from `turn_context`) since its last run, using a byte offset per file in
 `~/.local/state/token-usage-exporter/state.json`. It writes the running totals
-as `ai_tokens_total{client="claude-code|codex|agy",model,type="input|output|cache_read|cache_write"}`
+as `ai_tokens_total{client="claude-code|codex|agy|hermes",model,type="input|output|cache_read|cache_write"}`
 (a counter; graph it with `increase()`) to `ai_tokens.prom` in the textfile
 directory. On the first run every file starts at its end; later, files born
 since the last scan are read from the start, skipping Claude records older than
@@ -79,6 +79,16 @@ database kept in the state); their usage block was inferred from agy 1.5.14
 to follow Codeium's ModelUsageStats layout (input, output, cache write, cache
 read; missing counts are 0). agy history before 2026-11-24 16:10 was loaded
 once into Prometheus by joining each generation to its step's timestamp.
+Hermes (`client="hermes"`) re-reads `session_model_usage` in `~/.hermes/state.db`
+and any profile databases `~/.hermes/profiles/*/state.db` (read-only SQLite, WAL
+mode) and tracks per-database, per-row running counters (`input_tokens`,
+`output_tokens`, `cache_read_tokens`, `cache_write_tokens`) in the state file
+keyed by a short SHA-1 hash of each row's primary key; each run adds the
+per-counter delta (or the full value if a row is new or its counter dropped).
+Rows that disappear are dropped from the state with their past contribution
+kept, though Hermes may never prune them when auto-prune is off. Each Hermes
+database records its current rows as a baseline on first sight and adds nothing
+(no backfill, and newly created profiles do not spike).
 If the state file is lost, counting restarts (a counter reset, which
 `increase()` handles). History before 2026-11-24 was loaded once into
 Prometheus as `instance="backfill"` series. Log: `~/Library/Logs/token-usage-exporter.log`.
