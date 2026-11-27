@@ -7,11 +7,13 @@ Reads only what was appended since the last run (byte offset per file) from
   ~/.claude/projects/**/*.jsonl  (Claude Code: message.usage per reply, deduped by message.id)
   ~/.codex/sessions/**/*.jsonl   (Codex: token_count events, last_token_usage per turn)
   ~/.gemini/antigravity-cli/conversations/*.db  (agy: new gen_metadata rows, protobuf; see agy_generation)
+  ~/.hermes/state.db             (Hermes: per-row counter deltas from session_model_usage, read-only)
 and keeps monotonic totals in the state file, written as
-  ai_tokens_total{client="claude-code|codex|agy",model,type="input|output|cache_read|cache_write"}  (counter)
-On the first run every file starts at its end. Later, a file born since the last scan is read from
-the start (skipping Claude records older than the file: resumed/forked sessions copy earlier
-messages); an older file seen for the first time (e.g. after the 30-day prune) starts at its end.
+  ai_tokens_total{client="claude-code|codex|agy|hermes",model,type="input|output|cache_read|cache_write"}  (counter)
+On the first run every file starts at its end (and Hermes baselines its current rows without adding).
+Later, a file born since the last scan is read from the start (skipping Claude records older than the
+file: resumed/forked sessions copy earlier messages); an older file seen for the first time (e.g.
+after the 30-day prune) starts at its end.
 """
 
 import json
@@ -25,6 +27,8 @@ from pathlib import Path
 HOME = Path.home()
 SOURCES = {"claude-code": HOME / ".claude/projects", "codex": HOME / ".codex/sessions"}
 AGY_CONVERSATIONS = HOME / ".gemini/antigravity-cli/conversations"
+HERMES_DB = Path(os.environ.get("TOKEN_USAGE_HERMES_DB") or HOME / ".hermes/state.db").expanduser()
+HERMES_KINDS = ("input", "output", "cache_read", "cache_write")
 RECENT_IDS = 20  # Claude writes one line per content block with the same message id, consecutively
 
 
@@ -186,6 +190,40 @@ def scan_agy(files, totals, first_run, since):
         entry["mtime"] = mtime
 
 
+def scan_hermes(state, totals):
+    if not HERMES_DB.is_file():
+        return
+    try:
+        db = sqlite3.connect(Path(os.path.abspath(HERMES_DB)).as_uri() + "?mode=ro", uri=True, timeout=5)
+        try:
+            rows = db.execute(
+                "select session_id, model, billing_provider, billing_base_url, billing_mode, task, "
+                "input_tokens, output_tokens, cache_read_tokens, cache_write_tokens "
+                "from session_model_usage"
+            ).fetchall()
+        finally:
+            db.close()
+    except (sqlite3.Error, OSError):
+        return
+    current = {}
+    prev = state.get("hermes")
+    prev_rows = prev.get("rows", {}) if isinstance(prev, dict) else None
+    for row in rows:
+        key = json.dumps(row[:6], separators=(",", ":"))
+        vals = [max(0, int(v or 0)) for v in row[6:]]
+        current[key] = vals
+        if prev_rows is None:
+            continue
+        old = prev_rows.get(key)
+        model = str(row[1] or "unknown")
+        for kind, cur, was in zip(HERMES_KINDS, vals, old if isinstance(old, list) and len(old) == 4 else (0, 0, 0, 0)):
+            delta = cur - was if cur >= was else cur
+            if delta > 0:
+                k = f"hermes|{model}|{kind}"
+                totals[k] = totals.get(k, 0) + delta
+    state["hermes"] = {"rows": current}
+
+
 def scan(state):
     files, totals = state.setdefault("files", {}), state.setdefault("totals", {})
     first_run = "last_scan" not in state
@@ -237,6 +275,7 @@ def scan(state):
             entry["offset"] += end
             entry["mtime"] = st.st_mtime
     scan_agy(files, totals, first_run, since)
+    scan_hermes(state, totals)
     # Forget files untouched for 30 days (their offsets aren't needed any more).
     cutoff = time.time() - 30 * 86400
     for key in [k for k, v in files.items() if v.get("mtime", 0) < cutoff]:
@@ -249,7 +288,7 @@ def esc(v):
 
 
 def render(totals):
-    lines = ["# HELP ai_tokens_total Tokens used, counted from local Claude Code, Codex and agy session logs.",
+    lines = ["# HELP ai_tokens_total Tokens used, counted from local Claude Code, Codex, agy and Hermes session logs.",
              "# TYPE ai_tokens_total counter"]
     for k, n in sorted(totals.items()):
         provider, model, kind = k.split("|")
