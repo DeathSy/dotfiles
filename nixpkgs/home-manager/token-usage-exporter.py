@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""Count AI token usage from local session logs into a node_exporter textfile.
+"""Count AI token usage from local session logs and Hermes' usage table into a node_exporter textfile.
 
 Usage: token-usage-exporter <state.json> <output.prom>
 
-Reads only what was appended since the last run (byte offset per file) from
-  ~/.claude/projects/**/*.jsonl  (Claude Code: message.usage per reply, deduped by message.id)
-  ~/.codex/sessions/**/*.jsonl   (Codex: token_count events, last_token_usage per turn)
+Reads incrementally from
+  ~/.claude/projects/**/*.jsonl  (Claude Code: appended bytes, message.usage per reply, deduped by message.id)
+  ~/.codex/sessions/**/*.jsonl   (Codex: appended bytes, token_count events, last_token_usage per turn)
   ~/.gemini/antigravity-cli/conversations/*.db  (agy: new gen_metadata rows, protobuf; see agy_generation)
-  ~/.hermes/state.db             (Hermes: per-row counter deltas from session_model_usage, read-only)
-and keeps monotonic totals in the state file, written as
+and re-reads Hermes' session_model_usage table each run (read-only, per-row counter deltas) from
+  ~/.hermes/state.db and ~/.hermes/profiles/*/state.db
+keeping monotonic totals in the state file, written as
   ai_tokens_total{client="claude-code|codex|agy|hermes",model,type="input|output|cache_read|cache_write"}  (counter)
-On the first run every file starts at its end (and Hermes baselines its current rows without adding).
-Later, a file born since the last scan is read from the start (skipping Claude records older than the
-file: resumed/forked sessions copy earlier messages); an older file seen for the first time (e.g.
-after the 30-day prune) starts at its end.
+On the first run every log file starts at its end; later, a file born since the last scan is read
+from the start (skipping Claude records older than the file: resumed/forked sessions copy earlier
+messages), while an older file seen for the first time (e.g. after the 30-day prune) starts at its
+end. Each Hermes database baselines its current rows on first sight (adding nothing) so existing
+history or a newly created profile does not spike.
 """
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -27,7 +30,7 @@ from pathlib import Path
 HOME = Path.home()
 SOURCES = {"claude-code": HOME / ".claude/projects", "codex": HOME / ".codex/sessions"}
 AGY_CONVERSATIONS = HOME / ".gemini/antigravity-cli/conversations"
-HERMES_DB = Path(os.environ.get("TOKEN_USAGE_HERMES_DB") or HOME / ".hermes/state.db").expanduser()
+HERMES_DIR = HOME / ".hermes"
 HERMES_KINDS = ("input", "output", "cache_read", "cache_write")
 RECENT_IDS = 20  # Claude writes one line per content block with the same message id, consecutively
 
@@ -190,38 +193,79 @@ def scan_agy(files, totals, first_run, since):
         entry["mtime"] = mtime
 
 
+def hermes_dbs():
+    override = os.environ.get("TOKEN_USAGE_HERMES_DB")
+    if override:
+        return [Path(override).expanduser()]
+    paths = [HERMES_DIR / "state.db"]
+    profiles = HERMES_DIR / "profiles"
+    if profiles.is_dir():
+        paths.extend(sorted(profiles.glob("*/state.db")))
+    return paths
+
+
+def valid_hermes_rows(entry):
+    if not isinstance(entry, dict):
+        return None
+    rows = entry.get("rows")
+    if not isinstance(rows, dict):
+        return None
+    for k, v in rows.items():
+        if not isinstance(k, str) or not isinstance(v, list) or len(v) != 4:
+            return None
+        if not all(isinstance(x, int) and not isinstance(x, bool) for x in v):
+            return None
+    return rows
+
+
 def scan_hermes(state, totals):
-    if not HERMES_DB.is_file():
-        return
     try:
-        db = sqlite3.connect(Path(os.path.abspath(HERMES_DB)).as_uri() + "?mode=ro", uri=True, timeout=5)
-        try:
-            rows = db.execute(
-                "select session_id, model, billing_provider, billing_base_url, billing_mode, task, "
-                "input_tokens, output_tokens, cache_read_tokens, cache_write_tokens "
-                "from session_model_usage"
-            ).fetchall()
-        finally:
-            db.close()
-    except (sqlite3.Error, OSError):
+        dbs = hermes_dbs()
+    except Exception as exc:
+        print(f"token-usage-exporter: hermes scan failed ({type(exc).__name__})", file=sys.stderr)
         return
-    current = {}
-    prev = state.get("hermes")
-    prev_rows = prev.get("rows", {}) if isinstance(prev, dict) else None
-    for row in rows:
-        key = json.dumps(row[:6], separators=(",", ":"))
-        vals = [max(0, int(v or 0)) for v in row[6:]]
-        current[key] = vals
-        if prev_rows is None:
+    prev_all = state.get("hermes")
+    hermes_state = dict(prev_all) if isinstance(prev_all, dict) else {}
+    changed = False
+    for path in dbs:
+        try:
+            if not path.is_file():
+                continue
+            db_key = os.path.abspath(path)
+            db = sqlite3.connect(Path(db_key).as_uri() + "?mode=ro", uri=True, timeout=5)
+            try:
+                rows = db.execute(
+                    "select session_id, model, billing_provider, billing_base_url, billing_mode, task, "
+                    "input_tokens, output_tokens, cache_read_tokens, cache_write_tokens "
+                    "from session_model_usage"
+                ).fetchall()
+            finally:
+                db.close()
+            prev_rows = valid_hermes_rows(hermes_state.get(db_key))
+            current = {}
+            deltas = {}
+            for row in rows:
+                key = hashlib.sha1(json.dumps(row[:6]).encode()).hexdigest()[:16]
+                vals = [max(0, int(v or 0)) for v in row[6:]]
+                current[key] = vals
+                if prev_rows is None:
+                    continue
+                old = prev_rows.get(key, (0, 0, 0, 0))
+                model = str(row[1] or "unknown").replace("|", "/")
+                for kind, cur, was in zip(HERMES_KINDS, vals, old):
+                    delta = cur - was if cur >= was else cur
+                    if delta > 0:
+                        k = f"hermes|{model}|{kind}"
+                        deltas[k] = deltas.get(k, 0) + delta
+        except Exception as exc:
+            print(f"token-usage-exporter: hermes scan failed ({type(exc).__name__})", file=sys.stderr)
             continue
-        old = prev_rows.get(key)
-        model = str(row[1] or "unknown")
-        for kind, cur, was in zip(HERMES_KINDS, vals, old if isinstance(old, list) and len(old) == 4 else (0, 0, 0, 0)):
-            delta = cur - was if cur >= was else cur
-            if delta > 0:
-                k = f"hermes|{model}|{kind}"
-                totals[k] = totals.get(k, 0) + delta
-    state["hermes"] = {"rows": current}
+        for k, n in deltas.items():
+            totals[k] = totals.get(k, 0) + n
+        hermes_state[db_key] = {"rows": current}
+        changed = True
+    if changed:
+        state["hermes"] = hermes_state
 
 
 def scan(state):
@@ -288,10 +332,11 @@ def esc(v):
 
 
 def render(totals):
-    lines = ["# HELP ai_tokens_total Tokens used, counted from local Claude Code, Codex, agy and Hermes session logs.",
+    lines = ["# HELP ai_tokens_total Tokens used, counted from local Claude Code, Codex and agy session logs and Hermes' usage table.",
              "# TYPE ai_tokens_total counter"]
     for k, n in sorted(totals.items()):
-        provider, model, kind = k.split("|")
+        provider, rest = k.split("|", 1)
+        model, kind = rest.rsplit("|", 1)
         lines.append(f'ai_tokens_total{{client="{esc(provider)}",model="{esc(model)}",type="{esc(kind)}"}} {int(n)}')
     return "\n".join(lines) + "\n"
 
